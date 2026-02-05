@@ -43,3 +43,10 @@ env/
 
 # Build outputs
 gradle.properties
+# Firebase & Secrets
+app/google-services.json
+google-services.json
+*.key
+secrets.properties
+credentials.json
+.credentials/

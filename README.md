@@ -1,5 +1,25 @@
 # TrustShield - Real-Time Intelligent Security Application
 
+## ⚠️ Security Notice
+
+**IMPORTANT**: Never commit sensitive credentials to version control:
+- `google-services.json` (Firebase credentials)
+- `.env` files with API keys
+- Private keys or certificates
+
+All developers must:
+1. Use `google-services.template.json` as reference
+2. Generate their own credentials from Firebase Console
+3. Keep `.env` files in `.gitignore`
+4. Rotate any exposed keys immediately
+
+**If credentials are exposed:**
+1. Immediately regenerate in Firebase Console
+2. Force push the cleanup: `git push --force-with-lease`
+3. Use `git-filter-branch` to remove from history if needed
+
+---
+
 ## 🛡️ Overview
 
 With the rapid rise of AI-powered cyber threats, users are increasingly exposed to phishing links, voice-based scams, and AI-generated fake videos. **TrustShield** is a real-time intelligent security application designed to protect users from modern digital frauds before any damage occurs.
@@ -106,36 +126,225 @@ User-triggered mechanism for detecting manipulated video content.
 - Python 3.8+
 - Firebase account with project setup
 - Git for version control
+- JDK 11 or higher
 
-### Installation:
+### Installation & Setup
 
-1. **Clone the repository:**
+#### Step 1: Clone the Repository
+```bash
+git clone https://github.com/AKHILASH-SK/TRUST-SHEILD.git
+cd TRUST-SHEILD
+```
+
+#### Step 2: Firebase Configuration (Important - Security)
+
+**⚠️ SECURITY NOTE**: Never commit `google-services.json` to version control. This file contains sensitive API keys.
+
+1. Go to [Firebase Console](https://console.firebase.google.com)
+2. Create a new project or select existing one
+3. Add an Android app:
+   - Package name: `com.example.trustshield`
+   - SHA-1 fingerprint: Get from `./gradlew signingReport`
+4. Download `google-services.json`
+5. Place the file in the `app/` directory:
    ```bash
-   git clone https://github.com/AKHILASH-SK/TRUST-SHEILD.git
-   cd TRUST-SHEILD
+   cp ~/Downloads/google-services.json app/
+   ```
+6. Configure Firebase services:
+   - Enable Realtime Database
+   - Enable Cloud Firestore
+   - Enable Authentication
+   - Enable Cloud Functions
+
+#### Step 3: Android App Setup
+
+1. **Open in Android Studio:**
+   - Open Android Studio
+   - Select "Open" and choose the `TRUST-SHEILD` folder
+   - Wait for Gradle sync to complete
+
+2. **Configure Local Properties:**
+   ```bash
+   echo "sdk.dir=$ANDROID_HOME" > local.properties
    ```
 
-2. **Android Setup:**
+3. **Build the Project:**
    ```bash
-   # Configure Firebase in Android Studio
-   # Update google-services.json with your Firebase credentials
-   # Build the project
-   ./gradlew build
+   ./gradlew clean build
    ```
 
-3. **Backend Setup:**
+4. **Run on Emulator or Device:**
+   ```bash
+   # List connected devices
+   ./gradlew devices
+   
+   # Install and run on default device
+   ./gradlew installDebug
+   
+   # Or directly from Android Studio: Run > Run 'app'
+   ```
+
+#### Step 4: Backend Setup (Python Flask)
+
+1. **Navigate to Backend Directory:**
    ```bash
    cd backend
-   pip install -r requirements.txt
-   python app.py
    ```
 
-4. **Run the Application:**
+2. **Create Virtual Environment:**
    ```bash
-   ./gradlew installDebug
+   # On Windows
+   python -m venv venv
+   venv\Scripts\activate
+   
+   # On macOS/Linux
+   python3 -m venv venv
+   source venv/bin/activate
    ```
+
+3. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure Environment Variables:**
+   ```bash
+   # Create .env file
+   cp .env.example .env
+   
+   # Edit .env with your settings
+   nano .env
+   ```
+
+5. **Run the Backend Server:**
+   ```bash
+   python app.py
+   # Server runs on http://localhost:5000
+   ```
+
+#### Step 5: Connect Android App to Backend
+
+1. **Get Your Machine's IP Address:**
+   ```bash
+   # On Windows
+   ipconfig
+   
+   # On macOS/Linux
+   ifconfig
+   ```
+
+2. **Update Backend URL in Android Code:**
+   - Open `app/src/main/java/com/example/trustshield/SandboxChecker.kt`
+   - Change `BASE_URL` to: `http://<your-ip>:5000`
+
+3. **Configure Network Security:**
+   - Update `app/src/main/res/xml/network_security_config.xml` to allow cleartext traffic to your backend
 
 ---
+
+## 🏃 Quick Start - Running Everything Locally
+
+### Terminal 1 - Start Backend:
+```bash
+cd backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+python app.py
+```
+
+### Terminal 2 - Build & Run Android App:
+```bash
+./gradlew installDebug
+```
+
+### Terminal 3 (Optional) - Run Tests:
+```bash
+./gradlew test
+```
+
+---
+
+## 🌐 Deployment (Production Setup)
+
+### Backend Deployment Options:
+
+#### Option A: Deploy to Heroku
+```bash
+cd backend
+heroku create your-app-name
+heroku config:set FLASK_ENV=production
+git push heroku master
+```
+
+#### Option B: Deploy with ngrok (for testing):
+```bash
+cd backend
+# Download ngrok from https://ngrok.com/download
+./ngrok http 5000
+# Use the provided URL in your Android app
+```
+
+#### Option C: Deploy to Cloud (Firebase Functions, Google Cloud Run, etc.)
+```bash
+# Configure and deploy Firebase Functions
+firebase deploy --only functions
+```
+
+### Android App Deployment:
+
+1. **Build Release APK:**
+   ```bash
+   ./gradlew assembleRelease
+   ```
+
+2. **Build App Bundle (for Play Store):**
+   ```bash
+   ./gradlew bundleRelease
+   ```
+
+3. **Sign the APK:**
+   - Generate signing key in Android Studio
+   - Use Android Studio's "Build" > "Generate Signed Bundle/APK"
+
+4. **Upload to Google Play Store:**
+   - Go to [Google Play Console](https://play.google.com/console)
+   - Create new app
+   - Upload signed APK/AAB
+   - Submit for review
+
+---
+
+## 📱 How to Use TrustShield App
+
+### First Time Setup:
+1. Install and open the app
+2. Grant required permissions:
+   - Notification access
+   - Call monitoring (for voice scam detection)
+   - Camera (for deepfake detection)
+3. Sign in with your account
+4. Enable security features in Settings
+
+### Using Phishing Detection:
+- App automatically monitors messages and notifications
+- Suspicious links appear with warning badge
+- Tap to see detailed threat analysis
+- Block or whitelist links as needed
+
+### Using Voice Scam Detection:
+- Grant call monitoring permission
+- During active calls, app analyzes conversation in real-time
+- If scam detected, immediate alert appears
+- Check call transcript and scam details
+
+### Using Deepfake Video Detection:
+- Open suspicious video in any app
+- Switch to TrustShield and tap "Analyze Video"
+- App captures frames and analyzes for AI artifacts
+- Get verification result instantly
+
+---
+
+
 
 ## 📊 Project Structure
 
