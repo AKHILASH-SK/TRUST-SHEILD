@@ -57,7 +57,10 @@ data class LoginResponse(
  */
 data class LinkScanRequest(
     val user_id: Int,
-    val url: String
+    val url: String,
+    val risk_level: String,
+    val reasons: String,
+    val verdict: String
 )
 
 /**

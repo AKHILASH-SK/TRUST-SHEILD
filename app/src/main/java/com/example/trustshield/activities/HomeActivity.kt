@@ -1,7 +1,9 @@
 package com.example.trustshield.activities
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -12,52 +14,58 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.trustshield.R
-import com.example.trustshield.adapters.LinkScanAdapter
-import com.example.trustshield.firebase.FirebaseService
-import com.example.trustshield.models.LinkScan
+import com.example.trustshield.adapters.LinkHistoryAdapter
+import com.example.trustshield.network.RetrofitClient
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.launch
 
 /**
  * HomeActivity
- * Displays user's link scan history and statistics
+ * Displays user's link scan history from backend
  */
 class HomeActivity : AppCompatActivity() {
     
-    private lateinit var firebaseService: FirebaseService
+    companion object {
+        private const val TAG = "HomeActivity"
+    }
+    
     private lateinit var toolbar: Toolbar
     private lateinit var linkHistoryRecycler: RecyclerView
     private lateinit var emptyStateView: View
     private lateinit var emptyStateText: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var profileButton: MaterialButton
+    private lateinit var logoutButton: MaterialButton
     private lateinit var scanFab: FloatingActionButton
+    private lateinit var userGreeting: TextView
     
-    private val linkScanAdapter = LinkScanAdapter { linkScan ->
-        onLinkScanClicked(linkScan)
-    }
+    private val linkHistoryAdapter = LinkHistoryAdapter()
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
             setContentView(R.layout.activity_home)
             
-            firebaseService = FirebaseService()
-            
             // Check if user is logged in
-            if (!firebaseService.isUserLoggedIn()) {
+            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+            val userId = sharedPref.getInt("user_id", -1)
+            val userName = sharedPref.getString("user_name", "User") ?: "User"
+            
+            if (userId == -1) {
+                Log.w(TAG, "No logged in user found")
                 navigateToLogin()
                 return
             }
             
             initializeViews()
-            setupToolbar()
+            setupToolbar(userName)
             setupRecyclerView()
             setupListeners()
-            loadLinkHistory()
+            loadLinkHistory(userId)
+            
         } catch (e: Exception) {
-            android.util.Log.e("HomeActivity", "Initialization error: ${e.message}", e)
+            Log.e(TAG, "Initialization error: ${e.message}", e)
             Toast.makeText(this, "Error loading home: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -69,87 +77,99 @@ class HomeActivity : AppCompatActivity() {
         emptyStateText = findViewById(R.id.tv_empty_state)
         progressBar = findViewById(R.id.progress_bar)
         profileButton = findViewById(R.id.btn_profile)
+        logoutButton = findViewById(R.id.btn_logout)
         scanFab = findViewById(R.id.fab_scan)
+        userGreeting = findViewById(R.id.tv_user_greeting)
     }
     
-    private fun setupToolbar() {
+    private fun setupToolbar(userName: String) {
         setSupportActionBar(toolbar)
         supportActionBar?.title = "TrustShield"
-        supportActionBar?.subtitle = "Your Link Security Dashboard"
+        supportActionBar?.subtitle = "Link Security Dashboard"
+        userGreeting.text = "Welcome back, $userName!"
     }
     
     private fun setupRecyclerView() {
         linkHistoryRecycler.apply {
-            layoutManager = LinearLayoutManager(this@HomeActivity, LinearLayoutManager.VERTICAL, false)
-            adapter = linkScanAdapter
+            layoutManager = LinearLayoutManager(this@HomeActivity)
+            adapter = linkHistoryAdapter
         }
     }
     
     private fun setupListeners() {
         profileButton.setOnClickListener {
-            navigateToProfile()
+            Toast.makeText(this, "Profile page coming soon", Toast.LENGTH_SHORT).show()
+        }
+        
+        logoutButton.setOnClickListener {
+            logout()
         }
         
         scanFab.setOnClickListener {
-            // TODO: Open manual link scanner/input dialog
-            // For now, just refresh
-            loadLinkHistory()
-        }
-    }
-    
-    private fun loadLinkHistory() {
-        lifecycleScope.launch {
-            try {
-                progressBar.visibility = View.VISIBLE
-                
-                val userId = firebaseService.getCurrentUserId() ?: return@launch
-                val linkScans = firebaseService.getUserLinkScans(userId)
-                
-                progressBar.visibility = View.GONE
-                
-                if (linkScans.isEmpty()) {
-                    emptyStateView.visibility = View.VISIBLE
-                    linkHistoryRecycler.visibility = View.GONE
-                    emptyStateText.text = "No links scanned yet.\nStart using TrustShield to check link safety!"
-                } else {
-                    emptyStateView.visibility = View.GONE
-                    linkHistoryRecycler.visibility = View.VISIBLE
-                    linkScanAdapter.submitList(linkScans)
-                }
-            } catch (e: Exception) {
-                progressBar.visibility = View.GONE
-                emptyStateView.visibility = View.VISIBLE
-                emptyStateText.text = "Error loading link history: ${e.message}"
+            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+            val userId = sharedPref.getInt("user_id", -1)
+            if (userId != -1) {
+                loadLinkHistory(userId)
             }
         }
     }
     
-    private fun onLinkScanClicked(linkScan: LinkScan) {
-        val intent = Intent(this, LinkDetailActivity::class.java)
-        intent.putExtra("scanId", linkScan.scanId)
-        intent.putExtra("url", linkScan.url)
-        intent.putExtra("host", linkScan.host)
-        intent.putExtra("verdict", linkScan.verdict)
-        intent.putExtra("riskLevel", linkScan.riskLevel)
-        intent.putExtra("verificationStatus", linkScan.verificationStatus)
-        intent.putExtra("verifiedBrand", linkScan.verifiedBrand)
-        intent.putExtra("reasons", linkScan.reasons.toTypedArray())
-        intent.putExtra("timestamp", linkScan.timestamp)
-        intent.putExtra("sourceApp", linkScan.sourceApp)
-        startActivity(intent)
+    private fun loadLinkHistory(userId: Int) {
+        lifecycleScope.launch {
+            try {
+                progressBar.visibility = View.VISIBLE
+                Log.d(TAG, "Loading link history for user: $userId")
+                
+                val apiService = RetrofitClient.getInstance().getApiService()
+                val response = apiService.getLinkHistory(userId)
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val historyResponse = response.body()!!
+                    val links = historyResponse.scans
+                    
+                    Log.d(TAG, "Loaded ${links.size} links from backend")
+                    
+                    progressBar.visibility = View.GONE
+                    
+                    if (links.isEmpty()) {
+                        emptyStateView.visibility = View.VISIBLE
+                        linkHistoryRecycler.visibility = View.GONE
+                        emptyStateText.text = "No links scanned yet.\nStart using TrustShield to check link safety!"
+                    } else {
+                        emptyStateView.visibility = View.GONE
+                        linkHistoryRecycler.visibility = View.VISIBLE
+                        linkHistoryAdapter.submitList(links)
+                    }
+                } else {
+                    progressBar.visibility = View.GONE
+                    emptyStateView.visibility = View.VISIBLE
+                    emptyStateText.text = "Error loading link history: ${response.code()} ${response.message()}"
+                    Log.e(TAG, "Error loading history: ${response.code()} ${response.message()}")
+                }
+                
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
+                emptyStateView.visibility = View.VISIBLE
+                emptyStateText.text = "Error: ${e.message}"
+                Log.e(TAG, "Exception loading history: ${e.message}", e)
+            }
+        }
     }
     
-    private fun navigateToProfile() {
-        startActivity(Intent(this, ProfileActivity::class.java))
+    private fun logout() {
+        try {
+            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+            sharedPref.edit().clear().apply()
+            
+            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show()
+            navigateToLogin()
+        } catch (e: Exception) {
+            Log.e(TAG, "Logout error: ${e.message}", e)
+        }
     }
     
     private fun navigateToLogin() {
         startActivity(Intent(this, LoginActivity::class.java))
         finish()
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        loadLinkHistory()  // Refresh on resume
     }
 }

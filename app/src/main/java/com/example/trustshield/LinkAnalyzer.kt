@@ -35,11 +35,25 @@ class LinkAnalyzer {
     companion object {
         private const val TAG = "LINK_ANALYZE"
         
-        // Common phishing patterns
+        // High-confidence phishing keywords (NOT generic terms)
+        // Only flag URLs containing MULTIPLE of these in combination
         private val PHISHING_KEYWORDS = listOf(
-            "verify", "confirm", "urgent", "click", "action", "update",
-            "account", "secure", "alert", "login", "paypal", "amazon",
-            "bank", "auth", "password"
+            "confirm-account",      // Not just "confirm", but confirm + account
+            "verify-identity",      // Specific to verification scams
+            "update-payment",       // Payment update scams
+            "validate-credentials", // Credential stealing
+            "reactivate-account",   // Account lockout scams
+            "unusual-activity",     // Fake security alerts
+            "act-now",              // Urgency + action (good indicator)
+            "limited-time",         // Time pressure scams
+            "click-here-immediately", // No legitimate service says this
+            "suspended-account",    // Account lockout scams
+            "reset-password-urgent",// Combines keywords for reset scams
+            "confirm-bank-details", // Banking fraud
+            "verify-social-security", // Credential harvesting
+            "update-card-info",     // Payment fraud
+            "claim-reward",         // Prize scams
+            "congratulations-winner"// Prize/lottery scams
         )
         
         // Legitimate top-level domains (comprehensive whitelist - ~1000 verified safe domains)
@@ -221,7 +235,8 @@ class LinkAnalyzer {
             }
 
             // ===== TIER 2: TRUSTED DOMAIN WHITELIST (Legacy) =====
-            if (isTrustedDomain(normalizedUrl.host)) {
+            val isTrusted = isTrustedDomain(normalizedUrl.host)
+            if (isTrusted) {
                 Log.d(TAG, "✓ Whitelisted domain: $url")
                 return LinkAnalysisResult(
                     normalizedUrl.normalizedUrl,
@@ -237,9 +252,21 @@ class LinkAnalyzer {
             val checks = runSecurityChecks(normalizedUrl, reasons)
             
             val riskLevel = when {
-                checks["dangerous"] == true -> LinkRiskLevel.DANGEROUS
-                checks["suspicious"] == true -> LinkRiskLevel.SUSPICIOUS
-                else -> LinkRiskLevel.SAFE
+                checks["dangerous"] == true -> {
+                    Log.d(TAG, "⚠️ DANGEROUS: Found phishing indicators")
+                    LinkRiskLevel.DANGEROUS
+                }
+                checks["suspicious"] == true -> {
+                    Log.d(TAG, "⚠️ SUSPICIOUS: Found suspicious indicators")
+                    LinkRiskLevel.SUSPICIOUS
+                }
+                else -> {
+                    // NEW LOGIC: Unknown domains (not trusted, no obvious phishing)
+                    // should go to Tier 3 sandbox analysis, NOT marked as SAFE
+                    Log.d(TAG, "🔬 UNKNOWN DOMAIN: Not in whitelist - forcing to Tier 3 sandbox analysis")
+                    reasons.add("Unknown domain - requires sandbox analysis (Tier 3)")
+                    LinkRiskLevel.SUSPICIOUS  // Force to Tier 3, don't mark as SAFE
+                }
             }
             
             Log.d(TAG, "URL Analysis: ${normalizedUrl.normalizedUrl} -> $riskLevel (${reasons.size} issues)")
@@ -530,13 +557,22 @@ class LinkAnalyzer {
         val reasons = mutableListOf<String>()
         val lowerHost = host.lowercase()
         
+        // Only flag if MULTIPLE high-confidence keywords are found together
+        // This reduces false positives from legitimate domains
+        var keywordCount = 0
+        
         PHISHING_KEYWORDS.forEach { keyword ->
             if (lowerHost.contains(keyword)) {
-                reasons.add("⚠️ Contains phishing keyword: '$keyword'")
+                keywordCount++
             }
         }
         
-        return reasons.take(3) // Limit to 3 keywords in output
+        // Only consider it suspicious if we find 2+ phishing keywords
+        if (keywordCount >= 2) {
+            reasons.add("⚠️ Contains multiple phishing indicators in domain")
+        }
+        
+        return reasons
     }
     
     /**

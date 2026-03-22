@@ -3,6 +3,7 @@ package com.example.trustshield
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.os.Bundle
+import android.net.Uri
 import android.util.Log
 
 /**
@@ -32,6 +33,7 @@ class NotificationListener : NotificationListenerService() {
     private val linkAnalyzer = LinkAnalyzer()
     private lateinit var alertManager: AlertNotificationManager
     private lateinit var linkTracker: LinkTracker
+    private lateinit var linkScanRecorder: LinkScanRecorder
     private lateinit var phishingChecker: PhishingDomainCheckerFirebase
     private lateinit var sandboxChecker: SandboxChecker
 
@@ -39,10 +41,11 @@ class NotificationListener : NotificationListenerService() {
         super.onCreate()
         alertManager = AlertNotificationManager(this)
         linkTracker = LinkTracker(this)
+        linkScanRecorder = LinkScanRecorder(this)
 
         phishingChecker = PhishingDomainCheckerFirebase(this)
         sandboxChecker = SandboxChecker("http://10.101.140.61:5000")
-        Log.d(TAG, "NotificationListener service created with 3-tier analysis")
+        Log.d(TAG, "NotificationListener service created with 3-tier analysis + backend recording")
     }
 
     /**
@@ -143,9 +146,45 @@ class NotificationListener : NotificationListenerService() {
             
             // Step 2: Analyze each link (3-tier analysis)
             links.forEach { url ->
+                Log.d(TAG, "")
+                Log.d(TAG, "🔍 ============ ANALYZING LINK ============")
+                Log.d(TAG, "URL: $url")
+                
                 // TIER 1: Rule-based analysis (instant)
                 val analysis = linkAnalyzer.analyzeLink(url)
+                Log.d(TAG, "Tier 1 Verdict: ${analysis.riskLevel} - Reasons: ${analysis.reasons}")
                 var isSuspiciousFromTier1 = false
+                
+                // Record link scan to backend (Tier 1 verdict)
+                // Also handles callback to show alert if backend verdict is DANGEROUS (Tier 0 override)
+                Log.d(TAG, "📤 Calling LinkScanRecorder.recordLinkScan()...")
+                linkScanRecorder.recordLinkScan(
+                    url = url,
+                    host = Uri.parse(url).host ?: "",
+                    riskLevel = analysis.riskLevel,
+                    verificationStatus = null,
+                    verifiedBrand = null,
+                    reasons = analysis.reasons,
+                    sourceApp = packageName,
+                    callback = object : LinkScanRecorder.OnLinkScanCallback {
+                        override fun onSuccess(scanId: Int, verdict: String) {
+                            Log.d(TAG, "✅ Backend response: Scan #$scanId - Verdict: $verdict")
+                            // If backend says DANGEROUS (Tier 0 override), show alert
+                            if (verdict == "DANGEROUS") {
+                                Log.e(TAG, "🔴 BACKEND TIER 0 MATCH: $url is DANGEROUS (database phishing)")
+                                alertManager.showDangerousLinkAlert(
+                                    url,
+                                    packageName,
+                                    listOf("Known phishing URL from database")
+                                )
+                            }
+                        }
+                        
+                        override fun onFailure(error: String) {
+                            Log.e(TAG, "❌ Backend API error: $error")
+                        }
+                    }
+                )
                 
                 when (analysis.riskLevel) {
                     LinkRiskLevel.DANGEROUS -> {

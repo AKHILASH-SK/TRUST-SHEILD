@@ -11,12 +11,18 @@ data class NormalizedUrl(
 
 object UrlNormalizer {
 
+    // Pattern 1: Explicit URLs with http/https scheme
+    // Matches: https://example.com, http://site.co.uk, https://phishing.vercel.app
     private val STRICT_URL_REGEX = Regex(
-        pattern = """(?i)\bhttps?://[^\s<>\"'{}|\\^`\[\]]+"""
+        pattern = """(?i)\bhttps?://(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z]{2,})+(?::\d{2,5})?(?:/[^\s<>\"'{}|\\^`\[\]]*)?"""
     )
 
-    private val DOMAIN_CANDIDATE_REGEX = Regex(
-        pattern = """(?i)(?<![@\w])(?:www\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{2,5})?(?:/[^\s<>\"'{}|\\^`\[\]]*)?"""
+    // Pattern 2: Domains starting with WWW (but NOT from email addresses)
+    // Matches: www.example.com, www.phishing-site.co.uk
+    // Rejects: someone@www.com (has @ before it)
+    // Rejects: Gsk.abilas (doesn't start with www)
+    private val WWW_DOMAIN_REGEX = Regex(
+        pattern = """(?i)(?<![@\w])www\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{2,5})?(?:/[^\s<>\"'{}|\\^`\[\]]*)?"""
     )
 
     private val SCHEME_REGEX = Regex("""^[a-z][a-z0-9+.-]*://""", RegexOption.IGNORE_CASE)
@@ -31,11 +37,14 @@ object UrlNormalizer {
 
         val candidates = mutableListOf<Pair<Int, String>>()
 
+        // Pattern 1: Extract explicit URLs (https://example.com, http://site.com)
         STRICT_URL_REGEX.findAll(text).forEach { match ->
             candidates.add(match.range.first to match.value)
         }
 
-        DOMAIN_CANDIDATE_REGEX.findAll(text).forEach { match ->
+        // Pattern 2: Extract domains starting with www. (www.example.com)
+        // The regex already prevents matching email@www.com because of (?<![@\w])
+        WWW_DOMAIN_REGEX.findAll(text).forEach { match ->
             candidates.add(match.range.first to match.value)
         }
 
@@ -157,10 +166,14 @@ object UrlNormalizer {
             return false
         }
 
+        // Validate each label: letters, digits, hyphens only. NO underscores or other chars
         return labels.all { label ->
             label.firstOrNull()?.isLetterOrDigit() == true &&
                 label.lastOrNull()?.isLetterOrDigit() == true &&
-                label.all { character -> character.isLetterOrDigit() || character == '-' }
+                label.all { character -> 
+                    character.isLetterOrDigit() || character == '-'
+                } &&
+                !label.contains('_') // Explicitly reject underscores (invalid in domain names)
         }
     }
 }

@@ -50,6 +50,8 @@ class RetrofitClient private constructor(private val baseUrl: String) {
     
     fun getApiService(): TrustShieldApiService = apiService
     
+    fun getBaseUrl(): String = baseUrl
+    
     companion object {
         private var instance: RetrofitClient? = null
         

@@ -155,7 +155,7 @@ class LoginActivity : AppCompatActivity() {
     
     private fun saveUserData(userId: Int, name: String, email: String, phoneNumber: String) {
         try {
-            val sharedPref = getSharedPreferences("user_prefs", MODE_PRIVATE)
+            val sharedPref = getSharedPreferences("trustshield_prefs", MODE_PRIVATE)
             with(sharedPref.edit()) {
                 putInt("user_id", userId)
                 putString("user_name", name)
