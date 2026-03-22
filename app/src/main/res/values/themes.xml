@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Main app theme - inherits from MaterialComponents for Material Design support -->
+    <style name="Theme.TrustShield" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@android:color/holo_blue_dark</item>
+        <item name="colorPrimaryVariant">@android:color/holo_blue_dark</item>
+        <item name="colorSecondary">@android:color/holo_blue_bright</item>
+        <item name="colorSecondaryVariant">@android:color/holo_blue_bright</item>
+        <item name="colorError">#B00020</item>
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="colorOnError">#FFFFFF</item>
+        <item name="colorOnSurface">#000000</item>
+    </style>
 
-    <style name="Theme.TrustShield" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Login Theme with custom styling -->
+    <style name="Theme.TrustShield.Login" parent="Theme.TrustShield">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+
+    <!-- Activity themes -->
+    <style name="Theme.TrustShield.LoginActivity" parent="Theme.TrustShield" />
+    <style name="Theme.TrustShield.HomeActivity" parent="Theme.TrustShield" />
+    <style name="Theme.TrustShield.ProfileActivity" parent="Theme.TrustShield" />
+    <style name="Theme.TrustShield.LinkDetailActivity" parent="Theme.TrustShield" />
 </resources>

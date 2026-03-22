@@ -50,10 +50,11 @@ class AlertNotificationManager(private val context: Context) {
                 Log.d(TAG, "No existing channel to delete")
             }
             
-            val importance = NotificationManager.IMPORTANCE_MAX
+            val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, importance).apply {
                 description = "Alerts for suspicious links and phishing attempts"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
                 enableLights(true)
                 setShowBadge(true)
                 // Allow sounds and vibrations
@@ -189,18 +190,15 @@ class AlertNotificationManager(private val context: Context) {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))
                 .setContentIntent(pendingIntent)
                 .setPriority(priority)
-                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setAutoCancel(true)
                 // Vibration pattern
-                .setVibrate(longArrayOf(0, 500, 250, 500, 250, 500))
+                .setVibrate(longArrayOf(0, 400, 200, 400))
                 // LED lights
                 .setLights(if (isError) 0xFFFF0000.toInt() else 0xFFFFAA00.toInt(), 500, 500)
                 .setShowWhen(true)
                 .setOngoing(false)
-                // Add visual weight
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
-                // Make sure it's prominent
-                .setFullScreenIntent(pendingIntent, true)
+                .setOnlyAlertOnce(true)
                 .build()
             
             Log.d(TAG, "Posting notification to system...")

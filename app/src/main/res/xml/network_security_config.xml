@@ -2,10 +2,11 @@
 <network-security-config>
     <!-- Allow cleartext traffic to local backend IP for development -->
     <domain-config cleartextTrafficPermitted="true">
+        <!-- Hotspot/Local IPs -->
+        <domain includeSubdomains="true">10.177.26.61</domain>
         <domain includeSubdomains="true">192.168.137.93</domain>
         <domain includeSubdomains="true">10.101.140.61</domain>
         <domain includeSubdomains="true">10.150.255.61</domain>
-        <domain includeSubdomains="true">10.0.0.0/8</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
     </domain-config>

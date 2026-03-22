@@ -14,12 +14,14 @@ enum class LinkRiskLevel {
 
 /**
  * Link Analysis Result
- * Contains the URL, risk level, and reasons for classification
+ * Contains the URL, risk level, reasons, and verification status
  */
 data class LinkAnalysisResult(
     val url: String,
     val riskLevel: LinkRiskLevel,
-    val reasons: List<String> = emptyList()
+    val reasons: List<String> = emptyList(),
+    val verificationStatus: VerificationStatus? = null,
+    val verifiedBrand: String? = null
 )
 
 /**
@@ -46,6 +48,7 @@ class LinkAnalyzer {
             "google.com", "amazon.com", "apple.com", "microsoft.com", "facebook.com",
             "twitter.com", "github.com", "stackoverflow.com", "reddit.com", "youtube.com",
             "gmail.com", "outlook.com", "linkedin.com", "instagram.com", "whatsapp.com",
+            "youtu.be", "googleapis.com", "gstatic.com", "googlevideo.com",
             "telegram.com", "netflix.com", "wikipedia.org", "ebay.com", "uber.com",
             "dropbox.com", "slack.com", "discord.com", "twitch.tv", "airbnb.com",
             "booking.com", "paypal.com", "stripe.com", "square.com", "shopify.com",
@@ -74,6 +77,17 @@ class LinkAnalyzer {
             "coinbase.com", "kraken.com", "binance.com", "bitstamp.com", "gemini.com",
             "blockfi.com", "celsius.network", "nexo.io", "aave.com", "uniswap.org",
             "sushiswap.org", "curve.fi", "yearn.finance", "compound.finance", "makerdao.com",
+            
+            // Indian Banks & Payment Systems
+            "icicibank.com", "icici.com", "axisbank.com", "axis.com",
+            "hdfcbank.com", "hdfc.com", "sbi.co.in", "sbionline.sbi.co.in",
+            "bob.co.in", "bankofbaroda.in", "canara.co.in", "yesbankltd.com",
+            "kotak.com", "indusind.com", "federalbank.co.in", "southindianbank.in",
+            "indianbank.in", "bandhanbank.com", "rbl.co.in", "aubank.in",
+            "aubankonline.com", "idfcfirstbank.com", "scbindia.com", "citibank.co.in",
+            "hsbc.co.in", "deutschebank.co.in", "standardchartered.co.in",
+            "paytmbank.com", "okhdfcbank.com", "ibl.in", "moneycontrol.com",
+            "idbi.com", "pnbindia.com", "unionbankofindia.co.in", "bankofmaharashtra.in",
             
             // News & Publishing
             "bbc.com", "cnn.com", "foxnews.com", "nytimes.com", "washingtonpost.com",
@@ -155,22 +169,72 @@ class LinkAnalyzer {
     
     /**
      * Analyze a single URL for security risks
-     * Runs multiple rule-based checks
+     * Runs verification checks in order of priority:
+     *   1. FIRST: Official Domain Registry (prevents false positives on real brand links)
+     *   2. SECOND: Rule-based security checks (phishing patterns, typos, etc.)
      * 
      * @param url The URL to analyze
-     * @return LinkAnalysisResult with risk level and reasons
+     * @return LinkAnalysisResult with risk level, verification status, and reasons
      */
     fun analyzeLink(url: String): LinkAnalysisResult {
         return try {
-            // First check: Is it a whitelisted legitimate domain?
-            val domain = extractDomain(url).lowercase()
-            if (LEGITIMATE_DOMAINS.any { domain.endsWith(it) || domain == it }) {
+            val normalizedUrl = UrlNormalizer.normalizeCandidate(url)
+                ?: return LinkAnalysisResult(
+                    url,
+                    LinkRiskLevel.SAFE,
+                    listOf("No valid URL detected"),
+                    null,
+                    null
+                )
+
+            // ===== TIER 1: OFFICIAL DOMAIN REGISTRY =====
+            // Check against official brand registry FIRST
+            val registryVerification = OfficialDomainRegistry.verifyDomain(normalizedUrl.host)
+            
+            when (registryVerification.status) {
+                VerificationStatus.VERIFIED_OFFICIAL -> {
+                    Log.d(TAG, "✅ Verified Official: ${registryVerification.brandName} - ${normalizedUrl.host}")
+                    return LinkAnalysisResult(
+                        normalizedUrl.normalizedUrl,
+                        LinkRiskLevel.SAFE,
+                        listOf(registryVerification.reason),
+                        VerificationStatus.VERIFIED_OFFICIAL,
+                        registryVerification.brandName
+                    )
+                }
+                
+                VerificationStatus.BRAND_ABUSE -> {
+                    Log.d(TAG, "🔴 Brand Abuse Detected: ${registryVerification.brandName} - ${normalizedUrl.host}")
+                    return LinkAnalysisResult(
+                        normalizedUrl.normalizedUrl,
+                        LinkRiskLevel.DANGEROUS,
+                        listOf(registryVerification.reason),
+                        VerificationStatus.BRAND_ABUSE,
+                        registryVerification.brandName
+                    )
+                }
+                
+                VerificationStatus.UNKNOWN -> {
+                    // Continue to rule-based checks
+                    Log.d(TAG, "❓ Unknown domain, proceeding to rule-based checks: ${normalizedUrl.host}")
+                }
+            }
+
+            // ===== TIER 2: TRUSTED DOMAIN WHITELIST (Legacy) =====
+            if (isTrustedDomain(normalizedUrl.host)) {
                 Log.d(TAG, "✓ Whitelisted domain: $url")
-                return LinkAnalysisResult(url, LinkRiskLevel.SAFE, listOf("Whitelisted legitimate domain"))
+                return LinkAnalysisResult(
+                    normalizedUrl.normalizedUrl,
+                    LinkRiskLevel.SAFE,
+                    listOf("Whitelisted legitimate domain"),
+                    null,
+                    null
+                )
             }
             
+            // ===== TIER 3: RULE-BASED SECURITY CHECKS =====
             val reasons = mutableListOf<String>()
-            val checks = runSecurityChecks(url, reasons)
+            val checks = runSecurityChecks(normalizedUrl, reasons)
             
             val riskLevel = when {
                 checks["dangerous"] == true -> LinkRiskLevel.DANGEROUS
@@ -178,13 +242,25 @@ class LinkAnalyzer {
                 else -> LinkRiskLevel.SAFE
             }
             
-            Log.d(TAG, "URL Analysis: $url -> $riskLevel (${reasons.size} issues)")
+            Log.d(TAG, "URL Analysis: ${normalizedUrl.normalizedUrl} -> $riskLevel (${reasons.size} issues)")
             
-            LinkAnalysisResult(url, riskLevel, reasons)
+            LinkAnalysisResult(
+                normalizedUrl.normalizedUrl,
+                riskLevel,
+                reasons,
+                null,
+                null
+            )
             
         } catch (e: Exception) {
             Log.e(TAG, "Error analyzing link: ${e.message}", e)
-            LinkAnalysisResult(url, LinkRiskLevel.SUSPICIOUS, listOf("Analysis error: ${e.message}"))
+            LinkAnalysisResult(
+                url,
+                LinkRiskLevel.SAFE,
+                listOf("Analysis error: ${e.message}"),
+                null,
+                null
+            )
         }
     }
     
@@ -192,74 +268,77 @@ class LinkAnalyzer {
      * Run all security checks on a URL
      * Returns map indicating if dangerous or suspicious patterns found
      */
-    private fun runSecurityChecks(url: String, reasons: MutableList<String>): Map<String, Boolean> {
+    private fun runSecurityChecks(url: NormalizedUrl, reasons: MutableList<String>): Map<String, Boolean> {
         var isDangerous = false
         var isSuspicious = false
+        val normalizedUrl = url.normalizedUrl
+        val host = url.host
         
         // Check 1: IP Address Detection (DANGEROUS - immediate reject)
-        if (checkIPAddress(url)) {
+        if (checkIPAddress(host)) {
             reasons.add("🔴 DANGEROUS: Uses IP address instead of domain (typical phishing)")
             isDangerous = true
         }
+
+        // Check 2: Known brand name embedded in an unrelated host
+        val brandEmbeddingReason = checkEmbeddedTrustedDomain(host)
+        if (brandEmbeddingReason != null) {
+            reasons.add(brandEmbeddingReason)
+            isDangerous = true
+        }
         
-        // Check 2: Domain Typosquatting (DANGEROUS - common phishing technique)
-        val typosquattingCheck = checkDomainTyposquatting(url)
+        // Check 3: Domain Typosquatting (DANGEROUS - common phishing technique)
+        val typosquattingCheck = checkDomainTyposquatting(host)
         if (typosquattingCheck.isNotEmpty()) {
             reasons.addAll(typosquattingCheck)
             isDangerous = true
         }
         
-        // Check 3: URL Length Analysis
-        if (checkURLLength(url)) {
-            reasons.add("⚠️ Unusually long URL (${url.length} chars)")
+        // Check 4: URL Length Analysis
+        if (checkURLLength(normalizedUrl)) {
+            reasons.add("⚠️ Unusually long URL (${normalizedUrl.length} chars)")
             isSuspicious = true
         }
         
-        // Check 4: Suspicious Characters and Encoding
-        if (checkSuspiciousCharacters(url)) {
+        // Check 5: Suspicious Characters and Encoding
+        if (checkSuspiciousCharacters(normalizedUrl)) {
             reasons.add("⚠️ Contains suspicious special characters or encoding")
             isSuspicious = true
         }
         
-        // Check 5: Multiple Hyphens/Underscores
-        if (checkMultipleHyphens(url)) {
+        // Check 6: Multiple Hyphens/Underscores
+        if (checkMultipleHyphens(host)) {
             reasons.add("⚠️ Contains multiple hyphens (homograph attack indicator)")
             isSuspicious = true
         }
         
-        // Check 6: Shortened URL Detection
-        if (checkShortenedURL(url)) {
+        // Check 7: Shortened URL Detection
+        if (checkShortenedURL(host)) {
             reasons.add("⚠️ Uses URL shortener service (hides final destination)")
             isSuspicious = true
         }
         
-        // Check 7: Phishing Keywords
-        val phishingCheck = checkPhishingKeywords(url)
+        // Check 8: Phishing Keywords
+        val phishingCheck = checkPhishingKeywords(host)
         if (phishingCheck.isNotEmpty()) {
             reasons.addAll(phishingCheck)
             isSuspicious = true
         }
         
-        // Check 8: Subdomain Flooding
-        if (checkSubdomainFlooding(url)) {
+        // Check 9: Subdomain Flooding
+        if (checkSubdomainFlooding(host)) {
             reasons.add("⚠️ Suspicious number of subdomains")
             isSuspicious = true
         }
         
-        // Check 9: Port Number Analysis
-        if (checkSuspiciousPort(url)) {
+        // Check 10: Port Number Analysis
+        if (checkSuspiciousPort(normalizedUrl)) {
             reasons.add("⚠️ Uses non-standard or suspicious port number")
             isSuspicious = true
         }
         
-        // Check 10: Protocol Inconsistency
-        if (checkProtocolIssues(url)) {
-            reasons.add("⚠️ Protocol or structure issues detected")
-            isSuspicious = true
-        }
-        
         // Check 11: Homograph Attack Detection
-        if (checkHomographAttack(url)) {
+        if (checkHomographAttack(host)) {
             reasons.add("🔴 Potential homograph attack (lookalike domain)")
             isDangerous = true
         }
@@ -275,9 +354,18 @@ class LinkAnalyzer {
      * Example: http://192.168.1.1 or http://8.8.8.8
      * DANGEROUS: Phishers use IPs to bypass domain reputation checks
      */
-    private fun checkIPAddress(url: String): Boolean {
-        val ipPattern = Regex("""(\d{1,3}\.){3}\d{1,3}""")
-        return ipPattern.containsMatchIn(url)
+    private fun checkIPAddress(host: String): Boolean {
+        return UrlNormalizer.isIpAddress(host)
+    }
+
+    private fun checkEmbeddedTrustedDomain(host: String): String? {
+        val embeddedDomain = LEGITIMATE_DOMAINS.firstOrNull { legitDomain ->
+            host.contains(legitDomain) && !UrlNormalizer.isSameOrSubdomain(host, legitDomain)
+        }
+
+        return embeddedDomain?.let {
+            "🔴 DANGEROUS: Embeds trusted domain '$it' inside an unrelated host"
+        }
     }
     
     /**
@@ -289,30 +377,29 @@ class LinkAnalyzer {
      *   - "googel.com" instead of "google.com" (transposed characters)
      *   - "g00gle.com" instead of "google.com" (character substitution)
      */
-    private fun checkDomainTyposquatting(url: String): List<String> {
+    private fun checkDomainTyposquatting(host: String): List<String> {
         val reasons = mutableListOf<String>()
-        val domainPart = extractDomain(url).lowercase()
+        val suspectLabel = UrlNormalizer.extractRegistrableLabel(host)
         
         // Check against all legitimate domains
         LEGITIMATE_DOMAINS.forEach { legit ->
-            val legitName = legit.split(".")[0].lowercase()
-            val urlName = domainPart.split(".")[0].lowercase()
+            val legitName = UrlNormalizer.extractRegistrableLabel(legit)
             
             // Check 1: Similar length but different characters (typo)
-            val similarity = calculateStringSimilarity(urlName, legitName)
+            val similarity = calculateStringSimilarity(suspectLabel, legitName)
             if (similarity > 0.7 && similarity < 0.99) { // Very similar but not identical
                 reasons.add("🔴 DANGEROUS: Domain typo of '$legit' (phishing - typosquatting)")
                 return reasons
             }
             
             // Check 2: Extra repeated characters (goooogle vs google)
-            if (hasExtraRepeatedChars(urlName, legitName)) {
+            if (hasExtraRepeatedChars(suspectLabel, legitName)) {
                 reasons.add("🔴 DANGEROUS: Domain with repeated chars similar to '$legit' (typosquatting)")
                 return reasons
             }
             
             // Check 3: Character substitutions (g00gle vs google)
-            if (hasCharacterSubstitutions(urlName, legitName)) {
+            if (hasCharacterSubstitutions(suspectLabel, legitName)) {
                 reasons.add("🔴 DANGEROUS: Domain with char substitutions similar to '$legit' (lookalike)")
                 return reasons
             }
@@ -404,7 +491,7 @@ class LinkAnalyzer {
      * Phishing URLs are often very long to hide the actual domain
      */
     private fun checkURLLength(url: String): Boolean {
-        return url.length > 100
+        return url.length > 180
     }
     
     /**
@@ -412,7 +499,7 @@ class LinkAnalyzer {
      * Example: %2F, %3D (encoded characters)
      */
     private fun checkSuspiciousCharacters(url: String): Boolean {
-        return url.contains("%") || 
+        return url.count { it == '%' } >= 3 || 
                url.contains("\\u") ||
                url.contains("&amp;") ||
                url.contains("&#")
@@ -422,30 +509,29 @@ class LinkAnalyzer {
      * Check 4: Multiple hyphens indicate homograph/typosquatting
      * Example: g00gle-secure-verify.com
      */
-    private fun checkMultipleHyphens(url: String): Boolean {
-        val domainPart = extractDomain(url)
-        val hyphenCount = domainPart.count { it == '-' }
+    private fun checkMultipleHyphens(host: String): Boolean {
+        val hyphenCount = host.count { it == '-' }
         return hyphenCount > 2
     }
     
     /**
      * Check 5: Detect URL shorteners (bit.ly, tinyurl, etc.)
      */
-    private fun checkShortenedURL(url: String): Boolean {
+    private fun checkShortenedURL(host: String): Boolean {
         return SHORTENER_DOMAINS.any { shortener ->
-            url.contains(shortener, ignoreCase = true)
+            UrlNormalizer.isSameOrSubdomain(host, shortener)
         }
     }
     
     /**
      * Check 6: Detect phishing keywords in URL
      */
-    private fun checkPhishingKeywords(url: String): List<String> {
+    private fun checkPhishingKeywords(host: String): List<String> {
         val reasons = mutableListOf<String>()
-        val lowerUrl = url.lowercase()
+        val lowerHost = host.lowercase()
         
         PHISHING_KEYWORDS.forEach { keyword ->
-            if (lowerUrl.contains(keyword)) {
+            if (lowerHost.contains(keyword)) {
                 reasons.add("⚠️ Contains phishing keyword: '$keyword'")
             }
         }
@@ -458,9 +544,8 @@ class LinkAnalyzer {
      * Legitimate sites rarely have many subdomains
      * Example: suspicious.suspicious.evil.com
      */
-    private fun checkSubdomainFlooding(url: String): Boolean {
-        val domainPart = extractDomain(url)
-        val dots = domainPart.count { it == '.' }
+    private fun checkSubdomainFlooding(host: String): Boolean {
+        val dots = host.count { it == '.' }
         return dots > 3 // More than 3 dots = suspicious
     }
     
@@ -482,24 +567,16 @@ class LinkAnalyzer {
      * Check 9: Protocol inconsistency
      * Example: htp:// instead of http://
      */
-    private fun checkProtocolIssues(url: String): Boolean {
-        val protocolRegex = Regex("""^[a-z]{3,6}:\/\/""")
-        return !protocolRegex.containsMatchIn(url) && 
-               !url.startsWith("//") &&
-               url.contains("://").not()
-    }
-    
     /**
      * Check 10: Homograph attack detection
      * Detects lookalike domains using similar characters
      * Example: g00gle.com (zero instead of O)
      */
-    private fun checkHomographAttack(url: String): Boolean {
-        val domainPart = extractDomain(url)
+    private fun checkHomographAttack(host: String): Boolean {
         
         // Check for mixed character types in domain
-        val hasDigits = domainPart.any { it.isDigit() }
-        val hasLetters = domainPart.any { it.isLetter() }
+        val hasDigits = host.any { it.isDigit() }
+        val hasLetters = host.any { it.isLetter() }
         
         // Check for confusing character combinations
         val confusingPatterns = listOf(
@@ -511,7 +588,7 @@ class LinkAnalyzer {
         
         if (hasDigits && hasLetters) {
             confusingPatterns.forEach { pattern ->
-                if (pattern.containsMatchIn(domainPart)) {
+                if (pattern.containsMatchIn(host)) {
                     return true
                 }
             }
@@ -519,18 +596,10 @@ class LinkAnalyzer {
         
         return false
     }
-    
-    /**
-     * Helper: Extract domain from URL
-     */
-    private fun extractDomain(url: String): String {
-        return try {
-            val startIdx = url.indexOf("://") + 3
-            val endIdx = url.indexOf("/", startIdx).takeIf { it != -1 } ?: url.length
-            val domain = url.substring(startIdx, endIdx)
-            domain.replace(Regex(""":.*"""), "") // Remove port
-        } catch (e: Exception) {
-            url
+
+    private fun isTrustedDomain(host: String): Boolean {
+        return LEGITIMATE_DOMAINS.any { legitDomain ->
+            UrlNormalizer.isSameOrSubdomain(host, legitDomain)
         }
     }
 }

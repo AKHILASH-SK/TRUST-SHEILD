@@ -253,7 +253,7 @@ class PhishingDomainCheckerFirebase(private val context: Context) {
                                 for (domainSnapshot in dangerous.children) {
                                     val domain = domainSnapshot.value as? String
                                     if (domain != null) {
-                                        newDangerousSet.add(domain.toLowerCase())
+                                        newDangerousSet.add(domain.lowercase())
                                     }
                                 }
                                 
@@ -268,7 +268,7 @@ class PhishingDomainCheckerFirebase(private val context: Context) {
                                 for (domainSnapshot in suspicious.children) {
                                     val domain = domainSnapshot.value as? String
                                     if (domain != null) {
-                                        newSuspiciousSet.add(domain.toLowerCase())
+                                        newSuspiciousSet.add(domain.lowercase())
                                     }
                                 }
                                 cachedSuspiciousDomains = newSuspiciousSet
@@ -307,8 +307,8 @@ class PhishingDomainCheckerFirebase(private val context: Context) {
      * Returns result immediately from cache, updates in background if needed
      */
     fun checkDomain(domain: String, callback: (PhishingCheckData) -> Unit) {
-        val normalizedDomain = domain.toLowerCase().trim()
-        val extractedDomain = extractDomainFromUrl(normalizedDomain)
+        val extractedDomain = UrlNormalizer.extractHost(domain)
+            ?: domain.lowercase().trim().removePrefix("www.")
         
         // Check local cache immediately
         val result = checkLocalDatabase(extractedDomain)
@@ -324,7 +324,8 @@ class PhishingDomainCheckerFirebase(private val context: Context) {
      * Check local cached database
      */
     private fun checkLocalDatabase(domain: String): PhishingCheckData {
-        val normalizedDomain = domain.toLowerCase().trim()
+        val normalizedDomain = UrlNormalizer.extractHost(domain)
+            ?: domain.lowercase().trim().removePrefix("www.")
         
         return when {
             cachedDangerousDomains.contains(normalizedDomain) -> {
@@ -348,33 +349,6 @@ class PhishingDomainCheckerFirebase(private val context: Context) {
                     message = "✅ Domain appears safe"
                 )
             }
-        }
-    }
-    
-    /**
-     * Extract domain from URL string
-     * Examples:
-     * "http://paypal-confirm.com/verify" → "paypal-confirm.com"
-     * "paypal-confirm.com" → "paypal-confirm.com"
-     * "www.paypal-confirm.com" → "paypal-confirm.com"
-     */
-    private fun extractDomainFromUrl(urlString: String): String {
-        return try {
-            // Remove protocol if present
-            var domain = urlString
-                .replace(Regex("^https?://"), "")
-                .replace(Regex("^www\\."), "")
-            
-            // Remove path, query, fragment
-            domain = domain.split("/")[0]
-                .split("?")[0]
-                .split("#")[0]
-                .split(":")[0]
-            
-            domain.toLowerCase()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error extracting domain: ${e.message}")
-            urlString.toLowerCase()
         }
     }
     

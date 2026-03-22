@@ -58,6 +58,17 @@ class NotificationListener : NotificationListenerService() {
             
             // Extract the package name of the app that posted the notification
             val packageName = sbn.packageName
+
+            // Ignore our own app notifications to prevent recursive alert loops
+            if (packageName == applicationContext.packageName) {
+                Log.d(TAG, "Skipping self notification from: $packageName")
+                return
+            }
+
+            // Skip notifications we've already processed
+            if (linkTracker.hasProcessedNotification(notificationKey)) {
+                return
+            }
             
             // Get the notification extras bundle containing notification data
             val extras: Bundle = sbn.notification.extras
@@ -97,6 +108,10 @@ class NotificationListener : NotificationListenerService() {
             
             // ========== PHASE 1: LINK EXTRACTION & ANALYSIS ==========
             performLinkSecurityAnalysis(fullMessage, packageName)
+
+            // Mark processed to avoid duplicate handling of the same notification
+            linkTracker.markNotificationProcessed(notificationKey)
+            linkTracker.cleanupOldProcessedNotifications()
             
         } catch (e: Exception) {
             // Log any errors that occur during notification processing

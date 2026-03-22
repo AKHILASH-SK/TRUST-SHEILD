@@ -1,200 +1,247 @@
-"""
-TrustShield Sandbox Analysis Backend
-Tier 3 Analysis: URL Sandbox Check via VirusTotal API
-
-Usage:
-1. Set VIRUSTOTAL_API_KEY environment variable
-2. Run: python app.py
-3. Send POST request to http://localhost:5000/api/sandbox-check
-"""
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import logging
+import psycopg
+import bcrypt
 import os
-from sandbox_analyzer import SandboxAnalyzer, URLFeatureAnalyzer
+from dotenv import load_dotenv
 from datetime import datetime
+
+# Load environment variables
+load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for Android app
+CORS(app)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Initialize VirusTotal API key
-# Get free key from: https://www.virustotal.com/gui/
-VIRUSTOTAL_API_KEY = os.getenv('VIRUSTOTAL_API_KEY', 'YOUR_API_KEY_HERE')
-
-# Initialize sandbox analyzer
-sandbox = SandboxAnalyzer(VIRUSTOTAL_API_KEY)
-
-# Statistics
-stats = {
-    "total_checks": 0,
-    "dangerous_count": 0,
-    "suspicious_count": 0,
-    "safe_count": 0
+# Database configuration
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', '5432')),
+    'dbname': os.getenv('DB_NAME', 'trustshield_db'),
+    'user': os.getenv('DB_USER', 'postgres'),
+    'password': os.getenv('DB_PASSWORD', 'postgres')
 }
 
+print(f"🔌 Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}")
 
-@app.route('/health', methods=['GET'])
+# Helper functions
+def get_db_connection():
+    """Get database connection"""
+    return psycopg.connect(**DB_CONFIG)
+
+def hash_pin(pin):
+    """Hash PIN using bcrypt"""
+    return bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
+
+def verify_pin(plain_pin, hashed_pin):
+    """Verify PIN against hash"""
+    return bcrypt.checkpw(plain_pin.encode(), hashed_pin.encode())
+
+# ==================== ROUTES ====================
+
+@app.route('/', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        "status": "healthy",
-        "service": "TrustShield Sandbox Analysis",
-        "timestamp": datetime.now().isoformat(),
-        "api_configured": VIRUSTOTAL_API_KEY != 'YOUR_API_KEY_HERE'
-    }), 200
+    return jsonify({"message": "TrustShield Backend is running", "status": "healthy"}), 200
 
+# ==================== AUTHENTICATION ENDPOINTS ====================
 
-@app.route('/api/sandbox-check', methods=['POST'])
-def sandbox_check():
-    """
-    Tier 3 Analysis: Sandbox check for unknown URLs
-    
-    Request:
-    {
-        "url": "https://suspicious-link.com"
-    }
-    
-    Response:
-    {
-        "url": "https://suspicious-link.com",
-        "verdict": "DANGEROUS" | "SUSPICIOUS" | "SAFE",
-        "confidence": 0-100,
-        "details": "Malicious: 5, Suspicious: 2, Safe: 83",
-        "engines_count": 90,
-        "malicious_count": 5,
-        "suspicious_count": 2,
-        "features": {...},
-        "timestamp": "2026-01-31T12:34:56"
-    }
-    """
+@app.route('/api/auth/register', methods=['POST'])
+def register_user():
+    """Register a new user"""
     try:
-        # Get URL from request
         data = request.get_json()
-        if not data or 'url' not in data:
-            return jsonify({
-                "error": "Missing 'url' parameter"
-            }), 400
         
-        url = data.get('url', '').strip()
-        if not url:
-            return jsonify({
-                "error": "URL cannot be empty"
-            }), 400
+        # Validate input
+        required_fields = ['name', 'last_name', 'email', 'phone_number', 'pin']
+        if not all(field in data for field in required_fields):
+            return jsonify({"error": "Missing required fields"}), 400
         
-        logger.info(f"Sandbox check request for: {url}")
+        conn = get_db_connection()
+        cur = conn.cursor()
         
-        # Extract URL features
-        features = URLFeatureAnalyzer.extract_features(url)
-        logger.info(f"URL Features: {features}")
+        # Check if email already exists
+        cur.execute("SELECT id FROM users WHERE email = %s", (data['email'],))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "Email already registered"}), 400
         
-        # Perform sandbox analysis
-        verdict = sandbox.analyze_url(url)
+        # Check if phone number already exists
+        cur.execute("SELECT id FROM users WHERE phone_number = %s", (data['phone_number'],))
+        if cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "Phone number already registered"}), 400
         
-        # Update statistics
-        stats["total_checks"] += 1
-        if verdict["verdict"] == "DANGEROUS":
-            stats["dangerous_count"] += 1
-        elif verdict["verdict"] == "SUSPICIOUS":
-            stats["suspicious_count"] += 1
-        else:
-            stats["safe_count"] += 1
+        # Hash the PIN
+        hashed_pin = hash_pin(data['pin'])
         
-        # Add features to response
-        verdict["features"] = features
-        verdict["timestamp"] = datetime.now().isoformat()
+        # Insert user
+        cur.execute(
+            """INSERT INTO users (name, last_name, email, phone_number, pin, created_at, updated_at) 
+               VALUES (%s, %s, %s, %s, %s, NOW(), NOW()) 
+               RETURNING id, name, email, phone_number, created_at""",
+            (data['name'], data['last_name'], data['email'], data['phone_number'], hashed_pin)
+        )
         
-        # Determine HTTP status based on verdict
-        status_code = 200
-        if verdict["verdict"] == "DANGEROUS":
-            status_code = 200  # Still 200 but app will handle verdict
+        user = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
         
-        logger.info(f"Verdict: {verdict['verdict']} (Confidence: {verdict['confidence']}%)")
-        return jsonify(verdict), status_code
+        return jsonify({
+            "id": user[0],
+            "name": user[1],
+            "email": user[2],
+            "phone_number": user[3],
+            "created_at": user[4].isoformat()
+        }), 201
         
     except Exception as e:
-        logger.error(f"Error in sandbox_check: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def login_user():
+    """Login user with phone number and PIN"""
+    try:
+        data = request.get_json()
+        
+        if not data.get('phone_number') or not data.get('pin'):
+            return jsonify({"error": "Missing phone_number or pin"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Find user by phone number
+        cur.execute("SELECT id, name, email, phone_number, pin FROM users WHERE phone_number = %s", 
+                   (data['phone_number'],))
+        user_row = cur.fetchone()
+        
+        if not user_row:
+            cur.close()
+            conn.close()
+            return jsonify({"error": "Phone number not found"}), 401
+        
+        # Verify PIN
+        if not verify_pin(data['pin'], user_row[4]):
+            cur.close()
+            conn.close()
+            return jsonify({"error": "Incorrect PIN"}), 401
+        
+        cur.close()
+        conn.close()
+        
         return jsonify({
-            "error": f"Analysis failed: {str(e)}",
-            "verdict": "UNKNOWN"
-        }), 500
+            "id": user_row[0],
+            "name": user_row[1],
+            "email": user_row[2],
+            "phone_number": user_row[3],
+            "message": "Login successful"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+# ==================== LINK SCAN ENDPOINTS ====================
 
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    """Get analysis statistics"""
-    return jsonify({
-        "total_checks": stats["total_checks"],
-        "dangerous_count": stats["dangerous_count"],
-        "suspicious_count": stats["suspicious_count"],
-        "safe_count": stats["safe_count"],
-        "timestamp": datetime.now().isoformat()
-    }), 200
+@app.route('/api/links/scan', methods=['POST'])
+def save_link_scan():
+    """Save a scanned link to database"""
+    try:
+        data = request.get_json()
+        
+        if not data.get('user_id') or not data.get('url'):
+            return jsonify({"error": "Missing user_id or url"}), 400
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Verify user exists
+        cur.execute("SELECT id FROM users WHERE id = %s", (data['user_id'],))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+        
+        # Insert link scan
+        cur.execute(
+            """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at) 
+               VALUES (%s, %s, %s, %s, %s, NOW()) 
+               RETURNING id, user_id, url, risk_level, reasons, verdict, analyzed_at""",
+            (data['user_id'], data['url'], "SAFE", "Initial scan", "Safe link")
+        )
+        
+        scan = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "id": scan[0],
+            "user_id": scan[1],
+            "url": scan[2],
+            "risk_level": scan[3],
+            "reasons": scan[4],
+            "verdict": scan[5],
+            "analyzed_at": scan[6].isoformat()
+        }), 201
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
+@app.route('/api/links/history/<int:user_id>', methods=['GET'])
+def get_user_link_history(user_id):
+    """Get all scanned links for a user"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Verify user exists
+        cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+        if not cur.fetchone():
+            cur.close()
+            conn.close()
+            return jsonify({"error": "User not found"}), 404
+        
+        # Get all scans
+        cur.execute(
+            """SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at 
+               FROM link_scans WHERE user_id = %s 
+               ORDER BY analyzed_at DESC""",
+            (user_id,)
+        )
+        
+        scans = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        # Convert to dictionaries
+        scan_list = []
+        for scan in scans:
+            scan_list.append({
+                "id": scan[0],
+                "user_id": scan[1],
+                "url": scan[2],
+                "risk_level": scan[3],
+                "reasons": scan[4],
+                "verdict": scan[5],
+                "analyzed_at": scan[6].isoformat() if scan[6] else None
+            })
+        
+        return jsonify({
+            "user_id": user_id,
+            "total_scans": len(scan_list),
+            "scans": scan_list
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/test', methods=['GET'])
-def test_endpoint():
-    """Test endpoint to verify backend is working"""
-    return jsonify({
-        "message": "TrustShield Sandbox Backend is running!",
-        "version": "1.0",
-        "endpoints": [
-            "GET /health - Health check",
-            "POST /api/sandbox-check - Analyze URL",
-            "GET /api/stats - Get statistics",
-            "GET /api/test - Test endpoint"
-        ]
-    }), 200
-
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors"""
-    return jsonify({
-        "error": "Endpoint not found",
-        "available_endpoints": [
-            "/health",
-            "/api/sandbox-check (POST)",
-            "/api/stats",
-            "/api/test"
-        ]
-    }), 404
-
-
-@app.errorhandler(500)
-def server_error(error):
-    """Handle 500 errors"""
-    return jsonify({
-        "error": "Internal server error",
-        "message": str(error)
-    }), 500
-
+@app.route('/api/health', methods=['GET'])
+def api_health():
+    """Health check for API"""
+    return jsonify({"status": "healthy", "message": "Backend is running"}), 200
 
 if __name__ == '__main__':
-    # Check if API key is configured
-    if VIRUSTOTAL_API_KEY == 'YOUR_API_KEY_HERE':
-        logger.warning("⚠️  VIRUSTOTAL_API_KEY not configured!")
-        logger.warning("Get a free key from: https://www.virustotal.com/gui/")
-        logger.warning("Set environment variable: VIRUSTOTAL_API_KEY=your_key")
-        logger.warning("Backend will work but sandbox analysis will fail")
-    else:
-        logger.info("✅ VirusTotal API key configured")
-    
-    # Run Flask app
-    logger.info("🚀 Starting TrustShield Sandbox Backend...")
-    logger.info("📍 Running on http://0.0.0.0:5000")
-    logger.info("📱 Android app should connect to this backend")
-    
-    app.run(
-        host='0.0.0.0',  # Listen on all interfaces (for WiFi access)
-        port=5000,
-        debug=True
-    )
+    app.run(host='0.0.0.0', port=8000, debug=True)
