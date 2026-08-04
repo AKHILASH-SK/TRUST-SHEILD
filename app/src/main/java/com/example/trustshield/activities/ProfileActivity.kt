@@ -1,9 +1,10 @@
 package com.example.trustshield.activities
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.widget.ProgressBar
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -12,7 +13,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.trustshield.R
 import com.example.trustshield.firebase.FirebaseService
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import kotlinx.coroutines.launch
 
 /**
@@ -23,16 +24,12 @@ class ProfileActivity : AppCompatActivity() {
     
     private lateinit var firebaseService: FirebaseService
     private lateinit var toolbar: Toolbar
-    private lateinit var nameInput: TextInputEditText
-    private lateinit var emailInput: TextInputEditText
+    private lateinit var nameText: TextView
     private lateinit var phoneText: TextView
-    private lateinit var totalScansText: TextView
-    private lateinit var safeLinksText: TextView
-    private lateinit var suspiciousLinksText: TextView
-    private lateinit var dangerousLinksText: TextView
-    private lateinit var saveButton: MaterialButton
+    private lateinit var walletBalanceText: TextView
     private lateinit var logoutButton: MaterialButton
-    private lateinit var progressBar: ProgressBar
+    private lateinit var bottomNav: BottomNavigationView
+    private lateinit var progressOverlay: FrameLayout
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,8 +37,11 @@ class ProfileActivity : AppCompatActivity() {
         
         firebaseService = FirebaseService()
         
-        // Check if user is logged in
-        if (!firebaseService.isUserLoggedIn()) {
+        // Check if user is logged in via SharedPreferences
+        val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+        val userId = sharedPref.getInt("user_id", -1)
+        
+        if (userId == -1 && !firebaseService.isUserLoggedIn()) {
             navigateToLogin()
             return
         }
@@ -54,43 +54,54 @@ class ProfileActivity : AppCompatActivity() {
     
     private fun initializeViews() {
         toolbar = findViewById(R.id.toolbar)
-        nameInput = findViewById(R.id.et_name)
-        emailInput = findViewById(R.id.et_email)
+        nameText = findViewById(R.id.tv_name)
         phoneText = findViewById(R.id.tv_phone)
-        totalScansText = findViewById(R.id.tv_total_scans)
-        safeLinksText = findViewById(R.id.tv_safe_links)
-        suspiciousLinksText = findViewById(R.id.tv_suspicious_links)
-        dangerousLinksText = findViewById(R.id.tv_dangerous_links)
-        saveButton = findViewById(R.id.btn_save_profile)
+        walletBalanceText = findViewById(R.id.tv_wallet_balance)
         logoutButton = findViewById(R.id.btn_logout)
-        progressBar = findViewById(R.id.progress_bar)
+        bottomNav = findViewById(R.id.bottom_navigation)
+        progressOverlay = findViewById(R.id.progress_overlay)
     }
     
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.title = "Profile & Settings"
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        toolbar.setNavigationOnClickListener {
-            onBackPressed()
-        }
+        supportActionBar?.setDisplayShowTitleEnabled(false)
     }
     
     private fun setupListeners() {
-        saveButton.setOnClickListener {
-            val name = nameInput.text?.toString()?.trim() ?: ""
-            val email = emailInput.text?.toString()?.trim() ?: ""
-            
-            if (name.isEmpty()) {
-                Toast.makeText(this, "Please enter your name", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+        bottomNav.selectedItemId = R.id.nav_profile
+        
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> {
+                    val intent = Intent(this, HomeActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                R.id.nav_dashboard -> {
+                    val intent = Intent(this, DashboardActivity::class.java)
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                R.id.nav_profile -> true
+                else -> false
             }
-            
-            updateProfile(name, email)
         }
         
         logoutButton.setOnClickListener {
+            progressOverlay.visibility = View.VISIBLE
+            
+            // Clear Firebase
             firebaseService.logout()
+            
+            // Clear SharedPreferences
+            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+            sharedPref.edit().clear().apply()
+            
             Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show()
+            progressOverlay.visibility = View.GONE
             navigateToLogin()
         }
     }
@@ -98,51 +109,38 @@ class ProfileActivity : AppCompatActivity() {
     private fun loadUserProfile() {
         lifecycleScope.launch {
             try {
-                progressBar.visibility = View.VISIBLE
+                progressOverlay.visibility = View.VISIBLE
                 
                 val user = firebaseService.getCurrentUser()
-                val stats = firebaseService.getUserStats()
-                
-                progressBar.visibility = View.GONE
                 
                 if (user != null) {
-                    nameInput.setText(user.name)
-                    emailInput.setText(user.email)
-                    phoneText.text = "Phone: ${user.phoneNumber}"
-                }
-                
-                // Display statistics
-                totalScansText.text = stats.totalScans.toString()
-                safeLinksText.text = "${stats.safeLinks} (${String.format("%.1f", stats.getSafePercentage())}%)"
-                suspiciousLinksText.text = "${stats.suspiciousLinks} (${String.format("%.1f", stats.getSuspiciousPercentage())}%)"
-                dangerousLinksText.text = "${stats.dangerousLinks} (${String.format("%.1f", stats.getDangerousPercentage())}%)"
-                
-            } catch (e: Exception) {
-                progressBar.visibility = View.GONE
-                Toast.makeText(this@ProfileActivity, "Error loading profile: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-    
-    private fun updateProfile(name: String, email: String) {
-        lifecycleScope.launch {
-            try {
-                val userId = firebaseService.getCurrentUserId() ?: return@launch
-                val success = firebaseService.updateUserProfile(userId, name, email)
-                
-                if (success) {
-                    Toast.makeText(this@ProfileActivity, "Profile updated successfully", Toast.LENGTH_SHORT).show()
+                    nameText.text = user.name
+                    phoneText.text = user.phoneNumber
                 } else {
-                    Toast.makeText(this@ProfileActivity, "Failed to update profile", Toast.LENGTH_SHORT).show()
+                    // Fallback to shared preferences if firebase user object is missing
+                    val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+                    val userName = sharedPref.getString("user_name", "User") ?: "User"
+                    nameText.text = userName
                 }
+                
+                // Display wallet balance
+                val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+                val balance = sharedPref.getInt("wallet_balance", 1000)
+                walletBalanceText.text = "$balance Scans Left"
+                
+                progressOverlay.visibility = View.GONE
+                
             } catch (e: Exception) {
-                Toast.makeText(this@ProfileActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                progressOverlay.visibility = View.GONE
+                Toast.makeText(this@ProfileActivity, "Error loading profile", Toast.LENGTH_SHORT).show()
             }
         }
     }
     
     private fun navigateToLogin() {
-        startActivity(Intent(this, LoginActivity::class.java))
+        val intent = Intent(this, LoginActivity::class.java)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        startActivity(intent)
         finish()
     }
 }

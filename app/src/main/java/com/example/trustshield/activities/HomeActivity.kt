@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -13,11 +12,12 @@ import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.example.trustshield.R
 import com.example.trustshield.adapters.LinkHistoryAdapter
 import com.example.trustshield.network.RetrofitClient
-import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import kotlinx.coroutines.launch
 
 /**
@@ -34,11 +34,9 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var linkHistoryRecycler: RecyclerView
     private lateinit var emptyStateView: View
     private lateinit var emptyStateText: TextView
-    private lateinit var progressBar: ProgressBar
-    private lateinit var profileButton: MaterialButton
-    private lateinit var logoutButton: MaterialButton
+    private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var scanFab: FloatingActionButton
-    private lateinit var userGreeting: TextView
+    private lateinit var bottomNav: BottomNavigationView
     
     private val linkHistoryAdapter = LinkHistoryAdapter()
     
@@ -50,7 +48,6 @@ class HomeActivity : AppCompatActivity() {
             // Check if user is logged in
             val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
             val userId = sharedPref.getInt("user_id", -1)
-            val userName = sharedPref.getString("user_name", "User") ?: "User"
             
             if (userId == -1) {
                 Log.w(TAG, "No logged in user found")
@@ -59,14 +56,13 @@ class HomeActivity : AppCompatActivity() {
             }
             
             initializeViews()
-            setupToolbar(userName)
+            setupToolbar()
             setupRecyclerView()
             setupListeners()
             loadLinkHistory(userId)
             
         } catch (e: Exception) {
-            Log.e(TAG, "Initialization error: ${e.message}", e)
-            Toast.makeText(this, "Error loading home: ${e.message}", Toast.LENGTH_LONG).show()
+            Log.e(TAG, "Error in onCreate: ${e.message}", e)
         }
     }
     
@@ -75,18 +71,13 @@ class HomeActivity : AppCompatActivity() {
         linkHistoryRecycler = findViewById(R.id.recycler_link_history)
         emptyStateView = findViewById(R.id.empty_state_container)
         emptyStateText = findViewById(R.id.tv_empty_state)
-        progressBar = findViewById(R.id.progress_bar)
-        profileButton = findViewById(R.id.btn_profile)
-        logoutButton = findViewById(R.id.btn_logout)
+        swipeRefresh = findViewById(R.id.swipe_refresh_layout)
         scanFab = findViewById(R.id.fab_scan)
-        userGreeting = findViewById(R.id.tv_user_greeting)
+        bottomNav = findViewById(R.id.bottom_navigation)
     }
     
-    private fun setupToolbar(userName: String) {
+    private fun setupToolbar() {
         setSupportActionBar(toolbar)
-        supportActionBar?.title = "TrustShield"
-        supportActionBar?.subtitle = "Link Security Dashboard"
-        userGreeting.text = "Welcome back, $userName!"
     }
     
     private fun setupRecyclerView() {
@@ -97,18 +88,42 @@ class HomeActivity : AppCompatActivity() {
     }
     
     private fun setupListeners() {
-        profileButton.setOnClickListener {
-            Toast.makeText(this, "Profile page coming soon", Toast.LENGTH_SHORT).show()
+        bottomNav.selectedItemId = R.id.nav_home
+        
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> true
+                R.id.nav_dashboard -> {
+                    val intent = Intent(this, DashboardActivity::class.java)
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                R.id.nav_profile -> {
+                    val intent = Intent(this, ProfileActivity::class.java)
+                    startActivity(intent)
+                    overridePendingTransition(0, 0)
+                    true
+                }
+                else -> false
+            }
         }
         
-        logoutButton.setOnClickListener {
-            logout()
+        swipeRefresh.setOnRefreshListener {
+            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+            val userId = sharedPref.getInt("user_id", -1)
+            if (userId != -1) {
+                loadLinkHistory(userId)
+            } else {
+                swipeRefresh.isRefreshing = false
+            }
         }
         
         scanFab.setOnClickListener {
             val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
             val userId = sharedPref.getInt("user_id", -1)
             if (userId != -1) {
+                swipeRefresh.isRefreshing = true
                 loadLinkHistory(userId)
             }
         }
@@ -117,55 +132,43 @@ class HomeActivity : AppCompatActivity() {
     private fun loadLinkHistory(userId: Int) {
         lifecycleScope.launch {
             try {
-                progressBar.visibility = View.VISIBLE
-                Log.d(TAG, "Loading link history for user: $userId")
+                emptyStateView.visibility = View.GONE
+                swipeRefresh.isRefreshing = true
                 
                 val apiService = RetrofitClient.getInstance().getApiService()
                 val response = apiService.getLinkHistory(userId)
                 
                 if (response.isSuccessful && response.body() != null) {
                     val historyResponse = response.body()!!
-                    val links = historyResponse.scans
+                    Log.d(TAG, "Loaded ${historyResponse.scans.size} scans")
                     
-                    Log.d(TAG, "Loaded ${links.size} links from backend")
-                    
-                    progressBar.visibility = View.GONE
-                    
-                    if (links.isEmpty()) {
-                        emptyStateView.visibility = View.VISIBLE
-                        linkHistoryRecycler.visibility = View.GONE
-                        emptyStateText.text = "No links scanned yet.\nStart using TrustShield to check link safety!"
+                    if (historyResponse.scans.isEmpty()) {
+                        showEmptyState("No scan history found")
                     } else {
-                        emptyStateView.visibility = View.GONE
+                        linkHistoryAdapter.submitList(historyResponse.scans)
                         linkHistoryRecycler.visibility = View.VISIBLE
-                        linkHistoryAdapter.submitList(links)
                     }
                 } else {
-                    progressBar.visibility = View.GONE
-                    emptyStateView.visibility = View.VISIBLE
-                    emptyStateText.text = "Error loading link history: ${response.code()} ${response.message()}"
-                    Log.e(TAG, "Error loading history: ${response.code()} ${response.message()}")
+                    Log.e(TAG, "Failed to load history: ${response.code()}")
+                    showEmptyState("Failed to load history")
+                    Toast.makeText(this@HomeActivity, "Could not load history", Toast.LENGTH_SHORT).show()
                 }
                 
+                swipeRefresh.isRefreshing = false
+                
             } catch (e: Exception) {
-                progressBar.visibility = View.GONE
-                emptyStateView.visibility = View.VISIBLE
-                emptyStateText.text = "Error: ${e.message}"
-                Log.e(TAG, "Exception loading history: ${e.message}", e)
+                swipeRefresh.isRefreshing = false
+                Log.e(TAG, "Network error: ${e.message}", e)
+                showEmptyState("Network error")
+                Toast.makeText(this@HomeActivity, "Network error", Toast.LENGTH_SHORT).show()
             }
         }
     }
     
-    private fun logout() {
-        try {
-            val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
-            sharedPref.edit().clear().apply()
-            
-            Toast.makeText(this, "Logged out successfully", Toast.LENGTH_SHORT).show()
-            navigateToLogin()
-        } catch (e: Exception) {
-            Log.e(TAG, "Logout error: ${e.message}", e)
-        }
+    private fun showEmptyState(message: String) {
+        emptyStateView.visibility = View.VISIBLE
+        linkHistoryRecycler.visibility = View.GONE
+        emptyStateText.text = message
     }
     
     private fun navigateToLogin() {

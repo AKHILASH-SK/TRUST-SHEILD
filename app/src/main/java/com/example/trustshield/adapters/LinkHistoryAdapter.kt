@@ -38,6 +38,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
         private val verdictText: TextView = itemView.findViewById(R.id.tv_verdict)
         private val riskLevelText: TextView = itemView.findViewById(R.id.tv_risk_level)
         private val timestampText: TextView = itemView.findViewById(R.id.tv_timestamp)
+        private val statusIndicator: View = itemView.findViewById(R.id.status_indicator)
         
         fun bind(scan: LinkScanHistoryItem) {
             val context = itemView.context
@@ -58,6 +59,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
                     verdictIcon.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_green_dark))
                     riskLevelText.text = "Risk: Safe"
                     riskLevelText.setTextColor(ContextCompat.getColor(context, android.R.color.holo_green_dark))
+                    statusIndicator.setBackgroundColor(ContextCompat.getColor(context, android.R.color.holo_green_dark))
                 }
                 "SUSPICIOUS" -> {
                     verdictText.text = "⚠ Suspicious"
@@ -66,6 +68,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
                     verdictIcon.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
                     riskLevelText.text = "Risk: ${scan.risk_level ?: "Medium"}"
                     riskLevelText.setTextColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
+                    statusIndicator.setBackgroundColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
                 }
                 "DANGEROUS" -> {
                     verdictText.text = "✕ Dangerous"
@@ -74,6 +77,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
                     verdictIcon.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_red_dark))
                     riskLevelText.text = "Risk: ${scan.risk_level ?: "High"}"
                     riskLevelText.setTextColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
+                    statusIndicator.setBackgroundColor(ContextCompat.getColor(context, android.R.color.holo_red_dark))
                 }
                 else -> {
                     verdictText.text = "? Unknown"

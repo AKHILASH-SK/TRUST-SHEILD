@@ -51,6 +51,12 @@
             android:name=".activities.HomeActivity"
             android:exported="false"
             android:theme="@style/Theme.TrustShield" />
+            
+        <!-- Dashboard Activity - Stats and Chart -->
+        <activity
+            android:name=".activities.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield" />
 
         <!-- Link Detail Activity - Show full link analysis -->
         <activity

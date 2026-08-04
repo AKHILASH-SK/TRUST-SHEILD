@@ -1,128 +1,116 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@android:color/white">
+    android:fitsSystemWindows="true"
+    android:background="#F8F9FA">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/holo_blue_dark"
-        app:titleTextColor="@android:color/white" />
-
-    <!-- User Greeting Section -->
-    <LinearLayout
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:background="@android:color/holo_blue_light"
-        android:gravity="center_vertical">
+        android:background="#1E88E5"
+        app:elevation="4dp">
 
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:title="TrustShield"
+            app:titleTextColor="@android:color/white" />
+            
         <TextView
-            android:id="@+id/tv_user_greeting"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Welcome back, User!"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@android:color/white" />
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="16dp"
+            android:text="Recent Scans"
+            android:textColor="@android:color/white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+    </com.google.android.material.appbar.AppBarLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_logout"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:text="Logout"
-            android:textSize="12sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            app:cornerRadius="4dp"
-            app:backgroundTint="@android:color/holo_red_dark" />
-
-    </LinearLayout>
-
-    <FrameLayout
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipe_refresh_layout"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Recycler View for Link History -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/recycler_link_history"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:padding="8dp"
-            android:visibility="gone" />
+            android:paddingBottom="56dp"> <!-- padding for bottom nav -->
 
-        <!-- Empty State -->
-        <LinearLayout
-            android:id="@+id/empty_state_container"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="20dp">
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recycler_link_history"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingTop="8dp"
+                android:paddingBottom="88dp" /> <!-- extra padding for FAB -->
 
-            <ImageView
-                android:layout_width="80dp"
-                android:layout_height="80dp"
-                android:src="@drawable/ic_shield"
-                android:layout_marginBottom="15dp"
-                android:tint="@color/darker_gray" />
-
-            <TextView
-                android:id="@+id/tv_empty_state"
+            <!-- Empty State -->
+            <LinearLayout
+                android:id="@+id/empty_state_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="No links scanned yet.\nStart using TrustShield to check link safety!"
-                android:textSize="16sp"
-                android:textColor="@color/darker_gray"
+                android:layout_gravity="center"
+                android:orientation="vertical"
                 android:gravity="center"
-                android:layout_marginBottom="20dp" />
+                android:visibility="gone"
+                android:padding="32dp">
 
-        </LinearLayout>
+                <ImageView
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    android:src="@android:drawable/ic_dialog_info"
+                    app:tint="#BDBDBD"
+                    android:layout_marginBottom="16dp" />
 
-        <!-- Progress Bar -->
-        <ProgressBar
-            android:id="@+id/progress_bar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:visibility="gone" />
+                <TextView
+                    android:id="@+id/tv_empty_state"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="No scan history found"
+                    android:textSize="16sp"
+                    android:textColor="#888888"
+                    android:textAlignment="center" />
+                    
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Your recently scanned links will appear here"
+                    android:textSize="14sp"
+                    android:textColor="#AAAAAA"
+                    android:layout_marginTop="8dp"
+                    android:textAlignment="center" />
+            </LinearLayout>
+        </FrameLayout>
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
-    </FrameLayout>
-
-    <!-- Bottom Action Bar -->
-    <LinearLayout
+    <!-- Floating Action Button for manual scan/refresh -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_scan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="72dp"
+        android:contentDescription="Manual Scan"
+        android:src="@android:drawable/ic_popup_sync"
+        app:tint="@android:color/white"
+        app:backgroundTint="#1E88E5"
+        app:elevation="6dp"
+        app:pressedTranslationZ="12dp" />
+        
+    <!-- Bottom Navigation Bar -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_navigation"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:background="@color/lighter_gray">
+        android:layout_gravity="bottom"
+        android:background="@android:color/white"
+        app:elevation="8dp"
+        app:menu="@menu/bottom_nav_menu" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_profile"
-            android:layout_width="0dp"
-            android:layout_height="50dp"
-            android:layout_weight="1"
-            android:text="👤 Profile"
-            android:textSize="14sp"
-            android:layout_marginEnd="8dp"
-            app:cornerRadius="8dp"
-            app:backgroundTint="@android:color/holo_blue_dark" />
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/fab_scan"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
-            android:src="@drawable/ic_refresh"
-            app:backgroundTint="@android:color/holo_green_dark"
-            app:tint="@android:color/white" />
-
-    </LinearLayout>
-
-</LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

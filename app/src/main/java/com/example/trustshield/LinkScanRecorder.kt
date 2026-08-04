@@ -95,6 +95,12 @@ class LinkScanRecorder(private val context: Context) {
                     Log.d(TAG, "   Risk Level: ${scanResponse.risk_level}")
                     Log.d(TAG, "   Response Code: ${response.code()}")
                     
+                    // Decrease wallet balance on successful scan
+                    val balance = sharedPref.getInt("wallet_balance", 1000)
+                    if (balance > 0) {
+                        sharedPref.edit().putInt("wallet_balance", balance - 1).apply()
+                    }
+                    
                     // Execute callback on main thread
                     GlobalScope.launch {
                         callback?.onSuccess(scanResponse.id, scanResponse.verdict)

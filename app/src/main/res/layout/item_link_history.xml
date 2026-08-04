@@ -1,85 +1,113 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="8dp"
-    android:elevation="2dp">
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@android:color/white">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp">
+        android:orientation="horizontal">
+        
+        <!-- Status Color Indicator -->
+        <View
+            android:id="@+id/status_indicator"
+            android:layout_width="6dp"
+            android:layout_height="match_parent"
+            android:background="#4CAF50" />
 
-        <!-- URL Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <!-- URL Text -->
-            <TextView
-                android:id="@+id/tv_link_url"
-                android:layout_width="0dp"
+            <!-- URL Row -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="https://example.com"
-                android:textSize="14sp"
-                android:textColor="#333333"
-                android:ellipsize="end"
-                android:maxLines="1" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <!-- Verdict Icon -->
-            <ImageView
-                android:id="@+id/iv_verdict_icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_marginStart="8dp"
-                android:contentDescription="Verdict icon" />
+                <TextView
+                    android:id="@+id/tv_link_url"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="https://example.com"
+                    android:textSize="15sp"
+                    android:textColor="#222222"
+                    android:ellipsize="end"
+                    android:maxLines="1" />
 
+                <ImageView
+                    android:id="@+id/iv_verdict_icon"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="Verdict icon"
+                    android:src="@android:drawable/ic_dialog_info" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:background="#EEEEEE" />
+
+            <!-- Details Row -->
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_alignParentStart="true">
+                    
+                    <TextView
+                        android:id="@+id/tv_verdict"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Safe"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="#4CAF50" />
+                        
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text=" • "
+                        android:textColor="#BDBDBD" />
+                        
+                    <TextView
+                        android:id="@+id/tv_risk_level"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Low Risk"
+                        android:textSize="12sp"
+                        android:textColor="#757575" />
+                </LinearLayout>
+
+                <!-- Timestamp -->
+                <TextView
+                    android:id="@+id/tv_timestamp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_centerVertical="true"
+                    android:text="Just now"
+                    android:textSize="11sp"
+                    android:textColor="#9E9E9E" />
+            </RelativeLayout>
         </LinearLayout>
-
-        <!-- Verdict and Risk Level Row -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="8dp">
-
-            <!-- Verdict -->
-            <TextView
-                android:id="@+id/tv_verdict"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="✓ Safe"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="#2E7D32" />
-
-            <!-- Risk Level -->
-            <TextView
-                android:id="@+id/tv_risk_level"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Risk: Safe"
-                android:textSize="12sp"
-                android:textColor="#2E7D32" />
-
-        </LinearLayout>
-
-        <!-- Timestamp -->
-        <TextView
-            android:id="@+id/tv_timestamp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Mar 22, 2026 13:00"
-            android:textSize="11sp"
-            android:textColor="#666666"
-            android:layout_marginTop="8dp" />
-
     </LinearLayout>
-
 </com.google.android.material.card.MaterialCardView>

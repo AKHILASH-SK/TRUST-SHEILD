@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import android.util.Log
+import android.widget.TextView
+import android.widget.ProgressBar
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.trustshield.R
@@ -30,7 +32,8 @@ class RegistrationActivity : AppCompatActivity() {
     private var pinInput: TextInputEditText? = null
     private var confirmPinInput: TextInputEditText? = null
     private var registerButton: MaterialButton? = null
-    private var backButton: MaterialButton? = null
+    private var loginRedirectText: TextView? = null
+    private var progressBar: ProgressBar? = null
     private var isLoading = false
     private val TAG = "RegistrationActivity"
     
@@ -61,7 +64,7 @@ class RegistrationActivity : AppCompatActivity() {
             pinInput = findViewById(R.id.et_pin)
             confirmPinInput = findViewById(R.id.et_confirm_pin)
             registerButton = findViewById(R.id.btn_register)
-            backButton = findViewById(R.id.btn_back)
+            loginRedirectText = findViewById(R.id.btn_login_redirect)
             
             Log.d(TAG, "Views initialized successfully")
             
@@ -124,12 +127,12 @@ class RegistrationActivity : AppCompatActivity() {
                 registerUser(firstName, lastName, email, phoneNumber, pin)
             }
             
-            backButton?.setOnClickListener {
-                Log.d(TAG, "Back button clicked")
+            loginRedirectText?.setOnClickListener {
+                Log.d(TAG, "Login redirect clicked")
                 finish()
             }
             
-            Log.d(TAG, "Click listeners setup complete")
+            Log.d(TAG, "Listeners setup successfully")
         } catch (e: Exception) {
             Log.e(TAG, "setupListeners error: ${e.message}", e)
         }

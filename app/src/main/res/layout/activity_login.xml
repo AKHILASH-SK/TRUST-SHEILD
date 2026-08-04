@@ -1,100 +1,126 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#0066CC">
+    android:background="#F8F9FA">
 
-    <!-- Header Section -->
-    <LinearLayout
+    <!-- Top Blue Wave/Header Background -->
+    <View
+        android:id="@+id/header_bg"
         android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="16dp">
+        android:layout_height="250dp"
+        android:background="#1E88E5"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <ImageView
-            android:layout_width="80dp"
-            android:layout_height="80dp"
-            android:src="@drawable/ic_shield"
-            android:contentDescription="Logo"
-            android:tint="#FFFFFF" />
+    <ImageView
+        android:id="@+id/logo_icon"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:src="@drawable/ic_shield"
+        android:contentDescription="Logo"
+        app:tint="#FFFFFF"
+        android:layout_marginTop="32dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="TrustShield"
-            android:textSize="32sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:gravity="center"
-            android:layout_marginTop="8dp" />
+    <TextView
+        android:id="@+id/app_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="TrustShield"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:letterSpacing="0.02"
+        android:layout_marginTop="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/logo_icon" />
 
-    </LinearLayout>
-
-    <!-- Form Section -->
-    <ScrollView
+    <!-- Login Card -->
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="32dp"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="8dp"
+        app:cardBackgroundColor="#FFFFFF"
+        app:layout_constraintTop_toBottomOf="@+id/app_title"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:padding="32dp">
 
-            <!-- Welcome Text -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="Welcome Back"
                 android:textSize="24sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:layout_marginBottom="24dp" />
+                android:textColor="#333333"
+                android:layout_marginBottom="8dp" />
+                
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Sign in to continue to your dashboard."
+                android:textSize="14sp"
+                android:textColor="#777777"
+                android:layout_marginBottom="32dp" />
 
             <!-- Phone Input -->
             <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="20dp"
                 android:hint="Phone Number"
+                app:startIconDrawable="@android:drawable/ic_menu_call"
+                app:startIconTint="#999999"
                 app:endIconMode="clear_text"
-                app:boxBackgroundColor="#FFFFFF"
-                app:boxStrokeColor="#0084FF"
-                app:hintTextColor="#666666">
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/et_phone_number"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"
                     android:inputType="phone"
-                    android:textColor="#000000"
+                    android:textColor="#333333"
                     android:textSize="16sp" />
-
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- PIN Input -->
             <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="32dp"
                 android:hint="PIN (4-6 digits)"
+                app:startIconDrawable="@android:drawable/ic_lock_idle_lock"
+                app:startIconTint="#999999"
                 app:endIconMode="password_toggle"
-                app:boxBackgroundColor="#FFFFFF"
-                app:boxStrokeColor="#0084FF"
-                app:hintTextColor="#666666">
+                app:boxCornerRadiusTopStart="12dp"
+                app:boxCornerRadiusTopEnd="12dp"
+                app:boxCornerRadiusBottomStart="12dp"
+                app:boxCornerRadiusBottomEnd="12dp">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/et_pin"
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
+                    android:layout_height="wrap_content"
                     android:inputType="numberPassword"
-                    android:textColor="#000000"
+                    android:textColor="#333333"
                     android:textSize="16sp" />
-
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Login Button -->
@@ -102,49 +128,51 @@
                 android:id="@+id/btn_login"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="Login"
+                android:text="Sign In"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                app:cornerRadius="8dp"
-                app:backgroundTint="#FFFFFF"
-                android:textAllCaps="false" />
+                app:cornerRadius="12dp"
+                app:backgroundTint="#1E88E5" />
 
-            <!-- Register Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_register"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="New User? Register"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#0066CC"
-                android:layout_marginTop="12dp"
-                app:cornerRadius="8dp"
-                app:backgroundTint="#FFFFFF"
-                android:textAllCaps="false" />
-
-            <!-- Info Text -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Your login is secure and encrypted"
-                android:textSize="12sp"
-                android:textColor="#E8F4F8"
-                android:gravity="center"
-                android:layout_marginTop="24dp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Scan links - Check safety - Stay protected"
-                android:textSize="12sp"
-                android:textColor="#E8F4F8"
-                android:gravity="center"
-                android:layout_marginTop="8dp" />
+            <ProgressBar
+                android:id="@+id/progress_bar"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="-48dp"
+                android:visibility="gone"
+                android:elevation="2dp"
+                android:indeterminateTint="#FFFFFF" />
 
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-    </ScrollView>
+    <!-- Bottom Registration Link -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
 
-</LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Don't have an account? "
+            android:textColor="#666666"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/btn_register"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Register here"
+            android:textColor="#1E88E5"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:padding="8dp" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
