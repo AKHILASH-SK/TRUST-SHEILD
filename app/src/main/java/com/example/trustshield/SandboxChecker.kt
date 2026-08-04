@@ -17,7 +17,7 @@ import org.json.JSONObject
  * This checks against external APIs (VirusTotal)
  */
 class SandboxChecker(
-    private val backendUrl: String = "http://192.168.1.X:5000"  // UPDATE THIS
+    private val backendUrl: String = "http://${BuildConfig.BACKEND_IP}:8000"
 ) {
     
     companion object {

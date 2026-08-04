@@ -21,6 +21,9 @@ interface TrustShieldApiService {
     @GET("/")
     suspend fun healthCheck(): Response<HealthCheckResponse>
     
+    @GET("/api/brands/official")
+    suspend fun getOfficialBrands(): Response<OfficialBrandsResponse>
+    
     /**
      * Health check endpoint
      * GET /api/health

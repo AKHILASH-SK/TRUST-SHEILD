@@ -70,6 +70,20 @@ def init_database():
         """)
         print("✅ Created phishing_feed_sources table")
         
+        # Create official_brands table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS official_brands (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) UNIQUE,
+                primary_domain VARCHAR(255),
+                aliases JSONB DEFAULT '[]',
+                trusted_subdomains JSONB DEFAULT '[]',
+                trusted_cdns JSONB DEFAULT '[]',
+                date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        print("✅ Created official_brands table")
+        
         conn.commit()
         cur.close()
         conn.close()

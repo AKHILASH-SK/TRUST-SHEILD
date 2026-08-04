@@ -10,6 +10,8 @@ from phishing_feed import PhishingFeedImporter
 from sandbox_analyzer import SandboxAnalyzer
 import atexit
 import sys
+from brand_verification import verify_and_add_brand, discover_and_add_brand
+import json
 
 # Load environment variables
 load_dotenv()
@@ -114,6 +116,29 @@ def is_short_url(url):
 def health_check():
     """Health check endpoint"""
     return jsonify({"message": "TrustShield Backend is running", "status": "healthy"}), 200
+
+@app.route('/api/brands/official', methods=['GET'])
+def get_official_brands():
+    """Return all official brands for the Android app to cache"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT name, primary_domain, aliases, trusted_subdomains, trusted_cdns FROM official_brands")
+        brands = []
+        for row in cur.fetchall():
+            brands.append({
+                "name": row[0],
+                "primaryDomain": row[1],
+                "aliases": row[2] if isinstance(row[2], list) else json.loads(row[2] or '[]'),
+                "trustedSubdomains": row[3] if isinstance(row[3], list) else json.loads(row[3] or '[]'),
+                "trustedCdns": row[4] if isinstance(row[4], list) else json.loads(row[4] or '[]')
+            })
+        cur.close()
+        conn.close()
+        return jsonify({"brands": brands}), 200
+    except Exception as e:
+        print(f"Error fetching official brands: {e}")
+        return jsonify({"error": "Failed to fetch brands"}), 500
 
 # ==================== AUTHENTICATION ENDPOINTS ====================
 
@@ -277,6 +302,25 @@ def save_link_scan():
         reasons = data.get('reasons', 'Link analyzed')
         tier_analyzed = 'TIER_0'
         
+        # Intercept Brand Abuse logic
+        if verdict == 'DANGEROUS' and 'Abuses' in reasons and 'brand - This is fake' in reasons:
+            try:
+                # Extract brand name: "🔴 DANGEROUS: Abuses ChatGPT brand - This is fake"
+                brand_name = reasons.split('Abuses ')[1].split(' brand')[0]
+                from urllib.parse import urlparse
+                domain_to_check = urlparse(url).netloc.lower().replace('www.', '')
+                
+                print(f"[DYNAMIC VERIFICATION] Android app flagged {domain_to_check} as abusing {brand_name}. Checking Clearbit...")
+                is_official = verify_and_add_brand(brand_name, domain_to_check)
+                if is_official:
+                    verdict = 'SAFE'
+                    risk_level = 'SAFE'
+                    reasons = f"Dynamically verified {domain_to_check} as an official domain for {brand_name}"
+                    print(f"   ✓ OVERRIDE: Clearbit confirmed {domain_to_check} is SAFE. Overriding Android app's verdict.")
+            except Exception as e:
+                print(f"Error during dynamic brand verification: {e}")
+        
+        
         if is_phishing and not is_short:
             # Found in database AND it's NOT a short URL → Trust database verdict (permanent URLs don't change)
             verdict = 'DANGEROUS'
@@ -377,17 +421,50 @@ def save_link_scan():
         
         sys.stdout.flush()
         
-        # Insert link scan
-        print(f"💾 [DB] Saving to database...")
-        cur.execute(
-            """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at) 
-               VALUES (%s, %s, %s, %s, %s, NOW()) 
-               RETURNING id, user_id, url, risk_level, reasons, verdict, analyzed_at""",
-            (user_id, url, risk_level, reasons, verdict)
-        )
+        # ===== DYNAMIC BRAND DISCOVERY =====
+        # If the final verdict is SAFE (either from Tier 0/1 or after Sandbox analysis cleared it)
+        # and it's not already a verified brand, check if Clearbit recognizes it
+        if verdict == 'SAFE' and 'Verified official domain' not in reasons:
+            try:
+                from urllib.parse import urlparse
+                domain_to_check = urlparse(url).netloc.lower().replace('www.', '')
+                discovered_brand = discover_and_add_brand(domain_to_check)
+                if discovered_brand:
+                    # Update reasons to reflect discovery
+                    if 'Sandbox analysis cleared' in reasons:
+                        reasons = f"Dynamically discovered as official domain for {discovered_brand} (Sandbox also confirmed safe)"
+                    else:
+                        reasons = f"Dynamically discovered and verified as official domain for {discovered_brand}"
+                    print(f"   ✓ DYNAMIC DISCOVERY: Recognized as {discovered_brand}")
+            except Exception as e:
+                print(f"Error in dynamic brand discovery: {e}")
         
-        scan = cur.fetchone()
-        conn.commit()
+        # Check if this exact URL was already scanned by this user in the last 15 minutes to prevent duplicates
+        cur.execute(
+            """SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at 
+               FROM link_scans 
+               WHERE user_id = %s AND url = %s AND analyzed_at > NOW() - INTERVAL '15 minutes'
+               ORDER BY analyzed_at DESC LIMIT 1""",
+            (user_id, url)
+        )
+        existing_scan = cur.fetchone()
+        
+        if existing_scan:
+            print(f"ℹ️ [DB] Duplicate scan detected within 15 mins. Returning existing record to avoid UI spam.")
+            scan = existing_scan
+        else:
+            # Insert link scan
+            print(f"💾 [DB] Saving to database...")
+            cur.execute(
+                """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at) 
+                   VALUES (%s, %s, %s, %s, %s, NOW()) 
+                   RETURNING id, user_id, url, risk_level, reasons, verdict, analyzed_at""",
+                (user_id, url, risk_level, reasons, verdict)
+            )
+            
+            scan = cur.fetchone()
+            conn.commit()
+            
         cur.close()
         conn.close()
         
@@ -432,10 +509,17 @@ def get_user_link_history(user_id):
             conn.close()
             return jsonify({"error": "User not found"}), 404
         
-        # Get all scans
+        # Get all scans but only the latest one per unique URL (Deduplication for UI)
         cur.execute(
-            """SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at 
-               FROM link_scans WHERE user_id = %s 
+            """WITH RankedScans AS (
+                   SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at,
+                          ROW_NUMBER() OVER(PARTITION BY url ORDER BY analyzed_at DESC) as rn
+                   FROM link_scans 
+                   WHERE user_id = %s
+               )
+               SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at 
+               FROM RankedScans 
+               WHERE rn = 1 
                ORDER BY analyzed_at DESC""",
             (user_id,)
         )

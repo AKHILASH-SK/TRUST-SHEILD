@@ -3,6 +3,7 @@ package com.example.trustshield.config
 import android.content.Context
 import android.util.Log
 import com.example.trustshield.network.RetrofitClient
+import com.example.trustshield.BuildConfig
 
 /**
  * BackendConfig
@@ -20,7 +21,7 @@ object BackendConfig {
     private const val TAG = "BackendConfig"
     private const val PREFS_NAME = "backend_prefs"
     private const val KEY_BACKEND_URL = "backend_url"
-    private const val DEFAULT_BACKEND_URL = "http://192.168.x.x:8000"
+    private val DEFAULT_BACKEND_URL = "http://${BuildConfig.BACKEND_IP}:8000"
     
     /**
      * Get the backend URL from SharedPreferences

@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.MaterialTheme
 import com.example.trustshield.ui.theme.TrustShieldTheme
 import android.util.Log
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     
@@ -33,6 +35,11 @@ class MainActivity : ComponentActivity() {
         permissionManager.requestNotificationPermission(this)
         
         Log.d("MAIN", "MainActivity created and permission requested")
+        
+        // Fetch official brand registry from backend
+        lifecycleScope.launch {
+            OfficialDomainRegistry.fetchRegistryFromBackend()
+        }
         
         enableEdgeToEdge()
         setContent {

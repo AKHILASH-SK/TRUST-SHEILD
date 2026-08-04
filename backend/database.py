@@ -14,9 +14,9 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "trustshield_db")
 
 # Build PostgreSQL connection string
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-print(f"🔌 Connecting to database: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+print(f"Connecting to database: {DB_HOST}:{DB_PORT}/{DB_NAME}")
 
 # Create engine
 engine = create_engine(DATABASE_URL, echo=False)

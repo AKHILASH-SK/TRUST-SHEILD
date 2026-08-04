@@ -81,9 +81,10 @@ class LinkScanRecorder(private val context: Context) {
                 
                 // Call backend API
                 Log.d(TAG, "🔌 [API] Connecting to backend...")
-                val apiService = RetrofitClient.getInstance("http://10.177.26.61:8000").getApiService()
+                val baseUrl = "http://${BuildConfig.BACKEND_IP}:8000"
+                val apiService = RetrofitClient.getInstance(baseUrl).getApiService()
                 
-                Log.d(TAG, "🔌 [API] Sending request: POST http://10.177.26.61:8000/api/links/scan")
+                Log.d(TAG, "🔌 [API] Sending request: POST $baseUrl/api/links/scan")
                 val response = apiService.saveLinkScan(linkScanRequest)
                 
                 if (response.isSuccessful && response.body() != null) {

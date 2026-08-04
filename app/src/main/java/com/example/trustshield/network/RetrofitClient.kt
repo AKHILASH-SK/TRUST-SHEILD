@@ -6,6 +6,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import com.example.trustshield.BuildConfig
 
 /**
  * RetrofitClient
@@ -58,7 +59,7 @@ class RetrofitClient private constructor(private val baseUrl: String) {
         /**
          * Get singleton instance of RetrofitClient
          */
-        fun getInstance(baseUrl: String = "http://10.177.26.61:8000"): RetrofitClient {
+        fun getInstance(baseUrl: String = "http://${BuildConfig.BACKEND_IP}:8000"): RetrofitClient {
             if (instance == null) {
                 instance = RetrofitClient(baseUrl)
             }
