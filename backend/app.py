@@ -439,31 +439,17 @@ def save_link_scan():
             except Exception as e:
                 print(f"Error in dynamic brand discovery: {e}")
         
-        # Check if this exact URL was already scanned by this user in the last 15 minutes to prevent duplicates
+        # Insert link scan
+        print(f"💾 [DB] Saving to database...")
         cur.execute(
-            """SELECT id, user_id, url, risk_level, reasons, verdict, analyzed_at 
-               FROM link_scans 
-               WHERE user_id = %s AND url = %s AND analyzed_at > NOW() - INTERVAL '15 minutes'
-               ORDER BY analyzed_at DESC LIMIT 1""",
-            (user_id, url)
+            """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at) 
+               VALUES (%s, %s, %s, %s, %s, NOW()) 
+               RETURNING id, user_id, url, risk_level, reasons, verdict, analyzed_at""",
+            (user_id, url, risk_level, reasons, verdict)
         )
-        existing_scan = cur.fetchone()
         
-        if existing_scan:
-            print(f"ℹ️ [DB] Duplicate scan detected within 15 mins. Returning existing record to avoid UI spam.")
-            scan = existing_scan
-        else:
-            # Insert link scan
-            print(f"💾 [DB] Saving to database...")
-            cur.execute(
-                """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at) 
-                   VALUES (%s, %s, %s, %s, %s, NOW()) 
-                   RETURNING id, user_id, url, risk_level, reasons, verdict, analyzed_at""",
-                (user_id, url, risk_level, reasons, verdict)
-            )
-            
-            scan = cur.fetchone()
-            conn.commit()
+        scan = cur.fetchone()
+        conn.commit()
             
         cur.close()
         conn.close()

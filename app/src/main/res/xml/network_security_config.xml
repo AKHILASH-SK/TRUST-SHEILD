@@ -1,19 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext traffic to local backend IP for development -->
-    <domain-config cleartextTrafficPermitted="true">
-        <!-- Hotspot/Local IPs -->
-        <domain includeSubdomains="true">10.200.80.61</domain>
-        <domain includeSubdomains="true">192.168.137.93</domain>
-        <domain includeSubdomains="true">10.101.140.61</domain>
-        <domain includeSubdomains="true">10.150.255.61</domain>
-        <domain includeSubdomains="true">10.35.249.61</domain>
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">127.0.0.1</domain>
-    </domain-config>
-    
-    <!-- Block cleartext for all other domains (security) -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">example.com</domain>
-    </domain-config>
+    <!-- Allow cleartext traffic to ANY IP for local testing so it doesn't break when IP changes -->
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

@@ -35,17 +35,19 @@ class LinkTracker(context: Context) {
     }
     
     /**
-     * Check if we've already processed this notification key
+     * Check if we've already processed this exact notification content
      * Prevents processing the same notification multiple times
      * 
-     * @param notificationKey Unique key for the notification (from StatusBarNotification.getKey())
+     * @param notificationKey Unique key for the notification
+     * @param messageText The full text content of the notification
      * @return true if we've already processed it, false if this is new
      */
-    fun hasProcessedNotification(notificationKey: String): Boolean {
-        val hasProcessed = processedNotificationKeys.containsKey(notificationKey)
+    fun hasProcessedNotification(notificationKey: String, messageText: String): Boolean {
+        val uniqueId = "$notificationKey:${messageText.hashCode()}"
+        val hasProcessed = processedNotificationKeys.containsKey(uniqueId)
         
         if (hasProcessed) {
-            Log.d(TAG, "⏭️  Notification already processed: $notificationKey")
+            Log.d(TAG, "⏭️  Notification already processed: $uniqueId")
         }
         
         return hasProcessed
@@ -56,11 +58,13 @@ class LinkTracker(context: Context) {
      * Call this after you've processed all links in a notification
      * 
      * @param notificationKey Unique key for the notification
+     * @param messageText The full text content of the notification
      */
-    fun markNotificationProcessed(notificationKey: String) {
+    fun markNotificationProcessed(notificationKey: String, messageText: String) {
+        val uniqueId = "$notificationKey:${messageText.hashCode()}"
         val currentTime = System.currentTimeMillis()
-        processedNotificationKeys[notificationKey] = currentTime
-        Log.d(TAG, "✓ Notification marked as processed: $notificationKey")
+        processedNotificationKeys[uniqueId] = currentTime
+        Log.d(TAG, "✓ Notification marked as processed: $uniqueId")
     }
     
     /**
