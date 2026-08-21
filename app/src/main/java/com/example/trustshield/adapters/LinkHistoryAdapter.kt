@@ -98,6 +98,29 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
             } catch (e: Exception) {
                 timestampText.text = scan.analyzed_at
             }
+            
+            // Set click listener to open LinkDetailActivity
+            itemView.setOnClickListener {
+                val intent = android.content.Intent(context, com.example.trustshield.activities.LinkDetailActivity::class.java)
+                intent.putExtra("url", scan.url)
+                try {
+                    val host = java.net.URL(scan.url).host
+                    intent.putExtra("host", host)
+                } catch (e: Exception) {
+                    intent.putExtra("host", "Unknown")
+                }
+                intent.putExtra("verdict", scan.verdict)
+                intent.putExtra("riskLevel", scan.risk_level)
+                intent.putExtra("reasons", arrayOf(scan.reasons))
+                try {
+                    val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                    intent.putExtra("timestamp", isoFormat.parse(scan.analyzed_at)?.time ?: System.currentTimeMillis())
+                } catch (e: Exception) {
+                    intent.putExtra("timestamp", System.currentTimeMillis())
+                }
+                intent.putExtra("sourceApp", "Dashboard History")
+                context.startActivity(intent)
+            }
         }
     }
     

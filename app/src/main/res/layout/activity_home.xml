@@ -9,7 +9,7 @@
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#1E88E5"
+        android:background="?attr/colorPrimary"
         app:elevation="4dp">
 
         <androidx.appcompat.widget.Toolbar
@@ -99,7 +99,7 @@
         android:contentDescription="Manual Scan"
         android:src="@android:drawable/ic_popup_sync"
         app:tint="@android:color/white"
-        app:backgroundTint="#1E88E5"
+        app:backgroundTint="?attr/colorPrimary"
         app:elevation="6dp"
         app:pressedTranslationZ="12dp" />
         

@@ -10,7 +10,6 @@ import androidx.appcompat.widget.Toolbar
 import androidx.lifecycle.lifecycleScope
 import com.example.trustshield.R
 import com.example.trustshield.firebase.FirebaseService
-import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -33,9 +32,6 @@ class LinkDetailActivity : AppCompatActivity() {
     private lateinit var reasonsList: TextView
     private lateinit var timestampText: TextView
     private lateinit var sourceAppText: TextView
-    private lateinit var acceptButton: MaterialButton
-    private lateinit var blockButton: MaterialButton
-    private lateinit var deleteButton: MaterialButton
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +42,6 @@ class LinkDetailActivity : AppCompatActivity() {
         initializeViews()
         setupToolbar()
         loadLinkDetails()
-        setupListeners()
     }
     
     private fun initializeViews() {
@@ -60,9 +55,6 @@ class LinkDetailActivity : AppCompatActivity() {
         reasonsList = findViewById(R.id.tv_reasons)
         timestampText = findViewById(R.id.tv_timestamp)
         sourceAppText = findViewById(R.id.tv_source_app)
-        acceptButton = findViewById(R.id.btn_accept)
-        blockButton = findViewById(R.id.btn_block)
-        deleteButton = findViewById(R.id.btn_delete)
     }
     
     private fun setupToolbar() {
@@ -108,6 +100,9 @@ class LinkDetailActivity : AppCompatActivity() {
         }
         
         // Display verification status
+        val isInDb = reasons.any { it.contains("database", ignoreCase = true) }
+        val hasSandboxThreat = reasons.any { it.contains("sandbox", ignoreCase = true) }
+        
         val allVerifications = buildString {
             append(if (verificationStatus == "VERIFIED_OFFICIAL") "✅" else "❌")
             append(" Verified Official Domain\n")
@@ -116,8 +111,17 @@ class LinkDetailActivity : AppCompatActivity() {
                 append("✅ Brand: $verifiedBrand\n")
             }
             
-            append("✅ Firebase Phishing Database: Not in DB\n")
-            append("✅ Sandbox Analysis: No threats")
+            if (isInDb) {
+                append("❌ Firebase Phishing Database: Found in DB\n")
+            } else {
+                append("✅ Firebase Phishing Database: Not in DB\n")
+            }
+            
+            if (hasSandboxThreat) {
+                append("❌ Sandbox Analysis: Threats Detected")
+            } else {
+                append("✅ Sandbox Analysis: No threats")
+            }
         }
         verificationStatusText.text = allVerifications
         
@@ -140,76 +144,5 @@ class LinkDetailActivity : AppCompatActivity() {
         
         // Display source app
         sourceAppText.text = "Source: $sourceApp"
-        
-        // Store scanId for actions
-        acceptButton.tag = scanId
-        blockButton.tag = scanId
-        deleteButton.tag = scanId
-    }
-    
-    private fun setupListeners() {
-        acceptButton.setOnClickListener {
-            val scanId = it.tag as? String ?: return@setOnClickListener
-            markAsAccepted(scanId)
-        }
-        
-        blockButton.setOnClickListener {
-            val scanId = it.tag as? String ?: return@setOnClickListener
-            markAsBlocked(scanId)
-        }
-        
-        deleteButton.setOnClickListener {
-            val scanId = it.tag as? String ?: return@setOnClickListener
-            deleteScan(scanId)
-        }
-    }
-    
-    private fun markAsAccepted(scanId: String) {
-        lifecycleScope.launch {
-            try {
-                val userId = firebaseService.getCurrentUserId() ?: return@launch
-                val success = firebaseService.updateLinkScanAction(
-                    userId, scanId, "accepted", isUserTrusted = true
-                )
-                if (success) {
-                    Toast.makeText(this@LinkDetailActivity, "Marked as trusted", Toast.LENGTH_SHORT).show()
-                    acceptButton.isEnabled = false
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@LinkDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-    
-    private fun markAsBlocked(scanId: String) {
-        lifecycleScope.launch {
-            try {
-                val userId = firebaseService.getCurrentUserId() ?: return@launch
-                val success = firebaseService.updateLinkScanAction(
-                    userId, scanId, "rejected", isUserBlocked = true
-                )
-                if (success) {
-                    Toast.makeText(this@LinkDetailActivity, "Marked as blocked", Toast.LENGTH_SHORT).show()
-                    blockButton.isEnabled = false
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@LinkDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-    
-    private fun deleteScan(scanId: String) {
-        lifecycleScope.launch {
-            try {
-                val userId = firebaseService.getCurrentUserId() ?: return@launch
-                val success = firebaseService.deleteLinkScan(userId, scanId)
-                if (success) {
-                    Toast.makeText(this@LinkDetailActivity, "Scan deleted", Toast.LENGTH_SHORT).show()
-                    onBackPressed()
-                }
-            } catch (e: Exception) {
-                Toast.makeText(this@LinkDetailActivity, "Error deleting: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 }

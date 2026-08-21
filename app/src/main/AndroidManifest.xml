@@ -69,6 +69,26 @@
             android:name=".activities.ProfileActivity"
             android:exported="false"
             android:theme="@style/Theme.TrustShield" />
+            
+        <activity
+            android:name=".activities.AccountSettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield" />
+            
+        <activity
+            android:name=".activities.SecurityPrivacyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield" />
+            
+        <activity
+            android:name=".activities.HelpSupportActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield" />
+            
+        <activity
+            android:name=".activities.AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield" />
 
         <!-- Main Activity (kept for backward compatibility) -->
         <activity

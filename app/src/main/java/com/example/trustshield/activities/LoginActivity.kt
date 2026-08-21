@@ -26,7 +26,7 @@ class LoginActivity : AppCompatActivity() {
     private var phoneInput: TextInputEditText? = null
     private var pinInput: TextInputEditText? = null
     private var loginButton: MaterialButton? = null
-    private var registerButton: MaterialButton? = null
+    private var registerButton: android.widget.TextView? = null
     private var isLoading = false
     private val TAG = "LoginActivity"
     

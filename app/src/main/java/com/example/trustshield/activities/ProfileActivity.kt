@@ -90,6 +90,22 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
         
+        findViewById<View>(R.id.ll_account_settings).setOnClickListener {
+            startActivity(Intent(this, AccountSettingsActivity::class.java))
+        }
+        
+        findViewById<View>(R.id.ll_security_privacy).setOnClickListener {
+            startActivity(Intent(this, SecurityPrivacyActivity::class.java))
+        }
+        
+        findViewById<View>(R.id.ll_help_support).setOnClickListener {
+            startActivity(Intent(this, HelpSupportActivity::class.java))
+        }
+        
+        findViewById<View>(R.id.ll_about).setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java))
+        }
+        
         logoutButton.setOnClickListener {
             progressOverlay.visibility = View.VISIBLE
             

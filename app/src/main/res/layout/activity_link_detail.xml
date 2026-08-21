@@ -4,14 +4,20 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@android:color/white">
+    android:background="@color/light_bg"
+    android:fitsSystemWindows="true">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar"
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@android:color/holo_blue_dark"
-        app:titleTextColor="@android:color/white" />
+        android:layout_height="wrap_content"
+        android:background="?attr/colorPrimary">
+
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            app:titleTextColor="@android:color/white" />
+    </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -24,180 +30,206 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- URL Section -->
-            <TextView
+            <!-- Verdict Card -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="URL"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/darker_gray"
-                android:layout_marginBottom="5dp" />
+                android:layout_marginBottom="24dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@android:color/white">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:padding="20dp">
+
+                    <ImageView
+                        android:id="@+id/iv_verdict_icon"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:src="@drawable/ic_check_circle"
+                        android:layout_marginEnd="16dp" />
+
+                    <TextView
+                        android:id="@+id/tv_verdict"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="SAFE"
+                        android:textSize="24sp"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/holo_green_dark" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- URL Card -->
             <TextView
-                android:id="@+id/tv_full_url"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="https://example.com"
+                android:text="Link Details"
                 android:textSize="14sp"
-                android:layout_marginBottom="20dp"
-                android:textIsSelectable="true"
-                android:padding="8dp"
-                android:background="@color/lighter_gray" />
+                android:textStyle="bold"
+                android:textColor="@color/text_gray"
+                android:layout_marginBottom="8dp"
+                android:layout_marginStart="4dp" />
 
-            <!-- Host -->
-            <TextView
-                android:id="@+id/tv_host"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Host: example.com"
-                android:textSize="13sp"
-                android:layout_marginBottom="20dp" />
+                android:layout_marginBottom="24dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@android:color/white">
 
-            <!-- Verdict Section -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Full URL"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_gray"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tv_full_url"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="https://example.com"
+                        android:textSize="14sp"
+                        android:textColor="@color/black"
+                        android:textIsSelectable="true"
+                        android:layout_marginBottom="16dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Host Name"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_gray"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tv_host"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="example.com"
+                        android:textSize="14sp"
+                        android:textColor="@color/black" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Analysis Details Card -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Analysis Report"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_gray"
+                android:layout_marginBottom="8dp"
+                android:layout_marginStart="4dp" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                app:cardCornerRadius="12dp"
+                app:cardElevation="2dp"
+                app:cardBackgroundColor="@android:color/white">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:id="@+id/tv_verified_brand"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Official YouTube"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:textColor="@android:color/holo_green_dark"
+                        android:layout_marginBottom="12dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Verification Status"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_gray"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tv_verification_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="✅ Verified Official Domain\n✅ Firebase Database: Not in DB"
+                        android:textSize="13sp"
+                        android:textColor="@color/black"
+                        android:layout_marginBottom="16dp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#E2E8F0"
+                        android:layout_marginBottom="16dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Detected Threats / Reasons"
+                        android:textSize="12sp"
+                        android:textColor="@color/text_gray"
+                        android:layout_marginBottom="4dp" />
+
+                    <TextView
+                        android:id="@+id/tv_reasons"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="No specific reasons - appears safe"
+                        android:textSize="13sp"
+                        android:textColor="@color/black" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+            
+            <!-- Metadata -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginBottom="20dp"
-                android:padding="12dp"
-                android:background="@color/lighter_gray">
-
-                <ImageView
-                    android:id="@+id/iv_verdict_icon"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/ic_check_circle"
-                    android:layout_marginEnd="12dp" />
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_marginTop="8dp">
+                
+                <TextView
+                    android:id="@+id/tv_timestamp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scanned: Jan 01, 2024 10:30 AM"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_gray"
+                    android:layout_marginBottom="4dp" />
 
                 <TextView
-                    android:id="@+id/tv_verdict"
-                    android:layout_width="0dp"
+                    android:id="@+id/tv_source_app"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="SAFE"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:textColor="@android:color/holo_green_dark" />
-
+                    android:text="Source: Dashboard"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_gray" />
             </LinearLayout>
 
-            <!-- Verified Brand -->
-            <TextView
-                android:id="@+id/tv_verified_brand"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Official YouTube"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="@android:color/holo_green_dark"
-                android:layout_marginBottom="15dp"
-                android:visibility="gone" />
-
-            <!-- Verification Status -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Verification Details"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/darker_gray"
-                android:layout_marginBottom="5dp" />
-
-            <TextView
-                android:id="@+id/tv_verification_status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="✅ Verified Official Domain\n✅ Firebase Database: Not in DB"
-                android:textSize="13sp"
-                android:layout_marginBottom="20dp"
-                android:padding="8dp"
-                android:background="@color/lighter_gray" />
-
-            <!-- Reasons -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Analysis Reasons"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/darker_gray"
-                android:layout_marginBottom="5dp" />
-
-            <TextView
-                android:id="@+id/tv_reasons"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="No specific reasons - appears safe"
-                android:textSize="13sp"
-                android:layout_marginBottom="20dp"
-                android:padding="8dp"
-                android:background="@color/lighter_gray" />
-
-            <!-- Metadata -->
-            <TextView
-                android:id="@+id/tv_timestamp"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Scanned: Jan 01, 2024 10:30 AM"
-                android:textSize="12sp"
-                android:textColor="@color/darker_gray"
-                android:layout_marginBottom="8dp" />
-
-            <TextView
-                android:id="@+id/tv_source_app"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Source: WhatsApp"
-                android:textSize="12sp"
-                android:textColor="@color/darker_gray"
-                android:layout_marginBottom="20dp" />
-
         </LinearLayout>
-
     </ScrollView>
-
-    <!-- Action Buttons -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:background="@color/lighter_gray">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_accept"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:text="✅ Trust"
-            android:textSize="12sp"
-            android:layout_marginEnd="8dp"
-            app:cornerRadius="8dp"
-            app:backgroundTint="@android:color/holo_green_dark" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_block"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:text="🚫 Block"
-            android:textSize="12sp"
-            android:layout_marginEnd="8dp"
-            app:cornerRadius="8dp"
-            app:backgroundTint="@android:color/holo_red_dark" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_delete"
-            android:layout_width="0dp"
-            android:layout_height="45dp"
-            android:layout_weight="1"
-            android:text="🗑️ Delete"
-            android:textSize="12sp"
-            app:cornerRadius="8dp"
-            app:backgroundTint="@android:color/darker_gray" />
-
-    </LinearLayout>
 
 </LinearLayout>

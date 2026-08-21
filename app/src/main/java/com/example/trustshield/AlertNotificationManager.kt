@@ -8,6 +8,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import android.util.Log
+import com.example.trustshield.R
+import com.example.trustshield.activities.HomeActivity
 
 /**
  * AlertNotificationManager
@@ -170,8 +172,8 @@ class AlertNotificationManager(private val context: Context) {
             Log.d(TAG, "Title: $title")
             Log.d(TAG, "ID: $notificationId")
             
-            // Create intent to open MainActivity when notification is tapped
-            val intent = Intent(context, MainActivity::class.java).apply {
+            // Create intent to open HomeActivity when notification is tapped
+            val intent = Intent(context, HomeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
             
@@ -184,7 +186,8 @@ class AlertNotificationManager(private val context: Context) {
             }
             
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setSmallIcon(R.drawable.ic_shield) // Changed to TrustShield app icon
+                .setColor(if (isError) 0xFFD32F2F.toInt() else 0xFFF57C00.toInt()) // Red for dangerous, Amber for suspicious
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(bigText))

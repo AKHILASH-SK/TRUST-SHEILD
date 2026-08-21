@@ -15,7 +15,7 @@ object BackendConfig {
     private const val KEY_BACKEND_URL = "backend_url"
     
     // Set this directly to your Render URL!
-    private val DEFAULT_BACKEND_URL = "https://trust-sheild.onrender.com"
+    private val DEFAULT_BACKEND_URL = "https://trust-sheild.onrender.com/"
     
     /**
      * Get the backend URL from SharedPreferences
