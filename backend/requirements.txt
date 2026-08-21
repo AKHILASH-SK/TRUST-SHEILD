@@ -10,3 +10,5 @@ beautifulsoup4==4.12.2
 whois==0.9.7
 
 gunicorn==21.2.0
+
+SQLAlchemy>=2.0.0
