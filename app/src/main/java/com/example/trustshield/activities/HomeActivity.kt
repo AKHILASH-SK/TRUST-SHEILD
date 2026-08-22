@@ -54,15 +54,6 @@ class HomeActivity : AppCompatActivity() {
                 navigateToLogin()
                 return
             }
-
-            // Check if Notification Listener permission is granted
-            val permissionManager = com.example.trustshield.PermissionManager(this)
-            if (!permissionManager.hasNotificationListenerAccess()) {
-                Log.w(TAG, "Notification listener permission missing")
-                startActivity(Intent(this, PermissionActivity::class.java))
-                finish()
-                return
-            }
             
             initializeViews()
             setupToolbar()
