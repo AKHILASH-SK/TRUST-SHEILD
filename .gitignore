@@ -16,6 +16,7 @@ local.properties
 
 # Android
 *.apk
+!apk/*.apk
 *.ap_
 *.dex
 *.class
