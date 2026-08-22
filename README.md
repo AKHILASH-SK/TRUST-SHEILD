@@ -2,6 +2,18 @@
 
 TrustShield is a real-time intelligent security application designed exclusively to protect users from malicious phishing links before any damage occurs.
 
+---
+
+## 📥 Download the App
+
+You can download and install the latest TrustShield APK directly from our official portal:
+
+👉 **[Download TrustShield for Android (Official Portal)](https://akhilash-sk.github.io/TRUST-SHEILD/)**
+
+*(Note: Follow the step-by-step installation instructions below to ensure all real-time security interception features function seamlessly.)*
+
+---
+
 ## 📱 How to Install
 
 Follow the step-by-step visual instructions below to install TrustShield and grant it the required security permissions.
@@ -73,26 +85,26 @@ Because TrustShield intercepts notifications to protect against zero-day phishin
 
 ## 🧪 How to Test (Live Threat Simulation)
 
-For hackathon judges and testers, TrustShield includes a **built-in Live Threat Simulation** engine so you can test real-time zero-click interception directly on your phone without needing a second device.
+For users and evaluators who want to test the app independently without needing a third person to send messages, TrustShield includes a **built-in Live Threat Simulation** engine:
 
 ### Step 1: Launch the Threat Simulation
 Open the TrustShield app (ensure you have registered/logged in with your phone number). On the **Recent Scans** Home screen, tap the **Test Demo** button on the **⚡ Live Threat Simulation** card.
 <br><img src="images/test_01.png" width="300" /><br><br>
 
 ### Step 2: Receive & Intercept Phishing Attack (WhatsApp)
-A real WhatsApp notification containing an urgent PayPal phishing attack (`https://paypal-confirm.com`) will arrive on your phone. TrustShield's background engine immediately intercepts the link before you even click it and issues a high-priority warning: **🔴 DANGEROUS LINK - From: com.whatsapp**.
+A real WhatsApp notification containing a simulated urgent phishing link will arrive on your phone. TrustShield's background engine immediately intercepts the link before you even click it and issues a high-priority warning: **🔴 DANGEROUS LINK - From: com.whatsapp**.
 <br><img src="images/test_02.png" width="300" /><br><br>
 
 ### Step 3: View Real-Time Threat Telemetry
-Open the TrustShield app to view the **Recent Scans** history. The intercepted link is highlighted in red with complete classification details: **✕ Dangerous • Risk: DANGEROUS**.
+Open the TrustShield app to view the **Recent Scans** history. The intercepted link is flagged in red with complete classification details: **✕ Dangerous • Risk: DANGEROUS**.
 <br><img src="images/test_03.png" width="300" /><br><br>
 
 ### Step 4: Automated 15-Second Safe Link Delivery
-Exactly **15 seconds** after the first message, a second WhatsApp message automatically arrives containing a verified safe link (`https://www.amazon.in/`).
+Exactly **15 seconds** after the first message, a second WhatsApp message automatically arrives containing a legitimate safe link.
 <br><img src="images/test_04.png" width="300" /><br><br>
 
 ### Step 5: Verified Safe Link Classification
-TrustShield intercepts the notification, verifies that `amazon.in` is a legitimate, safe domain, and records it as **✔ Safe • Risk: Safe** with zero false alarms!
+TrustShield intercepts the notification, verifies that the domain is legitimate and safe, and records it as **✔ Safe • Risk: Safe** with zero false alarms!
 <br><img src="images/test_05.png" width="300" /><br><br>
 
 > [!TIP]
@@ -130,16 +142,6 @@ graph TD
 
 ---
 
-## 📥 Download the App
-
-You can download the latest pre-compiled APK file directly to try out TrustShield on your Android device:
-
-**[Download TrustShield APK](https://github.com/AKHILASH-SK/TRUST-SHEILD/raw/master/apk/TrustShield-debug.apk)**
-
-*(Note: You may need to enable "Install from unknown sources" on your Android device to install the APK.)*
-
----
-
 ## 💻 How to Run the Frontend Locally
 
 If you want to clone the repository and run the Android app yourself, follow these steps:
@@ -162,3 +164,27 @@ cd TRUST-SHEILD
 ```bash
 .\gradlew installDebug
 ```
+
+---
+
+## 🖥️ How to Run the Backend Locally
+
+To run the Python analysis & API server on your local machine:
+
+### 1. Navigate to Backend Directory
+```bash
+cd backend
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Start the Server
+```bash
+python app.py
+```
+
+The backend server will start at `http://localhost:8000`.
+
