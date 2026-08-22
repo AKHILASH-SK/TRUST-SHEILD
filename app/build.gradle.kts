@@ -30,15 +30,6 @@ android {
         buildConfigField("String", "BACKEND_IP", "\"$backendIp\"")
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file("release-key.jks")
-            storePassword = "hackathon123"
-            keyAlias = "trustshield-alias"
-            keyPassword = "hackathon123"
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -46,7 +37,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
