@@ -24,10 +24,13 @@ Before downloading the APK, you must temporarily pause Google Play Protect so it
 Because TrustShield intercepts notifications to scan for threats, you must grant it Notification Access. On modern Android versions, sideloaded apps have this setting "Restricted" by default.
 
 1. When you open TrustShield and try to enable Notification Access, Android may say **"Restricted Setting"**. Click OK.
+<img src="images/restricted_1.png" width="300" />
 
 2. Go to your phone's Settings -> Apps -> **TrustShield** (or long-press the TrustShield app icon and tap **App Info**). Tap the **three dots** in the top right corner.
+<img src="images/restricted_2.png" width="300" />
 
 3. Tap **Allow restricted settings**. You may be asked to authenticate with your fingerprint or PIN.
+<img src="images/restricted_3.png" width="300" />
 
 4. Finally, return to the TrustShield app, click Enable again, and you will now be able to grant the Notification Access permission successfully!
 
