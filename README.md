@@ -33,10 +33,10 @@ Before installing the debug APK, temporarily pause Google Play Protect so Androi
 
 ### Phase 2: Download & Install APK
 
-7. Open the download page and tap **Download for Android**.
+7. Open the download portal at **[https://akhilash-sk.github.io/TRUST-SHEILD/](https://akhilash-sk.github.io/TRUST-SHEILD/)** and tap **Download for Android**. If Google Chrome displays a *'File might be harmful'* warning, tap **Download anyway** to complete the download.
 <br><img src="images/step_07.png" width="300" /><br><br>
 
-8. Open the downloaded `TrustShield-debug.apk` file and select **Package installer** to install the application.
+8. Open the downloaded `TrustShield-debug.apk` file from your notification bar or Downloads folder and select **Package installer** to install the application.
 <br><img src="images/step_08.png" width="300" /><br><br>
 
 ---
