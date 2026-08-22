@@ -114,3 +114,18 @@ data class HealthCheckResponse(
 data class ErrorResponse(
     val error: String
 )
+
+// ===== Simulation Models =====
+
+data class SimulationRequest(
+    val phone_number: String
+)
+
+data class SimulationResponse(
+    val status: String,
+    val message: String,
+    val phone_number: String?,
+    val phishing_link: String?,
+    val safe_link: String?
+)
+

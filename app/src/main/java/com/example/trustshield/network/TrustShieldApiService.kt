@@ -73,4 +73,16 @@ interface TrustShieldApiService {
      */
     @GET("/api/links/history/{user_id}")
     suspend fun getLinkHistory(@Path("user_id") userId: Int): Response<LinkHistoryResponse>
+    
+    // ===== Live Threat Simulation =====
+    
+    /**
+     * Trigger Live Hackathon Threat Simulation
+     * POST /api/simulate/run
+     * 
+     * Sends phishing attack immediately, then safe link after 15 seconds
+     */
+    @POST("/api/simulate/run")
+    suspend fun triggerSimulation(@Body request: SimulationRequest): Response<SimulationResponse>
 }
+

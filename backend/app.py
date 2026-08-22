@@ -12,6 +12,9 @@ import atexit
 import sys
 from brand_verification import verify_and_add_brand, discover_and_add_brand
 import json
+import requests
+import threading
+import time
 
 # Load environment variables
 load_dotenv()
@@ -676,5 +679,101 @@ def phishing_database_stats():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ============================================================================
+# GREEN-API WHATSAPP THREAT SIMULATION (HACKATHON DEMO)
+# ============================================================================
+
+GREEN_API_URL = os.getenv('GREEN_API_URL', 'https://7107.api.greenapi.com')
+GREEN_API_ID_INSTANCE = os.getenv('GREEN_API_ID_INSTANCE', '710722716935')
+GREEN_API_TOKEN_INSTANCE = os.getenv('GREEN_API_TOKEN_INSTANCE', '2b0cbefc3bfa4c43ae04961a61dc556ed69cc9e8c81c41d0b8')
+
+def send_whatsapp_message(phone_number: str, message_text: str) -> bool:
+    """Send a real WhatsApp message to a phone number using Green-API"""
+    try:
+        # Strip non-digits
+        clean_digits = "".join(ch for ch in str(phone_number) if ch.isdigit())
+        # If 10-digit Indian number without country code, add 91
+        if len(clean_digits) == 10:
+            clean_digits = f"91{clean_digits}"
+        
+        chat_id = f"{clean_digits}@c.us"
+        endpoint = f"{GREEN_API_URL}/waInstance{GREEN_API_ID_INSTANCE}/sendMessage/{GREEN_API_TOKEN_INSTANCE}"
+        
+        payload = {
+            "chatId": chat_id,
+            "message": message_text
+        }
+        headers = {"Content-Type": "application/json"}
+        
+        print(f"📤 [Green-API] Dispatching message to {chat_id}...")
+        resp = requests.post(endpoint, json=payload, headers=headers, timeout=15)
+        print(f"✅ [Green-API] Response {resp.status_code}: {resp.text}")
+        return resp.status_code == 200
+    except Exception as e:
+        print(f"❌ [Green-API] Error sending WhatsApp message: {e}")
+        return False
+
+def _run_hackathon_simulation_sequence(phone_number: str):
+    """
+    Executes the 2-message simulation sequence:
+    1. Sends phishing attack: https://paypal-confirm.com
+    2. Waits 15 seconds
+    3. Sends verified safe link: https://www.amazon.in/
+    """
+    print(f"🚀 [Simulation] Starting live attack demo for phone: {phone_number}")
+    
+    # 1. First Message: Phishing Link
+    phishing_message = (
+        "🚨 [URGENT Security Alert] Your PayPal account access has been restricted due to suspicious login attempts.\n"
+        "Please confirm your account identity immediately to prevent suspension:\n"
+        "https://paypal-confirm.com"
+    )
+    send_whatsapp_message(phone_number, phishing_message)
+    print("⏳ [Simulation] Message 1 (Phishing) dispatched! Waiting 15 seconds for Message 2...")
+    
+    # 2. Wait 15 seconds
+    time.sleep(15)
+    
+    # 3. Second Message: Safe Link
+    safe_message = (
+        "🛒 [Amazon India Notification] Your exclusive deal recommendation is ready.\n"
+        "Check out top deals and order status on Amazon:\n"
+        "https://www.amazon.in/"
+    )
+    send_whatsapp_message(phone_number, safe_message)
+    print("✅ [Simulation] Message 2 (Safe link) dispatched successfully!")
+
+@app.route('/api/simulate/run', methods=['POST'])
+def trigger_live_simulation():
+    """
+    Trigger Live Hackathon Demo Simulation:
+    Sends phishing link (https://paypal-confirm.com), then waits 15 seconds and sends safe link (https://www.amazon.in/)
+    """
+    try:
+        data = request.get_json() or {}
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({"error": "phone_number is required"}), 400
+            
+        # Run asynchronous background thread so client gets immediate HTTP 200
+        threading.Thread(
+            target=_run_hackathon_simulation_sequence, 
+            args=(phone_number,), 
+            daemon=True
+        ).start()
+        
+        return jsonify({
+            "status": "success",
+            "message": "Live simulation triggered! Phishing link sent immediately; safe link arriving in 15 seconds.",
+            "phone_number": phone_number,
+            "phishing_link": "https://paypal-confirm.com",
+            "safe_link": "https://www.amazon.in/"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=True)
+
