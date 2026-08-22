@@ -28,6 +28,16 @@ TrustShield combines advanced AI, security intelligence, and user-friendly desig
 
 ---
 
+## 📥 Download App
+
+You can download the latest APK file directly to try out TrustShield on your Android device:
+
+**[Download TrustShield APK](https://github.com/akhil/TrustShield/releases/download/v1.0.0/app-debug.apk)**
+
+*(Note: If the link above does not work, please check the [Releases](../../releases) page of this repository to download the latest `.apk` file manually.)*
+
+---
+
 ## 🎯 Project Objectives
 
 - **Real-Time Protection**: Analyze threats instantly as they appear
