@@ -65,6 +65,10 @@ Because TrustShield intercepts notifications to protect against zero-day phishin
 15. Return to the TrustShield app; when the system prompt asks **"Allow TrustShield to send you notifications?"**, tap **Allow**.
 <br><img src="images/step_15.png" width="300" /><br><br>
 
+> [!NOTE]
+> **⚡ Backend Warm-up Notice (Render Free Tier):**
+> Because our backend API is hosted on Render's free tier, the server automatically enters sleep mode after 15 minutes of inactivity. When launching the app for the first time, please allow **~50 seconds** for the backend to wake up. Once awake, all link analysis, database queries, and history scans will operate in real-time with instant response times.
+
 ## 🎣 The Threat
 Cybercriminals use sophisticated phishing links sent via SMS, WhatsApp, and other messaging apps to steal sensitive data (passwords, banking details, personal information). Often, users don't realize it's a scam until they've already clicked the link and the damage is done.
 
