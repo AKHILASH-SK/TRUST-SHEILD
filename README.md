@@ -31,6 +31,9 @@ graph TD
 
 ## 🧪 How to Test
 
+> [!WARNING]
+> **Backend Sleep Mode (Important for Testing):** Our Python backend is currently hosted on Render's free tier. If the backend has been inactive for 15 minutes, it goes to sleep. **When you open the app for the first time, you may need to wait around 50 seconds** for the backend to wake up and load properly before tests will work. Please keep the app open for a minute if it's your first time launching it!
+
 To easily test TrustShield's capabilities, we have seeded our Firebase database with known scam links. 
 
 **How to test the Phishing DB:**

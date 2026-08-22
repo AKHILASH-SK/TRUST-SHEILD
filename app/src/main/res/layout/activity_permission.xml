@@ -55,18 +55,6 @@
         android:textSize="16sp"
         app:backgroundTint="@color/accent_cyan"
         app:cornerRadius="12dp"
-        app:layout_constraintBottom_toTopOf="@+id/btn_skip_for_now"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btn_skip_for_now"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="Skip (Not Recommended)"
-        android:textColor="@color/accent_cyan"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

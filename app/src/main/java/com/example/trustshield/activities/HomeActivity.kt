@@ -64,6 +64,9 @@ class HomeActivity : AppCompatActivity() {
                 return
             }
             
+            // Request standard push notification permission (Android 13+)
+            permissionManager.requestNotificationPermission(this)
+            
             initializeViews()
             setupToolbar()
             setupRecyclerView()

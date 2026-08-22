@@ -21,7 +21,6 @@ class PermissionActivity : AppCompatActivity() {
         permissionManager = PermissionManager(this)
 
         val btnEnable = findViewById<MaterialButton>(R.id.btn_enable_permission)
-        val btnSkip = findViewById<MaterialButton>(R.id.btn_skip_for_now)
 
         btnEnable.setOnClickListener {
             // Open Android Notification Listener Settings
@@ -29,10 +28,6 @@ class PermissionActivity : AppCompatActivity() {
             startActivity(intent)
             isReturningFromSettings = true
             Toast.makeText(this, "Please enable TrustShield to proceed", Toast.LENGTH_LONG).show()
-        }
-
-        btnSkip.setOnClickListener {
-            navigateToHome()
         }
     }
 
