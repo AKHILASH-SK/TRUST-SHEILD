@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TrustShield"
 include(":app")
+
