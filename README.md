@@ -2,6 +2,24 @@
 
 TrustShield is a real-time intelligent security application designed exclusively to protect users from malicious phishing links before any damage occurs.
 
+## 📱 How to Install (For Hackathon Judges)
+
+Since TrustShield is an unreleased app that requests powerful background system permissions (Notification Access) to achieve its "Zero-Click" threat prevention, Google Play Protect will flag the APK by default. **You must temporarily disable Play Protect to install it for testing.**
+
+### Step 1: Disable Google Play Protect
+1. Open the **Google Play Store** app and tap your profile picture.
+2. Select **Play Protect**.
+3. Tap the **Settings (gear icon)** in the top right.
+4. Turn off **Scan apps with Play Protect**.
+
+<p float="left">
+  <img src="images/play_protect_1.jpg" width="200" />
+  <img src="images/play_protect_2.jpg" width="200" /> 
+  <img src="images/play_protect_3.jpg" width="200" />
+</p>
+
+*(Once the app is installed, you can turn Play Protect back on!)*
+
 ## 🎣 The Threat
 Cybercriminals use sophisticated phishing links sent via SMS, WhatsApp, and other messaging apps to steal sensitive data (passwords, banking details, personal information). Often, users don't realize it's a scam until they've already clicked the link and the damage is done.
 
