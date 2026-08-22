@@ -64,6 +64,9 @@ class HomeActivity : AppCompatActivity() {
                 return
             }
             
+            // Request standard POST_NOTIFICATIONS runtime permission if needed
+            permissionManager.requestNotificationPermission(this)
+            
             initializeViews()
             setupToolbar()
             setupRecyclerView()

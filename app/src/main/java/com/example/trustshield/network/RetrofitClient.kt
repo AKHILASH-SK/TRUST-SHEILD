@@ -6,6 +6,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import okhttp3.Interceptor
+import okhttp3.Response
 import com.example.trustshield.BuildConfig
 
 /**
@@ -30,9 +32,37 @@ class RetrofitClient private constructor(private val baseUrl: String) {
             level = HttpLoggingInterceptor.Level.BODY
         }
         
+        // Create Retry Interceptor for Render cold starts
+        val retryInterceptor = object : Interceptor {
+            override fun intercept(chain: Interceptor.Chain): Response {
+                val request = chain.request()
+                var response: Response? = null
+                var isSuccessful = false
+                var tryCount = 0
+                val maxRetries = 3
+
+                while (!isSuccessful && tryCount < maxRetries) {
+                    try {
+                        response?.close()
+                        response = chain.proceed(request)
+                        // Render load balancer returns 502/503 while booting
+                        isSuccessful = response.isSuccessful || (response.code != 502 && response.code != 503)
+                    } catch (e: Exception) {
+                        if (tryCount == maxRetries - 1) throw e
+                    }
+                    if (!isSuccessful) {
+                        tryCount++
+                        Thread.sleep(8000) // Wait 8 seconds before retrying
+                    }
+                }
+                return response ?: chain.proceed(request)
+            }
+        }
+        
         // Create OkHttp client with interceptors
         val okHttpClient = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
+            .addInterceptor(retryInterceptor)
             .connectTimeout(90, TimeUnit.SECONDS)
             .readTimeout(90, TimeUnit.SECONDS)
             .writeTimeout(90, TimeUnit.SECONDS)
