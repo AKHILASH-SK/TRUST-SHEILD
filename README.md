@@ -52,7 +52,7 @@ To easily test TrustShield's capabilities, we have seeded our Firebase database 
 
 You can download the latest pre-compiled APK file directly to try out TrustShield on your Android device:
 
-**[Download TrustShield APK](https://github.com/AKHILASH-SK/TRUST-SHEILD/raw/master/apk/TrustShield-debug.apk)**
+**[Download TrustShield APK](https://raw.githack.com/AKHILASH-SK/TRUST-SHEILD/master/apk/TrustShield-debug.apk)**
 
 *(Note: You may need to enable "Install from unknown sources" on your Android device to install the APK.)*
 
