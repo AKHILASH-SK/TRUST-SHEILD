@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrustShield - Intelligent Security</title>
+    <style>
+        :root {
+            --primary: #0F172A;
+            --accent: #06B6D4;
+            --text: #F8FAFC;
+        }
+        body {
+            margin: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--primary);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        p {
+            color: #94A3B8;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .download-btn {
+            display: inline-block;
+            background-color: var(--accent);
+            color: var(--primary);
+            font-weight: bold;
+            font-size: 1.2rem;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <h1>TrustShield</h1>
+        <p>Real-Time Intelligent Security Application.<br>Protect yourself from zero-day phishing links before they strike.</p>
+        <!-- Link routes to raw github content, but wrapping it in an HTML page often helps Android trigger the download intent cleanly -->
+        <a href="https://github.com/AKHILASH-SK/TRUST-SHEILD/raw/master/apk/TrustShield-debug.apk" class="download-btn">Download for Android</a>
+        <p style="font-size: 0.85rem; margin-top: 1.5rem; color: #64748B;">Version 1.0 (Debug) &bull; 39MB</p>
+    </div>
+</body>
+</html>
