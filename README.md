@@ -32,7 +32,7 @@ TrustShield combines advanced AI, security intelligence, and user-friendly desig
 
 You can download the latest APK file directly to try out TrustShield on your Android device:
 
-**[Download TrustShield APK](https://github.com/akhil/TrustShield/raw/master/apk/TrustShield-debug.apk)**
+**[Download TrustShield APK](https://github.com/AKHILASH-SK/TRUST-SHEILD/raw/master/apk/TrustShield-debug.apk)**
 
 *(Note: You may need to enable "Install from unknown sources" on your Android device to install the APK.)*
 
