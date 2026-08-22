@@ -4,21 +4,35 @@ TrustShield is a real-time intelligent security application designed exclusively
 
 ## 📱 How to Install (For Hackathon Judges)
 
-Since TrustShield is an unreleased app that requests powerful background system permissions (Notification Access) to achieve its "Zero-Click" threat prevention, Google Play Protect will flag the APK by default. **You must temporarily disable Play Protect to install it for testing.**
+Since TrustShield is an unreleased app that requests powerful background system permissions (Notification Access) to achieve its "Zero-Click" threat prevention, Android will apply strict security measures by default. Please follow these two steps to install and test the app.
 
 ### Step 1: Disable Google Play Protect
+Before downloading the APK, you must temporarily pause Google Play Protect so it doesn't block the unverified debug installation.
+
 1. Open the **Google Play Store** app and tap your profile picture.
-2. Select **Play Protect**.
-3. Tap the **Settings (gear icon)** in the top right.
-4. Turn off **Scan apps with Play Protect**.
+<img src="images/play_protect_1.jpg" width="300" />
 
-<p float="left">
-  <img src="images/play_protect_1.jpg" width="200" />
-  <img src="images/play_protect_2.jpg" width="200" /> 
-  <img src="images/play_protect_3.jpg" width="200" />
-</p>
+2. Select **Play Protect** and tap the **Settings (gear icon)** in the top right.
+<img src="images/play_protect_2.jpg" width="300" />
 
-*(Once the app is installed, you can turn Play Protect back on!)*
+3. Turn off **Scan apps with Play Protect**. We highly recommend selecting the **"Pause"** option so it turns back on automatically the next day, rather than turning it off permanently.
+<img src="images/play_protect_3.jpg" width="300" />
+
+*(You can now safely install the downloaded APK!)*
+
+### Step 2: Allow Restricted Settings for Notification Access
+Because TrustShield intercepts notifications to scan for threats, you must grant it Notification Access. On modern Android versions, sideloaded apps have this setting "Restricted" by default.
+
+1. When you open TrustShield and try to enable Notification Access, Android may say **"Restricted Setting"**. Click OK.
+<img src="images/restricted_1.png" width="300" />
+
+2. Go to your phone's Settings -> Apps -> **TrustShield** (or long-press the TrustShield app icon and tap **App Info**). Tap the **three dots** in the top right corner.
+<img src="images/restricted_2.png" width="300" />
+
+3. Tap **Allow restricted settings**. You may be asked to authenticate with your fingerprint or PIN.
+<img src="images/restricted_3.png" width="300" />
+
+4. Finally, return to the TrustShield app, click Enable again, and you will now be able to grant the Notification Access permission successfully!
 
 ## 🎣 The Threat
 Cybercriminals use sophisticated phishing links sent via SMS, WhatsApp, and other messaging apps to steal sensitive data (passwords, banking details, personal information). Often, users don't realize it's a scam until they've already clicked the link and the damage is done.
