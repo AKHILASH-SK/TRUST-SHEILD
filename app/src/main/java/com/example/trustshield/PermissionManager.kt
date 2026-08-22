@@ -56,4 +56,15 @@ class PermissionManager(private val context: Context) {
             }
         }
     }
+    
+    /**
+     * Check if the app has Notification Access (Special App Access)
+     * required for NotificationListenerService
+     */
+    fun hasNotificationListenerAccess(): Boolean {
+        val enabledListenerPackages = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context)
+        val hasAccess = enabledListenerPackages.contains(context.packageName)
+        Log.d(TAG, "Notification Listener access granted: $hasAccess")
+        return hasAccess
+    }
 }

@@ -89,6 +89,11 @@
             android:name=".activities.AboutActivity"
             android:exported="false"
             android:theme="@style/Theme.TrustShield" />
+            
+        <activity
+            android:name=".activities.PermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TrustShield.Login" />
 
         <!-- Main Activity (kept for backward compatibility) -->
         <activity
