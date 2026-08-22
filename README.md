@@ -2,37 +2,46 @@
 
 TrustShield is a real-time intelligent security application designed exclusively to protect users from malicious phishing links before any damage occurs.
 
-## 🎣 What is Phishing?
+## 🎣 The Threat
+Cybercriminals use sophisticated phishing links sent via SMS, WhatsApp, and other messaging apps to steal sensitive data (passwords, banking details, personal information). Often, users don't realize it's a scam until they've already clicked the link and the damage is done.
 
-Phishing is a type of cyberattack where attackers deceive users into revealing sensitive information—such as passwords, banking details, or personal data—by impersonating a trustworthy entity in a digital communication. 
+## 🛡️ Our Solution: Zero-Click Prevention
+TrustShield protects users by intercepting and analyzing links directly from device notifications **before** the user even clicks them. When a message containing a link is received, TrustShield silently extracts it, runs a comprehensive security check, and alerts the user immediately if it is a threat.
 
-TrustShield actively combats this by:
-- **Real-Time Monitoring**: Automatically scanning incoming messages and notifications for suspicious URLs.
-- **On-Device Analysis**: Instantly validating URLs against known malicious patterns and domains to minimize latency.
-- **Backend Sandbox Verification**: Sending uncertain links to a secure backend for comprehensive, isolated analysis.
-- **Instant Alerts**: Warning you with a clear, detailed threat analysis before you accidentally open a dangerous link.
+## ⚙️ How It Works (The Architecture)
 
----
+Our threat-detection pipeline consists of 4 main stages:
 
-## 🏗️ Architecture Diagram
+1. **Notification Interception**: The app securely extracts URLs from incoming notifications (WhatsApp, SMS, etc.).
+2. **Rule-Based Fast Check**: The link is instantly analyzed on-device for obvious red flags like typosquatting or homograph attacks.
+3. **Phishing Domain DB Check**: The URL is cross-referenced against our **Firebase Realtime Database** (`phishing_db`), which contains a hardcoded list of known scam and phishing links.
+4. **Sandbox Analysis & VirusTotal API**: If a link is unknown, it requires deeper analysis. While our custom ML classification model and automated DB updaters are currently in development, we have integrated the **VirusTotal API** as our final classification layer. This ensures that the app can still catch sophisticated, zero-day attacks in real-time and deliver an accurate final verdict to the user.
 
 ```mermaid
 graph TD
-    A[User Device / Android App] -->|Receives SMS/Notification| B(Link Extractor)
-    B --> C{On-Device Analysis}
-    C -->|Known Safe| D[Allow Link]
-    C -->|Known Malicious| E[Block & Alert User]
-    C -->|Unknown/Suspicious| F[Backend API]
+    A[User Receives Message] -->|Notification Listener| B(Link Extractor)
+    B --> C{1. Rule-Based Check}
+    C --> D{2. Firebase DB Check}
+    D -->|Found in DB| E[Block & Alert User]
+    D -->|Not in DB| F{3. Sandbox / VirusTotal API}
     
-    F --> G[Sandbox Environment]
-    G --> H[(Firebase Threat DB)]
-    G --> I[ML Classification Model]
-    
-    H -.->|Updates| G
-    I -.->|Score| G
-    
-    G -->|Result| A
+    F -->|Malicious| E
+    F -->|Safe| G[Allow Link / Safe Verdict]
 ```
+
+## 🧪 Testing Guide for Hackathon Judges
+
+To easily test TrustShield's capabilities, we have seeded our Firebase database with known scam links. 
+
+**How to test the Phishing DB:**
+1. Install the app and grant the necessary Notification access permissions.
+2. Send the following message to the device (via SMS, WhatsApp, or any messenger):
+   👉 `https://paypal-security-verify.com/confirm-account`
+3. TrustShield will instantly intercept the notification and flag it as a severe phishing attempt because it matches a known threat in our database.
+
+**How to test the API fallback:**
+1. Send a real, legitimate link (e.g., `https://google.com` or `https://github.com`) to the device.
+2. TrustShield will analyze it, realize it is not in the malicious database, check it against the external APIs, and return a "Safe" verdict.
 
 ---
 
@@ -51,7 +60,6 @@ You can download the latest pre-compiled APK file directly to try out TrustShiel
 If you want to clone the repository and run the Android app yourself, follow these steps:
 
 ### 1. Clone the Repository
-Open your terminal and run:
 ```bash
 git clone https://github.com/AKHILASH-SK/TRUST-SHEILD.git
 cd TRUST-SHEILD
@@ -67,9 +75,5 @@ cd TRUST-SHEILD
 2. In Android Studio, click the green **Play** button (Run 'app') in the top toolbar.
 3. Alternatively, you can install it via the terminal:
 ```bash
-# On Windows
 .\gradlew installDebug
-
-# On macOS/Linux
-./gradlew installDebug
 ```
