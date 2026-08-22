@@ -92,6 +92,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
             // Format timestamp
             try {
                 val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                isoFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
                 val displayFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
                 val date = isoFormat.parse(scan.analyzed_at)
                 timestampText.text = if (date != null) displayFormat.format(date) else scan.analyzed_at
@@ -114,6 +115,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
                 intent.putExtra("reasons", arrayOf(scan.reasons))
                 try {
                     val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+                    isoFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
                     intent.putExtra("timestamp", isoFormat.parse(scan.analyzed_at)?.time ?: System.currentTimeMillis())
                 } catch (e: Exception) {
                     intent.putExtra("timestamp", System.currentTimeMillis())
