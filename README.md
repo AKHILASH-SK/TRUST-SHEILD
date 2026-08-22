@@ -29,7 +29,7 @@ graph TD
     F -->|Safe| G[Allow Link / Safe Verdict]
 ```
 
-## 🧪 Testing Guide for Hackathon Judges
+## 🧪 How to Test
 
 To easily test TrustShield's capabilities, we have seeded our Firebase database with known scam links. 
 
