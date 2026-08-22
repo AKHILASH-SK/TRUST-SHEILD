@@ -69,6 +69,38 @@ Because TrustShield intercepts notifications to protect against zero-day phishin
 > **⚡ Backend Warm-up Notice (Render Free Tier):**
 > Because our backend API is hosted on Render's free tier, the server automatically enters sleep mode after 15 minutes of inactivity. When launching the app for the first time, please allow **~50 seconds** for the backend to wake up. Once awake, all link analysis, database queries, and history scans will operate in real-time with instant response times.
 
+---
+
+## 🧪 How to Test (Live Threat Simulation)
+
+For hackathon judges and testers, TrustShield includes a **built-in Live Threat Simulation** engine so you can test real-time zero-click interception directly on your phone without needing a second device.
+
+### Step 1: Launch the Threat Simulation
+Open the TrustShield app (ensure you have registered/logged in with your phone number). On the **Recent Scans** Home screen, tap the **Test Demo** button on the **⚡ Live Threat Simulation** card.
+<br><img src="images/test_01.png" width="300" /><br><br>
+
+### Step 2: Receive & Intercept Phishing Attack (WhatsApp)
+A real WhatsApp notification containing an urgent PayPal phishing attack (`https://paypal-confirm.com`) will arrive on your phone. TrustShield's background engine immediately intercepts the link before you even click it and issues a high-priority warning: **🔴 DANGEROUS LINK - From: com.whatsapp**.
+<br><img src="images/test_02.png" width="300" /><br><br>
+
+### Step 3: View Real-Time Threat Telemetry
+Open the TrustShield app to view the **Recent Scans** history. The intercepted link is highlighted in red with complete classification details: **✕ Dangerous • Risk: DANGEROUS**.
+<br><img src="images/test_03.png" width="300" /><br><br>
+
+### Step 4: Automated 15-Second Safe Link Delivery
+Exactly **15 seconds** after the first message, a second WhatsApp message automatically arrives containing a verified safe link (`https://www.amazon.in/`).
+<br><img src="images/test_04.png" width="300" /><br><br>
+
+### Step 5: Verified Safe Link Classification
+TrustShield intercepts the notification, verifies that `amazon.in` is a legitimate, safe domain, and records it as **✔ Safe • Risk: Safe** with zero false alarms!
+<br><img src="images/test_05.png" width="300" /><br><br>
+
+> [!TIP]
+> **Custom Link Testing:**
+> You can also send any custom SMS, WhatsApp, or Telegram message containing any URL from another phone to test TrustShield's real-time interception on your device!
+
+---
+
 ## 🎣 The Threat
 Cybercriminals use sophisticated phishing links sent via SMS, WhatsApp, and other messaging apps to steal sensitive data (passwords, banking details, personal information). Often, users don't realize it's a scam until they've already clicked the link and the damage is done.
 
@@ -95,23 +127,6 @@ graph TD
     F -->|Malicious| E
     F -->|Safe| G[Allow Link / Safe Verdict]
 ```
-
-## 🧪 How to Test
-
-> [!WARNING]
-> **Backend Sleep Mode (Important for Testing):** Our Python backend is currently hosted on Render's free tier. If the backend has been inactive for 15 minutes, it goes to sleep. **When you open the app for the first time, you may need to wait around 50 seconds** for the backend to wake up and load properly before tests will work. Please keep the app open for a minute if it's your first time launching it!
-
-To easily test TrustShield's capabilities, we have seeded our Firebase database with known scam links. 
-
-**How to test the Phishing DB:**
-1. Install the app and grant the necessary Notification access permissions.
-2. Send the following message to the device (via SMS, WhatsApp, or any messenger):
-   👉 `https://paypal-security-verify.com/confirm-account`
-3. TrustShield will instantly intercept the notification and flag it as a severe phishing attempt because it matches a known threat in our database.
-
-**How to test the API fallback:**
-1. Send a real, legitimate link (e.g., `https://google.com` or `https://github.com`) to the device.
-2. TrustShield will analyze it, realize it is not in the malicious database, check it against the external APIs, and return a "Safe" verdict.
 
 ---
 
