@@ -172,10 +172,18 @@ class LoginActivity : AppCompatActivity() {
     
     private fun navigateToHome() {
         try {
-            Log.d(TAG, "Navigating to HomeActivity")
-            val intent = Intent(this, HomeActivity::class.java)
-            startActivity(intent)
-            finish()
+            val permissionManager = com.example.trustshield.PermissionManager(this)
+            if (!permissionManager.hasNotificationListenerAccess()) {
+                Log.d(TAG, "Navigating to PermissionActivity")
+                val intent = Intent(this, PermissionActivity::class.java)
+                startActivity(intent)
+                finish()
+            } else {
+                Log.d(TAG, "Navigating to HomeActivity")
+                val intent = Intent(this, HomeActivity::class.java)
+                startActivity(intent)
+                finish()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "navigateToHome error: ${e.message}", e)
             Toast.makeText(this, "Navigation error: ${e.message}", Toast.LENGTH_SHORT).show()
