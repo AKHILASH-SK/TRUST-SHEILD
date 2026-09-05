@@ -5,11 +5,11 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 class GoodDomainChecker:
-    "\""
+    """
     Tier 2.5: API-Driven 'Known Good' Domain Checker.
     Uses VirusTotal's Global Popularity Rankings to determine if a 
     domain (or its root domain) is a highly recognized, legitimate website.
-    "\""
+    """
     
     def __init__(self, virustotal_api_key):
         self.vt_api_key = virustotal_api_key
@@ -18,10 +18,10 @@ class GoodDomainChecker:
         self.timeout = 5
 
     def is_known_good_domain(self, url):
-        "\""
+        """
         Checks Global Popularity Rank via VirusTotal API.
         Handles subdomains and endpoints automatically.
-        "\""
+        """
         try:
             # Safely extract just the domain from complex URLs (e.g., offers.myntra.com/sale -> offers.myntra.com)
             parsed_url = urlparse(url)
