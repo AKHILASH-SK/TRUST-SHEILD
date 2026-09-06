@@ -44,7 +44,7 @@ class NotificationListener : NotificationListenerService() {
         linkScanRecorder = LinkScanRecorder(this)
 
         phishingChecker = PhishingDomainCheckerFirebase(this)
-        sandboxChecker = SandboxChecker("http://${BuildConfig.BACKEND_IP}:8000")
+        sandboxChecker = SandboxChecker()
         Log.d(TAG, "NotificationListener service created with 3-tier analysis + backend recording")
     }
 

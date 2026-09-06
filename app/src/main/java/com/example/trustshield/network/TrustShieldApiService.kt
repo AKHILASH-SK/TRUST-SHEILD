@@ -74,6 +74,13 @@ interface TrustShieldApiService {
     @GET("/api/links/history/{user_id}")
     suspend fun getLinkHistory(@Path("user_id") userId: Int): Response<LinkHistoryResponse>
     
+    /**
+     * Fetch or synthesize Gemini AI Forensic Report on demand
+     * POST /api/links/explain
+     */
+    @POST("/api/links/explain")
+    suspend fun explainLink(@Body request: LinkExplainRequest): Response<LinkExplainResponse>
+    
     // ===== Live Threat Simulation =====
     
     /**

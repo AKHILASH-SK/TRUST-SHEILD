@@ -126,11 +126,11 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Analysis Details Card -->
+            <!-- AI Forensic Investigation Card -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Analysis Report"
+                android:text="AI Forensic Intelligence"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_gray"
@@ -141,43 +141,65 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="3dp"
                 app:cardBackgroundColor="@android:color/white">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="20dp">
 
-                    <TextView
-                        android:id="@+id/tv_verified_brand"
+                    <!-- Header with Google Gemini badge -->
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Official YouTube"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:textColor="@android:color/holo_green_dark"
-                        android:layout_marginBottom="12dp"
-                        android:visibility="gone" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="16dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Verification Status"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_gray"
-                        android:layout_marginBottom="4dp" />
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:src="@drawable/ic_shield"
+                            app:tint="@color/accent_cyan"
+                            android:layout_marginEnd="10dp" />
 
-                    <TextView
-                        android:id="@+id/tv_verification_status"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="✅ Verified Official Domain\n✅ Firebase Database: Not in DB"
-                        android:textSize="13sp"
-                        android:textColor="@color/black"
-                        android:layout_marginBottom="16dp" />
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Forensic Investigation"
+                                android:textSize="16sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/primary_navy" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Google Gemini 3.6 Flash"
+                                android:textSize="11sp"
+                                android:textColor="@color/accent_cyan_dark"
+                                android:textStyle="bold" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_refresh_gemini"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Refresh"
+                            android:textSize="12sp"
+                            app:icon="@drawable/ic_refresh"
+                            app:iconSize="16dp"
+                            android:textColor="@color/accent_cyan" />
+                    </LinearLayout>
 
                     <View
                         android:layout_width="match_parent"
@@ -185,21 +207,123 @@
                         android:background="#E2E8F0"
                         android:layout_marginBottom="16dp" />
 
-                    <TextView
+                    <!-- Loading State -->
+                    <LinearLayout
+                        android:id="@+id/ll_gemini_loading"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Detected Threats / Reasons"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_gray"
-                        android:layout_marginBottom="4dp" />
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="24dp"
+                        android:visibility="gone">
 
-                    <TextView
-                        android:id="@+id/tv_reasons"
+                        <ProgressBar
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:indeterminateTint="@color/accent_cyan"
+                            android:layout_marginBottom="12dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Synthesizing AI Forensic Intelligence..."
+                            android:textSize="13sp"
+                            android:textColor="@color/text_gray" />
+                    </LinearLayout>
+
+                    <!-- Content State -->
+                    <LinearLayout
+                        android:id="@+id/ll_gemini_content"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="No specific reasons - appears safe"
-                        android:textSize="13sp"
-                        android:textColor="@color/black" />
+                        android:orientation="vertical">
+
+                        <!-- Threat Summary Section -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:background="#F1F5F9"
+                            android:padding="12dp"
+                            android:layout_marginBottom="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="THREAT SUMMARY"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/primary_navy"
+                                android:layout_marginBottom="4dp" />
+
+                            <TextView
+                                android:id="@+id/tv_gemini_summary"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Analyzing link telemetry..."
+                                android:textSize="13sp"
+                                android:lineSpacingExtra="3dp"
+                                android:textColor="#1E293B" />
+                        </LinearLayout>
+
+                        <!-- Key Forensic Evidence Section -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:background="#F8FAFC"
+                            android:padding="12dp"
+                            android:layout_marginBottom="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="KEY FORENSIC EVIDENCE"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/primary_navy"
+                                android:layout_marginBottom="4dp" />
+
+                            <TextView
+                                android:id="@+id/tv_gemini_evidence"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Technical indicators..."
+                                android:textSize="13sp"
+                                android:lineSpacingExtra="3dp"
+                                android:textColor="#334155" />
+                        </LinearLayout>
+
+                        <!-- Recommended Action Section -->
+                        <LinearLayout
+                            android:id="@+id/ll_gemini_action_box"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:background="#FEF2F2"
+                            android:padding="12dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="RECOMMENDED ACTION"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:textColor="#DC2626"
+                                android:layout_marginBottom="4dp" />
+
+                            <TextView
+                                android:id="@+id/tv_gemini_action"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Immediate security advice..."
+                                android:textSize="13sp"
+                                android:lineSpacingExtra="3dp"
+                                android:textColor="#991B1B" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
             

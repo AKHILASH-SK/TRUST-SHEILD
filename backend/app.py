@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from phishing_feed import PhishingFeedImporter
-from sandbox_analyzer import SandboxAnalyzer
+from core_engine.ml_engine import MultiModalFusionEngine
+from core_engine.link_threat_pipeline import get_link_pipeline
 import atexit
 import sys
 from brand_verification import verify_and_add_brand, discover_and_add_brand
@@ -37,17 +38,15 @@ print(f"🔌 Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB
 # Initialize phishing feed importer (Tier 0)
 phishing_importer = PhishingFeedImporter()
 
-# Initialize Tier 3 Sandbox Analyzer
-VIRUSTOTAL_API_KEY = os.getenv('VIRUSTOTAL_API_KEY')
-if VIRUSTOTAL_API_KEY:
-    sandbox_analyzer = SandboxAnalyzer(VIRUSTOTAL_API_KEY)
-    print(f"✅ VirusTotal Tier 3 Sandbox Analyzer initialized")
-    print(f"   API Key: {VIRUSTOTAL_API_KEY[:30]}..." if len(VIRUSTOTAL_API_KEY) > 30 else f"   API Key found")
+# Initialize V2 Multi-Modal AI Engine (Replacing V1 Sandbox)
+try:
+    print(f"🚀 Initializing V2 MultiModal AI Engine...")
+    ai_engine = MultiModalFusionEngine()
+    print(f"✅ V2 AI Engine initialized successfully!")
     sys.stdout.flush()
-else:
-    sandbox_analyzer = None
-    print(f"❌ VirusTotal API key NOT found in environment - Tier 3 analysis DISABLED")
-    print(f"   Add VIRUSTOTAL_API_KEY to .env file")
+except Exception as e:
+    ai_engine = None
+    print(f"❌ Failed to initialize V2 AI Engine: {e}")
     sys.stdout.flush()
 
 sys.stdout.flush()
@@ -244,6 +243,71 @@ def login_user():
 
 # ==================== LINK SCAN ENDPOINTS ====================
 
+@app.route('/api/sandbox-check', methods=['POST'])
+def sandbox_check():
+    """
+    Tier 3: Sandbox check called by Android SandboxChecker.kt
+    Executes V2 Link Threat Pipeline (Headless Sandbox + Meta-Classifier + Gemini)
+    """
+    try:
+        print("\n" + "="*80)
+        print("🔬 [API] /api/sandbox-check REQUEST RECEIVED")
+        print("="*80)
+        data = request.get_json(silent=True) or {}
+        url = data.get('url', '').strip()
+        print(f"   Target URL: {url}")
+        sys.stdout.flush()
+        
+        if not url:
+            return jsonify({
+                "verdict": "UNKNOWN",
+                "confidence": 0,
+                "details": "Missing url in request body"
+            }), 400
+            
+        print(f"🚀 [V2 LINK PIPELINE] Executing Deep Analysis on {url}...")
+        sys.stdout.flush()
+        pipeline = get_link_pipeline()
+        pipeline_res = pipeline.analyze_url(url)
+        v2_verdict = pipeline_res.get('verdict', 'SAFE')
+        threat_score = int(pipeline_res.get('threat_score', 0))
+        summary = pipeline_res.get('summary', '')
+        
+        if 'CRITICAL' in v2_verdict or 'PHISHING' in v2_verdict or 'DANGEROUS' in v2_verdict or threat_score >= 60:
+            android_verdict = 'DANGEROUS'
+            malicious_count = 1
+            suspicious_count = 0
+        elif 'SUSPICIOUS' in v2_verdict or threat_score >= 40:
+            android_verdict = 'SUSPICIOUS'
+            malicious_count = 0
+            suspicious_count = 1
+        else:
+            android_verdict = 'SAFE'
+            malicious_count = 0
+            suspicious_count = 0
+            
+        print(f"✅ [TIER 3 SANDBOX RESULT] Verdict: {android_verdict} (Score: {threat_score})")
+        sys.stdout.flush()
+        
+        return jsonify({
+            "verdict": android_verdict,
+            "confidence": threat_score,
+            "details": summary or f"TrustShield V2 Pipeline: {v2_verdict} (Score: {threat_score}/100)",
+            "summary": summary,
+            "engines_count": 4,
+            "malicious_count": malicious_count,
+            "suspicious_count": suspicious_count
+        }), 200
+            
+    except Exception as e:
+        print(f"❌ [TIER 3 SANDBOX ERROR]: {e}")
+        sys.stdout.flush()
+        return jsonify({
+            "verdict": "UNKNOWN",
+            "confidence": 0,
+            "details": f"Analysis failed: {str(e)}"
+        }), 500
+
 @app.route('/api/links/scan', methods=['POST'])
 def save_link_scan():
     """
@@ -351,75 +415,38 @@ def save_link_scan():
             print(f"✓ [TIER 0] No match in phishing database - Using app verdict: {verdict}")
             sys.stdout.flush()
         
-        # ===== TIER 3: Sandbox Analysis =====
-        # Run Tier 3 if:
-        # 1. App verdict is SUSPICIOUS, OR
-        # 2. Found in database as phishing AND it's a short URL (need to check final destination)
-        should_run_tier3 = (verdict == 'SUSPICIOUS') and sandbox_analyzer
+        # ===== TRUSTSHIELD V2 UNIFIED PIPELINE (Heuristics -> ThreatDB -> VirusTotal -> Sandbox -> MetaClassifier & Gemini) =====
+        is_official = 'Verified official domain' in str(reasons) or 'Dynamically verified' in str(reasons)
         
-        if should_run_tier3:
-            print(f"\n🔬 [TIER 3] Running sandbox analysis...")
+        print(f"\n🔬 [V2 PIPELINE] Running Multi-Modal Threat Pipeline on: {url}...")
+        sys.stdout.flush()
+        
+        try:
+            pipeline = get_link_pipeline()
+            pipeline_res = pipeline.analyze_url(url)
+            
+            pipeline_verdict = pipeline_res.get('verdict', 'SAFE')
+            threat_score = pipeline_res.get('threat_score', 0)
+            gemini_summary = pipeline_res.get('summary', '')
+            
+            print(f"✅ [V2 PIPELINE COMPLETE] Verdict: {pipeline_verdict} (Threat Score: {threat_score}/100)")
             sys.stdout.flush()
             
-            try:
-                sandbox_result = sandbox_analyzer.analyze_url(url)
+            if 'CRITICAL' in pipeline_verdict or 'PHISHING' in pipeline_verdict or 'DANGEROUS' in pipeline_verdict or threat_score >= 60:
+                verdict = 'DANGEROUS'
+                risk_level = 'DANGEROUS'
+            elif 'SUSPICIOUS' in pipeline_verdict or threat_score >= 40:
+                verdict = 'SUSPICIOUS'
+                risk_level = 'SUSPICIOUS'
+            else:
+                verdict = 'SAFE'
+                risk_level = 'SAFE'
                 
-                sandbox_verdict = sandbox_result.get('verdict', 'SAFE')
-                sandbox_score = sandbox_result.get('score', 0)
-                sandbox_confidence = sandbox_result.get('confidence', 0)
-                
-                print(f"\n✅ [TIER 3 COMPLETE] Sandbox verdict: {sandbox_verdict} (Score: {sandbox_score}, Confidence: {sandbox_confidence}%)")
-                sys.stdout.flush()
-                
-                # Tier 3 is final - it overrides Tier 0 and Tier 1
-                if sandbox_verdict == 'DANGEROUS':
-                    verdict = 'DANGEROUS'
-                    risk_level = 'DANGEROUS'
-                    if is_phishing and is_short:
-                        reasons = f"Tier 0: Found in {db_source} database. Tier 3: CONFIRMED PHISHING via sandbox analysis (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                    else:
-                        reasons = f"Sandbox analysis detected phishing (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                    tier_analyzed = 'TIER_3'
-                    print(f"   🚨 VERDICT: DANGEROUS - Confirmed by Tier 3 analysis")
-                elif sandbox_verdict == 'SUSPICIOUS':
-                    verdict = 'SUSPICIOUS'
-                    risk_level = 'SUSPICIOUS'
-                    if is_phishing and is_short:
-                        reasons = f"Tier 0: Short URL in {db_source} database. Tier 3: Analysis is SUSPICIOUS (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                    else:
-                        reasons = f"Sandbox analysis: SUSPICIOUS (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                    tier_analyzed = 'TIER_3'
-                    print(f"   ⚠️  VERDICT: SUSPICIOUS - Based on Tier 3 analysis")
-                else:
-                    # Sandbox says SAFE
-                    verdict = 'SAFE'
-                    risk_level = 'SAFE'
-                    if is_phishing and is_short:
-                        reasons = f"Tier 0: Short URL in {db_source} database (old/reused entry). Tier 3: Destination is SAFE (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                        print(f"   ✓ OVERRIDE: Short URL was in database but points to SAFE destination")
-                    else:
-                        reasons = f"Sandbox analysis cleared URL (Score: {sandbox_score}/100, Confidence: {sandbox_confidence}%)"
-                    tier_analyzed = 'TIER_3'
-                    print(f"   ✓ VERDICT: SAFE - Tier 3 analysis confirms safe")
-                
-                sys.stdout.flush()
-                
-            except Exception as e:
-                print(f"❌ [TIER 3 ERROR] Sandbox analysis failed: {str(e)}")
-                if is_phishing and is_short:
-                    # Tier 3 failed but we can't trust database alone for short URLs
-                    # Keep as SUSPICIOUS to be safe
-                    verdict = 'SUSPICIOUS'
-                    risk_level = 'SUSPICIOUS'
-                    reasons = f"Tier 0: Short URL in {db_source} database. Tier 3 verification failed: {str(e)}"
-                    tier_analyzed = 'TIER_0'
-                    print(f"   ⚠️  VERDICT: SUSPICIOUS - Tier 3 failed but database entry is unreliable for short URLs")
-                else:
-                    print(f"   Keeping original verdict: {verdict}")
-                sys.stdout.flush()
-        elif verdict == 'SUSPICIOUS' and not sandbox_analyzer:
-            print(f"⚠️  [TIER 3] Sandbox analyzer not available (check VirusTotal API key)")
-            print(f"   Keeping verdict as SUSPICIOUS")
+            reasons = gemini_summary if gemini_summary else f"TrustShield V2 Engine: {verdict} (Score: {threat_score}/100)"
+            tier_analyzed = 'V2_LINK_PIPELINE'
+            
+        except Exception as e:
+            print(f"❌ [V2 PIPELINE ERROR] Analysis failed: {str(e)}")
             sys.stdout.flush()
         
         sys.stdout.flush()
@@ -434,10 +461,7 @@ def save_link_scan():
                 discovered_brand = discover_and_add_brand(domain_to_check)
                 if discovered_brand:
                     # Update reasons to reflect discovery
-                    if 'Sandbox analysis cleared' in reasons:
-                        reasons = f"Dynamically discovered as official domain for {discovered_brand} (Sandbox also confirmed safe)"
-                    else:
-                        reasons = f"Dynamically discovered and verified as official domain for {discovered_brand}"
+                    reasons = f"Dynamically discovered and verified as official domain for {discovered_brand}"
                     print(f"   ✓ DYNAMIC DISCOVERY: Recognized as {discovered_brand}")
             except Exception as e:
                 print(f"Error in dynamic brand discovery: {e}")
@@ -482,6 +506,102 @@ def save_link_scan():
         print(traceback.format_exc())
         import sys
         sys.stdout.flush()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/links/explain', methods=['POST'])
+def explain_link():
+    """
+    On-Demand / Detail View Gemini AI Forensic Report Generation
+    Called when the user clicks on a link item in Android app or requests an AI forensic breakdown.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        url = data.get('url', '').strip()
+        scan_id = data.get('scan_id')
+        
+        if not url and not scan_id:
+            return jsonify({"error": "Missing url or scan_id"}), 400
+            
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if existing scan has Gemini summary in reasons
+        existing_reasons = None
+        existing_verdict = "DANGEROUS"
+        existing_risk = "DANGEROUS"
+        
+        if scan_id:
+            cur.execute("SELECT id, url, risk_level, reasons, verdict FROM link_scans WHERE id = %s", (scan_id,))
+            row = cur.fetchone()
+            if row:
+                if not url:
+                    url = row[1]
+                existing_risk = row[2]
+                existing_reasons = row[3]
+                existing_verdict = row[4]
+        elif url:
+            cur.execute("SELECT id, url, risk_level, reasons, verdict FROM link_scans WHERE url = %s ORDER BY analyzed_at DESC LIMIT 1", (url,))
+            row = cur.fetchone()
+            if row:
+                scan_id = row[0]
+                existing_risk = row[2]
+                existing_reasons = row[3]
+                existing_verdict = row[4]
+                
+        # If existing reasons already contains a Gemini 3-bullet summary, return it immediately (< 5ms)
+        if existing_reasons and ("• Threat Summary" in existing_reasons or "Threat Summary:" in existing_reasons):
+            cur.close()
+            conn.close()
+            return jsonify({
+                "status": "success",
+                "url": url,
+                "scan_id": scan_id,
+                "verdict": existing_verdict or "SAFE",
+                "threat_score": 90.0 if existing_verdict == "DANGEROUS" else (50.0 if existing_verdict == "SUSPICIOUS" else 0.0),
+                "summary": existing_reasons
+            }), 200
+            
+        # Otherwise, run link pipeline to synthesize fresh Gemini forensic report
+        pipeline = get_link_pipeline()
+        pipeline_res = pipeline.analyze_url(url)
+        summary = pipeline_res.get("summary", "")
+        threat_score = pipeline_res.get("threat_score", 0.0)
+        verdict = pipeline_res.get("verdict", "SAFE")
+        
+        # Normalize verdict
+        if "CRITICAL" in verdict or "PHISHING" in verdict or "DANGEROUS" in verdict or threat_score >= 60:
+            norm_verdict = "DANGEROUS"
+        elif "SUSPICIOUS" in verdict or threat_score >= 40:
+            norm_verdict = "SUSPICIOUS"
+        else:
+            norm_verdict = "SAFE"
+            
+        # Update database record if scan_id exists
+        if scan_id:
+            cur.execute("UPDATE link_scans SET reasons = %s, verdict = %s, risk_level = %s WHERE id = %s",
+                        (summary, norm_verdict, norm_verdict, scan_id))
+            conn.commit()
+        elif url:
+            cur.execute("UPDATE link_scans SET reasons = %s, verdict = %s, risk_level = %s WHERE url = %s",
+                        (summary, norm_verdict, norm_verdict, url))
+            conn.commit()
+            
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            "status": "success",
+            "url": url,
+            "scan_id": scan_id,
+            "verdict": norm_verdict,
+            "threat_score": threat_score,
+            "summary": summary
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ [API EXPLAIN ERROR]: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/links/history/<int:user_id>', methods=['GET'])
@@ -775,5 +895,5 @@ def trigger_live_simulation():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    app.run(host='0.0.0.0', port=8000, debug=False)
 

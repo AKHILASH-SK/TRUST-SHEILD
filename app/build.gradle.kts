@@ -21,13 +21,29 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val localProperties = Properties()
+        val envProperties = Properties()
         val localPropertiesFile = rootProject.file("local.properties")
         if (localPropertiesFile.exists()) {
-            localProperties.load(FileInputStream(localPropertiesFile))
+            envProperties.load(FileInputStream(localPropertiesFile))
         }
-        val backendIp = localProperties.getProperty("BACKEND_IP", "10.35.249.61")
+        val envFile = rootProject.file(".env")
+        if (envFile.exists()) {
+            envProperties.load(FileInputStream(envFile))
+        }
+        val backendEnv = envProperties.getProperty("BACKEND_ENV", "local")
+        val backendIp = envProperties.getProperty("BACKEND_IP", "10.140.29.61")
+        val backendPort = envProperties.getProperty("BACKEND_PORT", "8000")
+        val hostedUrl = envProperties.getProperty("HOSTED_BACKEND_URL", "https://trust-sheild.onrender.com/")
+
+        val baseUrl = if (backendEnv.equals("hosted", ignoreCase = true)) {
+            if (hostedUrl.endsWith("/")) hostedUrl else "$hostedUrl/"
+        } else {
+            "http://$backendIp:$backendPort/"
+        }
+
+        buildConfigField("String", "BACKEND_ENV", "\"$backendEnv\"")
         buildConfigField("String", "BACKEND_IP", "\"$backendIp\"")
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {

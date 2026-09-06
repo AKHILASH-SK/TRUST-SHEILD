@@ -14,8 +14,8 @@ except ImportError:
 
 from transformers import pipeline
 
-from sandbox_engine import VirtualSandboxAnalyzer
-from meta_classifier import EnsembleMetaClassifier
+from core_engine.sandbox_engine import VirtualSandboxAnalyzer
+from core_engine.meta_classifier import EnsembleMetaClassifier
 
 class EmailNLPClassifier:
     """
@@ -59,7 +59,11 @@ class LinkFeatureExtractor:
     Deep Feature Engineering for URLs with Pre-Filtering for Global Domains.
     """
     def __init__(self, known_brands: List[str] = None):
-        self.known_brands = known_brands or ["amazon", "paypal", "microsoft", "google", "apple", "netflix", "facebook", "whatsapp", "apex-global"]
+        self.known_brands = known_brands or [
+            "amazon", "paypal", "microsoft", "google", "apple", "netflix", 
+            "facebook", "whatsapp", "apex-global", "forms", "drive", "dropbox",
+            "instagram", "telegram", "twitter", "linkedin", "github", "zoom"
+        ]
         
         vt_api_key = os.getenv('VIRUSTOTAL_API_KEY')
         if vt_api_key and GoodDomainChecker:
@@ -128,7 +132,19 @@ class MultiModalFusionEngine:
         return self.nlp
 
     def analyze_email_comprehensive(self, subject: str, body: str, extracted_links: List[str]) -> Dict[str, Any]:
-        text_results = self._get_nlp().analyze_text(subject, body)
+        # Decoupled NLP: Only invoke heavy BERT model when actual email body/subject exists (Web Portal .eml phase).
+        # In Pure Link-Only Notification Listener mode, BERT is bypassed completely (nlp_score = 0.0).
+        if (subject or "").strip() or (body or "").strip():
+            text_results = self._get_nlp().analyze_text(subject, body)
+            base_text_risk = text_results['risk_score']
+        else:
+            text_results = {
+                "risk_score": 0.0,
+                "threat_type": "Link-Only Notification Mode (BERT Bypassed)",
+                "confidence": 0.0,
+                "raw_label": "none"
+            }
+            base_text_risk = 0.0
         
         link_results = []
         highest_link_risk = 0.0
@@ -139,12 +155,14 @@ class MultiModalFusionEngine:
             if features['heuristic_risk_score'] > highest_link_risk:
                 highest_link_risk = features['heuristic_risk_score']
                 
-        base_text_risk = text_results['risk_score']
-        
         # Default values if no links are present
         highest_typosquat = 0
         highest_sandbox_threat = 0
         has_password_field = 0
+        external_form_action = 0
+        suspicious_exfiltration = 0
+        newly_registered_domain = 0
+        brand_impersonation = 0
         
         # 3. Sandbox Analysis (Only run for the most suspicious link to save time/API quota)
         if len(extracted_links) > 0:
@@ -158,17 +176,25 @@ class MultiModalFusionEngine:
                 highest_typosquat = link_results[0]['features'].get('typosquat_risk', 0)
                 highest_sandbox_threat = sandbox_results.get('sandbox_threat_score', 0)
                 has_password_field = sandbox_results.get('sandbox_has_password_field', 0)
+                external_form_action = sandbox_results.get('external_form_action', 0)
+                suspicious_exfiltration = sandbox_results.get('suspicious_exfiltration', 0)
+                newly_registered_domain = sandbox_results.get('newly_registered_domain', 0)
+                brand_impersonation = sandbox_results.get('brand_impersonation', 0)
                 
         # 4. Stage 6: The Ensemble Meta-Classifier
         meta_verdict = self.meta_classifier.predict_verdict(
             nlp_score=base_text_risk,
             typosquat_risk=highest_typosquat,
             sandbox_threat=highest_sandbox_threat,
-            has_password_field=has_password_field
+            has_password_field=has_password_field,
+            external_form_action=external_form_action,
+            suspicious_exfiltration=suspicious_exfiltration,
+            newly_registered_domain=newly_registered_domain,
+            brand_impersonation=brand_impersonation
         )
 
         return {
-            "final_threat_score": meta_verdict['confidence'], # The confidence of the ML Model IS our threat score
+            "final_threat_score": meta_verdict.get('threat_score', 0),
             "verdict": meta_verdict['verdict'],
             "text_analysis": text_results,
             "link_analysis": link_results,

@@ -98,6 +98,23 @@ data class LinkHistoryResponse(
     val scans: List<LinkScanHistoryItem>
 )
 
+/**
+ * Link Explain (Gemini Forensics) Request & Response
+ */
+data class LinkExplainRequest(
+    val url: String,
+    val scan_id: Int? = null
+)
+
+data class LinkExplainResponse(
+    val status: String,
+    val url: String?,
+    val scan_id: Int?,
+    val verdict: String?,
+    val threat_score: Float?,
+    val summary: String?
+)
+
 // ===== Health Check Models =====
 
 /**

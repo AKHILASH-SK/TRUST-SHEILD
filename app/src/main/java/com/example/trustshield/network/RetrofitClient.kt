@@ -89,7 +89,7 @@ class RetrofitClient private constructor(private val baseUrl: String) {
         /**
          * Get singleton instance of RetrofitClient
          */
-        fun getInstance(baseUrl: String = "https://trust-sheild.onrender.com/"): RetrofitClient {
+        fun getInstance(baseUrl: String = BuildConfig.BASE_URL): RetrofitClient {
             if (instance == null) {
                 instance = RetrofitClient(baseUrl)
             }

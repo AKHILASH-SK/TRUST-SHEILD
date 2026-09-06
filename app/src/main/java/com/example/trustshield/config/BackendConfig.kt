@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.example.trustshield.network.RetrofitClient
 
+import com.example.trustshield.BuildConfig
+
 /**
  * BackendConfig
  * Configuration helper for backend URL setup
@@ -14,8 +16,7 @@ object BackendConfig {
     private const val PREFS_NAME = "backend_prefs"
     private const val KEY_BACKEND_URL = "backend_url"
     
-    // Set this directly to your Render URL!
-    private val DEFAULT_BACKEND_URL = "https://trust-sheild.onrender.com/"
+    private val DEFAULT_BACKEND_URL = BuildConfig.BASE_URL
     
     /**
      * Get the backend URL from SharedPreferences
@@ -24,8 +25,7 @@ object BackendConfig {
     fun getBackendUrl(context: Context): String {
         val sharedPref = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val url = sharedPref.getString(KEY_BACKEND_URL, "")
-        // If the saved URL is an old local IP (contains :8000), force the new production URL
-        if (url.isNullOrEmpty() || url.contains(":8000") || url.contains("http://192")) {
+        if (url.isNullOrEmpty()) {
             return DEFAULT_BACKEND_URL
         }
         return url
