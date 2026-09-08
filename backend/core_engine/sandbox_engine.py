@@ -228,7 +228,8 @@ class VirtualSandboxAnalyzer:
         try:
             # 2. Initialize the Stealth Sandbox Browser
             driver = webdriver.Chrome(options=self.chrome_options)
-            driver.set_page_load_timeout(15)
+            driver.set_page_load_timeout(6)
+            driver.set_script_timeout(5)
             
             # Feature 1: Strip navigator.webdriver via CDP script before any page script executes
             driver.execute_cdp_cmd(
@@ -268,7 +269,7 @@ class VirtualSandboxAnalyzer:
             # 3. Record initial state and navigate
             initial_url = url
             driver.get(url)
-            time.sleep(3) # Wait for JS dynamic SPAs / payloads to execute
+            time.sleep(2) # Wait for JS dynamic SPAs / payloads to execute
             
             final_url = driver.current_url
             current_ext = tldextract.extract(final_url)

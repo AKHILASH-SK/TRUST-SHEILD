@@ -1,0 +1,43 @@
+Delivered-To: friend@gmail.com
+Received: by 2002:a17:902:d00d:b0:1c4:89a1:2345 with SMTP id z13csp982124plb;
+	Tue, 08 Sep 2026 17:37:46 +0000
+Received: from mail-relay.trustshield-demo.org (unknown [157.51.60.12])
+	by mx.google.com with ESMTP id a21si891024plm.12
+	for <friend@gmail.com>;
+	Tue, 08 Sep 2026 17:37:46 +0000
+Return-Path: <scammer-drop@external-spoof.biz>
+From: "Executive Payroll Notification" <hr-payroll@corporate-bonus.top>
+To: friend@gmail.com
+Reply-To: fraudster-collect@unauthorized-mailbox.net
+Subject: URGENT: Q3 Appraisal & Direct Deposit Verification Required
+Date: Tue, 08 Sep 2026 17:37:46 +0000
+Message-ID: <20260908.157.51.60.12.ts2@spoofed-domain.xyz>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="----=_Part_9988_7766"
+
+------=_Part_9988_7766
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+Important Security Notice:
+Your quarterly appraisal compensation letter is ready for verification.
+Please verify your banking credentials to prevent salary disbursement delays:
+https://linked1n.vercel.app/
+
+------=_Part_9988_7766
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+  <div style="background: white; border: 1px solid #ddd; padding: 20px; border-radius: 8px; max-width: 600px;">
+    <h2 style="color: #d9534f;">Q3 Payroll Disbursement Notice</h2>
+    <p>We received an update request for your direct deposit bank account from IP: <strong>157.51.60.12</strong> (Coimbatore, India).</p>
+    <p>If you did not authorize this change, please cancel immediately:</p>
+    <p><a href="https://linked1n.vercel.app/" style="background: #d9534f; color: white; padding: 10px 18px; text-decoration: none; border-radius: 4px; display: inline-block;">Verify & Cancel Request</a></p>
+    <p style="color: #888; font-size: 12px; margin-top: 20px;">Corporate Compensation Gateway // Automated Security Dispatch</p>
+  </div>
+</body>
+</html>
+------=_Part_9988_7766--

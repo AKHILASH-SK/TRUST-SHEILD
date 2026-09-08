@@ -385,6 +385,9 @@ def parse_email_file(file_bytes: bytes) -> Dict[str, Any]:
             "payload": {"body_text": "", "extracted_links": []}
         }
 
+    # Normalize line endings to prevent Windows double-CRLF truncation
+    file_bytes = file_bytes.replace(b"\r\r\n", b"\r\n")
+
     # Feature 1: Evidence Preservation (SHA-256)
     evidence_hash = compute_sha256(file_bytes)
 

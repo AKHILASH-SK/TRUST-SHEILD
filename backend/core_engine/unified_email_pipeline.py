@@ -220,12 +220,16 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     max_link_score = 0.0
     critical_link_detected = False
 
-    for link in extracted_links:
+    unique_links = list(dict.fromkeys(extracted_links))[:3]
+
+    for idx, link in enumerate(unique_links):
         try:
+            # If critical threat already confirmed on previous link, run fast-path heuristics on remaining
+            should_skip_sandbox = skip_link_sandbox or (critical_link_detected and idx > 0)
             link_analysis = analyze_url(
                 url=link,
                 email_text_context=body_text,
-                skip_sandbox=skip_link_sandbox
+                skip_sandbox=should_skip_sandbox
             )
             score = float(link_analysis.get("threat_score", 0.0))
             verdict = link_analysis.get("verdict", "UNKNOWN")

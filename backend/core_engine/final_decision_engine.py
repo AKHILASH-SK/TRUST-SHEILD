@@ -12,118 +12,16 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def generate_llm_incident_summary(
+def generate_deterministic_summary(
     url: str,
     threat_score: float,
     verdict: str,
     telemetry: Dict[str, Any]
 ) -> str:
     """
-    Synthesizes a 3-bullet forensic report using Google Gemini (gemini-3.6-flash),
-    Groq Llama 3, OpenAI, or a zero-latency deterministic template fallback.
+    Sub-millisecond high-fidelity deterministic 3-bullet forensic summary.
+    Generates exact evidence items from multi-modal sandbox and heuristic telemetry.
     """
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    
-    # 1. Primary: Google Gemini API (official google-genai SDK) with strict 6s timeout
-    if gemini_api_key:
-        def _call_gemini():
-            from google import genai
-            client = genai.Client(api_key=gemini_api_key)
-            prompt = f"""You are a Senior Cybersecurity Incident Responder. Analyze this phishing threat telemetry:
-URL: {url}
-Verdict: {verdict}
-Threat Score: {threat_score}/100
-Telemetry: {telemetry}
-
-Synthesize a professional, concise 3-bullet incident summary for a mobile user alert:
-• Threat Summary: <1 concise sentence explaining what this link does and why it is dangerous or safe>
-• Key Forensic Evidence: <specific technical indicators detected, separated by commas>
-• Recommended Action: <immediate clear advice for the mobile recipient>
-"""
-            resp = client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=prompt
-            )
-            if resp and resp.text:
-                return resp.text.strip()
-            return None
-
-        try:
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_call_gemini)
-                gemini_text = future.result(timeout=6.0)
-                if gemini_text:
-                    return gemini_text
-        except Exception as e:
-            logger.warning(f"Google Gemini summary generation timed out/failed, checking alternatives: {e}")
-
-    # 2. Secondary: Groq (Llama-3.1-8b-instant) if available
-    if groq_api_key:
-        try:
-            prompt = f"""You are a Senior Cybersecurity Incident Responder. Analyze this phishing threat telemetry:
-URL: {url}
-Verdict: {verdict}
-Threat Score: {threat_score}/100
-Telemetry: {telemetry}
-
-Provide exactly a 3-bullet forensic incident summary in this format:
-• Threat Summary: <1 concise sentence describing the attack type>
-• Key Forensic Evidence: <specific technical indicators detected, separated by commas>
-• Recommended Action: <immediate security action for SOC / user>
-"""
-            headers = {
-                "Authorization": f"Bearer {groq_api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "llama-3.1-8b-instant",
-                "messages": [
-                    {"role": "system", "content": "You are a cyber threat intelligence forensic analyst."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.1,
-                "max_tokens": 200
-            }
-            resp = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=4.0)
-            if resp.status_code == 200:
-                summary = resp.json()['choices'][0]['message']['content'].strip()
-                return summary
-        except Exception as e:
-            logger.warning(f"Groq API summary call failed, using template fallback: {e}")
-
-    # 2. Try OpenAI (gpt-4o-mini) if available
-    if openai_api_key:
-        try:
-            prompt = f"""Synthesize a 3-bullet security forensic report for this link scan:
-URL: {url}
-Threat Score: {threat_score} ({verdict})
-Telemetry Flags: {telemetry}
-
-Output format:
-• Threat Summary: ...
-• Key Forensic Evidence: ...
-• Recommended Action: ..."""
-            headers = {
-                "Authorization": f"Bearer {openai_api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                "max_tokens": 200
-            }
-            resp = requests.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers, timeout=4.0)
-            if resp.status_code == 200:
-                summary = resp.json()['choices'][0]['message']['content'].strip()
-                return summary
-        except Exception as e:
-            logger.warning(f"OpenAI API summary call failed, using template fallback: {e}")
-
-    # 3. High-Fidelity Deterministic Template Fallback (Sub-millisecond, $0 cost)
     evidence_items = []
     
     if telemetry.get("known_db_match"):
@@ -173,6 +71,63 @@ Output format:
         f"• Key Forensic Evidence: {formatted_evidence}\n"
         f"• Recommended Action: {action}"
     )
+
+
+def generate_llm_incident_summary(
+    url: str,
+    threat_score: float,
+    verdict: str,
+    telemetry: Dict[str, Any],
+    fast_mode: bool = True
+) -> str:
+    """
+    Synthesizes a 3-bullet forensic report.
+    When fast_mode=True (default), returns instant deterministic summary (< 1ms).
+    """
+    if fast_mode:
+        return generate_deterministic_summary(url, threat_score, verdict, telemetry)
+
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    
+    # Primary: Google Gemini API with strict 2.5s timeout
+    if gemini_api_key:
+        def _call_gemini():
+            from google import genai
+            client = genai.Client(api_key=gemini_api_key)
+            prompt = f"""You are a Senior Cybersecurity Incident Responder. Analyze this phishing threat telemetry:
+URL: {url}
+Verdict: {verdict}
+Threat Score: {threat_score}/100
+Telemetry: {telemetry}
+
+Synthesize a professional, concise 3-bullet incident summary for a mobile user alert:
+• Threat Summary: <1 concise sentence explaining what this link does and why it is dangerous or safe>
+• Key Forensic Evidence: <specific technical indicators detected, separated by commas>
+• Recommended Action: <immediate clear advice for the mobile recipient>
+"""
+            # Use valid fast model without retries
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            if resp and resp.text:
+                return resp.text.strip()
+            return None
+
+        try:
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_call_gemini)
+                gemini_text = future.result(timeout=2.5)
+                if gemini_text:
+                    return gemini_text
+        except Exception as e:
+            logger.debug(f"Gemini summary skipped: {e}")
+
+    # Fallback to instant deterministic summary
+    return generate_deterministic_summary(url, threat_score, verdict, telemetry)
 
 
 class FinalDecisionEngine:
@@ -306,8 +261,8 @@ class FinalDecisionEngine:
             "override_reason": override_reason
         }
         
-        # 5. Synthesize 3-bullet Forensic Explanation
-        summary = generate_llm_incident_summary(url, threat_score, verdict, telemetry)
+        # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)
+        summary = generate_deterministic_summary(url, threat_score, verdict, telemetry)
         
         return {
             "url": url,
