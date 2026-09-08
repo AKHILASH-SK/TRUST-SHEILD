@@ -118,6 +118,150 @@ window.copyEvidenceHash = copyEvidenceHash;
 window.openRawHeadersModal = openRawHeadersModal;
 window.closeRawHeadersModal = closeRawHeadersModal;
 window.copyRawHeaders = copyRawHeaders;
+window.openAttackStudioModal = openAttackStudioModal;
+window.closeAttackStudioModal = closeAttackStudioModal;
+window.downloadStudioLiveEml = downloadStudioLiveEml;
+window.executeLiveStudioInjection = executeLiveStudioInjection;
+
+var cachedLiveTelemetry = {
+  ip: '157.51.60.12',
+  city: 'Coimbatore',
+  region: 'Tamil Nadu',
+  country: 'India',
+  isp: 'Reliance Jio Infocomm Limited',
+  asn: 'AS55836'
+};
+
+async function queryLiveMachineTelemetry() {
+  try {
+    const res = await fetch('http://ip-api.com/json', { cache: 'no-store' }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json();
+      if (data && data.status === 'success') {
+        cachedLiveTelemetry = {
+          ip: data.query || '157.51.60.12',
+          city: data.city || 'Coimbatore',
+          region: data.regionName || 'Tamil Nadu',
+          country: data.country || 'India',
+          isp: data.isp || 'Reliance Jio Infocomm Limited',
+          asn: data.as || 'AS55836'
+        };
+      }
+    }
+  } catch (e) {
+    console.debug('Live telemetry probe:', e);
+  }
+
+  const ipEl = document.getElementById('studioLiveIp');
+  const cityEl = document.getElementById('studioLiveCity');
+  const ispEl = document.getElementById('studioLiveIsp');
+  const asnEl = document.getElementById('studioLiveAsn');
+
+  if (ipEl) ipEl.innerText = cachedLiveTelemetry.ip;
+  if (cityEl) cityEl.innerText = `${cachedLiveTelemetry.city}, ${cachedLiveTelemetry.region}, ${cachedLiveTelemetry.country}`;
+  if (ispEl) ispEl.innerText = cachedLiveTelemetry.isp;
+  if (asnEl) asnEl.innerText = cachedLiveTelemetry.asn;
+}
+
+function openAttackStudioModal(e) {
+  if (e) e.preventDefault();
+  const modal = document.getElementById('attackStudioModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    queryLiveMachineTelemetry();
+  }
+}
+
+function closeAttackStudioModal(e) {
+  if (e) e.preventDefault();
+  const modal = document.getElementById('attackStudioModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function buildLiveStudioEml() {
+  const from = document.getElementById('studioFrom')?.value || '"Executive Security Alert" <security@paypal-verification.top>';
+  const returnPath = document.getElementById('studioReturnPath')?.value || 'scammer-drop@external-spoof.biz';
+  const to = document.getElementById('studioTo')?.value || 'victim.executive@company.com';
+  const replyTo = document.getElementById('studioReplyTo')?.value || 'fraudster-collect@unauthorized-mailbox.net';
+  const subject = document.getElementById('studioSubject')?.value || 'URGENT: Unauthorized Wire Transfer Detected - Verify Identity';
+  const url = document.getElementById('studioUrl')?.value || 'https://linked1n.vercel.app/';
+
+  const nowUtc = new Date().toUTCString();
+  const ip = cachedLiveTelemetry.ip || '157.51.60.12';
+  const city = cachedLiveTelemetry.city || 'Coimbatore';
+  const country = cachedLiveTelemetry.country || 'India';
+
+  return `Delivered-To: ${to}\r
+Received: by 2002:a17:902:d00d:b0:1c4:89a1:2345 with SMTP id z13csp982124plb;\r
+\t${nowUtc}\r
+Received: from mail-relay.trustshield-demo.org (unknown [${ip}])\r
+\tby mx.google.com with ESMTP id a21si891024plm.12\r
+\tfor <${to}>;\r
+\t${nowUtc}\r
+Return-Path: <${returnPath}>\r
+From: ${from}\r
+To: ${to}\r
+Reply-To: ${replyTo}\r
+Subject: ${subject}\r
+Date: ${nowUtc}\r
+Message-ID: <${Date.now()}.${ip}@trustshield-demo.org>\r
+MIME-Version: 1.0\r
+Content-Type: multipart/alternative; boundary="----=_Part_LiveStudio_9988"\r
+\r
+------=_Part_LiveStudio_9988\r
+Content-Type: text/plain; charset=UTF-8\r
+Content-Transfer-Encoding: 7bit\r
+\r
+Urgent Notice:\r
+We detected an unauthorized transaction attempt originating from IP: ${ip} (${city}, ${country}).\r
+Please cancel this transaction immediately by visiting: ${url}\r
+\r
+------=_Part_LiveStudio_9988\r
+Content-Type: text/html; charset=UTF-8\r
+Content-Transfer-Encoding: 7bit\r
+\r
+<!DOCTYPE html>\r
+<html>\r
+<body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">\r
+  <div style="background: white; border: 1px solid #ddd; padding: 20px; border-radius: 8px; max-width: 600px;">\r
+    <h2 style="color: #d9534f;">Security Alert: Account Verification Required</h2>\r
+    <p>An unauthorized transaction was requested from network IP <strong>${ip}</strong> (${city}, ${country}).</p>\r
+    <p>If you did not authorize this, cancel immediately:</p>\r
+    <p><a href="${url}" style="background-color: #d9534f; color: white; padding: 10px 18px; text-decoration: none; border-radius: 4px; display: inline-block;">Verify & Cancel Request</a></p>\r
+    <p style="color: #888; font-size: 11px; margin-top: 20px;">Automated Security Gateway // TrustShield Forensic Demonstration</p>\r
+  </div>\r
+</body>\r
+</html>\r
+------=_Part_LiveStudio_9988--\r
+`;
+}
+
+function downloadStudioLiveEml(e) {
+  if (e) e.preventDefault();
+  const emlContent = buildLiveStudioEml();
+  const blob = new Blob([emlContent], { type: 'message/rfc822' });
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  const ipClean = (cachedLiveTelemetry.ip || 'LIVE').replace(/\./g, '_');
+  const cityClean = (cachedLiveTelemetry.city || 'ORIGIN').replace(/\s+/g, '_');
+  a.download = `LIVE_ATTACK_${cityClean}_${ipClean}.eml`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(downloadUrl);
+  a.remove();
+}
+
+function executeLiveStudioInjection(e) {
+  if (e) e.preventDefault();
+  closeAttackStudioModal();
+  const emlContent = buildLiveStudioEml();
+  const blob = new Blob([emlContent], { type: 'message/rfc822' });
+  const ipClean = (cachedLiveTelemetry.ip || 'LIVE').replace(/\./g, '_');
+  const cityClean = (cachedLiveTelemetry.city || 'ORIGIN').replace(/\s+/g, '_');
+  const liveFile = new File([blob], `LIVE_ATTACK_${cityClean}_${ipClean}.eml`, { type: 'message/rfc822' });
+  processEmlFile(liveFile);
+}
 
 // Setup Drag & Drop on startup
 document.addEventListener('DOMContentLoaded', () => {
