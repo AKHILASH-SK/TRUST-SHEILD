@@ -266,7 +266,9 @@ class FinalDecisionEngine:
             if brand_impersonation == 1: booster += 45.0
             if suspicious_exfiltration == 1: booster += 45.0
             if external_form_action == 1: booster += 35.0
-            if has_password == 1: booster += 30.0
+            # Password field only adds risk if coupled with deceptive brand, exfiltration, or zero-day domain
+            if has_password == 1 and (brand_impersonation == 1 or external_form_action == 1 or suspicious_exfiltration == 1 or domain_age_risk >= 80 or title_mismatch == 1):
+                booster += 30.0
             if title_mismatch == 1: booster += 25.0
             if url_entropy_risk == 1: booster += 15.0
             if hidden_iframes > 0: booster += 20.0

@@ -101,6 +101,30 @@ class NotificationListener : NotificationListenerService() {
                 .filter { it.isNotBlank() }
                 .joinToString(" | ")
 
+            // Deep extraction of links across notification Bundle (URLSpans, rich text, nested fields)
+            val discoveredLinks = linkedSetOf<String>()
+            discoveredLinks.addAll(linkExtractor.extractLinksFromBundle(extras))
+            
+            // Inspect notification action buttons (e.g. "Visit Link" quick action)
+            sbn.notification.actions?.forEach { action ->
+                action.title?.let { discoveredLinks.addAll(linkExtractor.extractLinks(it)) }
+                action.extras?.let { discoveredLinks.addAll(linkExtractor.extractLinksFromBundle(it)) }
+            }
+            
+            // Also inspect ticker text and plain text string
+            sbn.notification.tickerText?.let { discoveredLinks.addAll(linkExtractor.extractLinks(it)) }
+            discoveredLinks.addAll(linkExtractor.extractLinks(fullMessage))
+
+            val isEmailApp = packageName.contains("gm", ignoreCase = true) || packageName.contains("mail", ignoreCase = true)
+            if (isEmailApp) {
+                Log.i(TAG, "📧 [Email Notification] From: $packageName | Title: '$title' | Message: '$fullMessage'")
+                if (discoveredLinks.isEmpty()) {
+                    Log.w(TAG, "⚠️ [Email Notification] No URLs or URLSpans found in the notification preview snippet.")
+                } else {
+                    Log.i(TAG, "🔗 [Email Notification] Extracted ${discoveredLinks.size} link(s): $discoveredLinks")
+                }
+            }
+
             // Skip notifications we've already processed (exact identical content)
             if (linkTracker.hasProcessedNotification(notificationKey, fullMessage)) {
                 return
@@ -111,7 +135,7 @@ class NotificationListener : NotificationListenerService() {
             Log.d(TAG, "Message: $fullMessage")
             
             // ========== PHASE 1: LINK EXTRACTION & ANALYSIS ==========
-            performLinkSecurityAnalysis(fullMessage, packageName)
+            performLinkSecurityAnalysis(discoveredLinks.toList(), packageName)
 
             // Mark processed to avoid duplicate handling of the same notification
             linkTracker.markNotificationProcessed(notificationKey, fullMessage)
@@ -133,11 +157,8 @@ class NotificationListener : NotificationListenerService() {
      * Tier 2: Firebase phishing database (fast)
      * Tier 3: Sandbox analysis via backend (for unknown links)
      */
-    private fun performLinkSecurityAnalysis(message: String, packageName: String) {
+    private fun performLinkSecurityAnalysis(links: List<String>, packageName: String) {
         try {
-            // Step 1: Extract all links from the message
-            val links = linkExtractor.extractLinks(message)
-            
             if (links.isEmpty()) {
                 Log.d(TAG, "No links detected in notification")
                 return

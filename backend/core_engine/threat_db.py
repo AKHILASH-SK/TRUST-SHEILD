@@ -89,6 +89,12 @@ class ThreatIntelDB:
             conn.commit()
             return cursor.rowcount
 
+    def add_indicator(self, indicator: str, source: str = "MANUAL") -> bool:
+        """Inserts a single malicious indicator into SQLite."""
+        count = self.add_indicators([(indicator, source)])
+        return count > 0
+
+
     def check_indicator(self, url_or_domain: str) -> bool:
         """
         Queries SQLite to verify if the URL, its hostname, or its registered domain

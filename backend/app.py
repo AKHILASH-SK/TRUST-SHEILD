@@ -1,5 +1,16 @@
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+import werkzeug
+if not hasattr(werkzeug, '__version__'):
+    werkzeug.__version__ = "3.0.0"
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
 import psycopg
 import bcrypt
 import os
@@ -118,6 +129,26 @@ def is_short_url(url):
 def health_check():
     """Health check endpoint"""
     return jsonify({"message": "TrustShield Backend is running", "status": "healthy"}), 200
+
+@app.route('/portal')
+@app.route('/portal/')
+def serve_portal_index():
+    """Serves the SOC Analyst Web Portal"""
+    from flask import send_from_directory
+    frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+    return send_from_directory(frontend_dir, "index.html")
+
+@app.route('/portal/<path:filename>')
+@app.route('/app.js')
+@app.route('/index.html')
+def serve_portal_assets(filename='app.js'):
+    """Serves static assets for the SOC Analyst Web Portal"""
+    from flask import send_from_directory
+    frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+    target = 'app.js' if request.path == '/app.js' else ('index.html' if request.path == '/index.html' else filename)
+    return send_from_directory(frontend_dir, target)
+
+
 
 @app.route('/api/brands/official', methods=['GET'])
 def get_official_brands():
@@ -894,6 +925,79 @@ def trigger_live_simulation():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/api/forensics/analyze-eml', methods=['POST'])
+
+def analyze_eml_endpoint():
+    """
+    Ingests an uploaded .eml file (multipart/form-data with 'file' or raw bytes),
+    runs the Unified EML Forensic Orchestrator, and returns court-ready JSON telemetry
+    with Leaflet route maps and overall threat verdicts.
+    """
+    try:
+        eml_bytes = b""
+        if 'file' in request.files:
+            eml_bytes = request.files['file'].read()
+        elif request.data:
+            eml_bytes = request.data
+
+        if not eml_bytes:
+            return jsonify({"error": "No .eml file or data uploaded. Send as multipart/form-data ('file') or raw body."}), 400
+
+        skip_sandbox = request.args.get('skip_sandbox', 'false').lower() in ('true', '1')
+        from core_engine.unified_email_pipeline import analyze_email_pipeline
+        result = analyze_email_pipeline(eml_bytes, skip_link_sandbox=skip_sandbox)
+        return jsonify(result), 200
+
+    except Exception as e:
+
+        print(f"❌ [Forensics API] Error processing .eml: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/export-pdf', methods=['POST'])
+def export_forensic_pdf_endpoint():
+    """
+    Exports a court-admissible forensic PDF dossier.
+    Accepts either raw .eml file (multipart/form-data) OR pre-analyzed JSON dossier.
+    Returns the binary PDF file for direct browser download.
+    """
+    try:
+        from flask import send_file
+        from core_engine.report_generator import generate_pdf_dossier
+        import tempfile
+
+        report_json = None
+        if 'file' in request.files:
+            eml_bytes = request.files['file'].read()
+            from core_engine.unified_email_pipeline import analyze_email_pipeline
+            report_json = analyze_email_pipeline(eml_bytes)
+        elif request.is_json:
+            report_json = request.get_json()
+
+        if not report_json:
+            return jsonify({"error": "No .eml file or JSON dossier provided"}), 400
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
+            tmp_path = tmp_pdf.name
+
+        generate_pdf_dossier(report_json, output_path=tmp_path)
+        evidence_hash = report_json.get("evidence_hash_sha256", "dossier")[:12]
+        download_name = f"TrustShield_Forensic_Dossier_{evidence_hash}.pdf"
+
+        return send_file(
+            tmp_path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=download_name
+        )
+    except Exception as e:
+        print(f"❌ [Forensics PDF Export] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)
+
+
 

@@ -145,6 +145,90 @@ class HomeActivity : AppCompatActivity() {
                 loadLinkHistory(userId)
             }
         }
+
+        scanFab.setOnLongClickListener {
+            showManualScanDialog()
+            true
+        }
+    }
+
+    private fun showManualScanDialog() {
+        val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
+        val userId = sharedPref.getInt("user_id", -1)
+        if (userId == -1) {
+            Toast.makeText(this, "Please log in to scan links", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val input = android.widget.EditText(this).apply {
+            hint = "Paste link (e.g. https://...)"
+            setSingleLine()
+            setPadding(48, 36, 48, 36)
+        }
+
+        // Try reading clipboard for instant auto-paste
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+            if (!clipText.isNullOrBlank() && (clipText.startsWith("http://", true) || clipText.startsWith("https://", true) || clipText.startsWith("www.", true))) {
+                input.setText(clipText)
+                input.setSelection(clipText.length)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Could not access clipboard: ${e.message}")
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🔍 Scan Suspicious Link")
+            .setMessage("Paste any link copied from an email, SMS, or website to trigger real-time AI & sandbox analysis:")
+            .setView(input)
+            .setPositiveButton("Scan Threat") { _, _ ->
+                val rawUrl = input.text.toString().trim()
+                if (rawUrl.isBlank()) {
+                    Toast.makeText(this, "Please enter a valid link", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                val normalized = com.example.trustshield.UrlNormalizer.normalizeCandidate(rawUrl)?.normalizedUrl ?: rawUrl
+                executeManualScan(normalized, userId)
+            }
+            .setNeutralButton("Refresh History") { _, _ ->
+                swipeRefresh.isRefreshing = true
+                loadLinkHistory(userId)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun executeManualScan(url: String, userId: Int) {
+        Toast.makeText(this, "🔬 Scanning link via TrustShield Engine...", Toast.LENGTH_SHORT).show()
+        val analyzer = com.example.trustshield.LinkAnalyzer()
+        val analysis = analyzer.analyzeLink(url)
+        val recorder = com.example.trustshield.LinkScanRecorder(this)
+        
+        recorder.recordLinkScan(
+            url = url,
+            host = android.net.Uri.parse(url).host ?: "",
+            riskLevel = analysis.riskLevel,
+            verificationStatus = null,
+            verifiedBrand = null,
+            reasons = analysis.reasons,
+            sourceApp = "Manual Scan",
+            callback = object : com.example.trustshield.LinkScanRecorder.OnLinkScanCallback {
+                override fun onSuccess(scanId: Int, verdict: String) {
+                    runOnUiThread {
+                        Toast.makeText(this@HomeActivity, "✅ Scan #$scanId Complete: Verdict is $verdict", Toast.LENGTH_LONG).show()
+                        loadLinkHistory(userId)
+                    }
+                }
+
+                override fun onFailure(error: String) {
+                    runOnUiThread {
+                        Toast.makeText(this@HomeActivity, "❌ Scan failed: $error", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
     }
     
     private fun triggerLiveThreatSimulation() {

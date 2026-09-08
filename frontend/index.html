@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <base href="/portal/" />
+  <title>TrustShield V2 // Forensic Intelligence & Threat Origin Portal</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#ecfeff',
+              400: '#22d3ee',
+              500: '#06b6d4',
+              600: '#0891b2',
+              900: '#164e63',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet.js CSS & JS CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Radar scan effect */
+    @keyframes radar-sweep {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .radar-beam {
+      animation: radar-sweep 2.5s linear infinite;
+    }
+
+    /* Glow utilities */
+    .glow-red {
+      box-shadow: 0 0 25px -3px rgba(239, 68, 68, 0.35);
+    }
+    .glow-cyan {
+      box-shadow: 0 0 25px -3px rgba(6, 182, 212, 0.35);
+    }
+    .glow-amber {
+      box-shadow: 0 0 25px -3px rgba(245, 158, 11, 0.35);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 25px -3px rgba(16, 185, 129, 0.35);
+    }
+
+    /* Leaflet Dark Theme Overrides */
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #0f172a !important;
+      color: #e2e8f0 !important;
+      border: 1px solid #334155;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7);
+      border-radius: 8px;
+    }
+    .leaflet-popup-content {
+      margin: 10px 14px;
+      line-height: 1.4;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+    }
+    .leaflet-container {
+      background: #090d16 !important;
+    }
+
+    /* OpenStreetMap Free Dark Theme (100% Free - Zero API Key Required) */
+    .leaflet-tile-pane {
+      filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
+    }
+
+    /* Custom Pulsing Leaflet Marker */
+    .pulse-marker-origin {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ef4444;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 12px #ef4444;
+      animation: pulse-ring 1.8s infinite;
+    }
+    .pulse-marker-hop {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #06b6d4;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 8px #06b6d4;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
+      70% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+  </style>
+</head>
+
+<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+
+  <!-- ===================================================================== -->
+  <!-- TOP NAVBAR & SYSTEM STATUS                                            -->
+  <!-- ===================================================================== -->
+  <header class="border-b border-slate-800/80 bg-[#0d1322]/90 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 p-0.5 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+            <!-- Shield SVG Icon -->
+            <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base font-bold tracking-wider text-white uppercase font-mono">TrustShield V2</h1>
+            <span class="px-1.5 py-0.5 text-[10px] font-semibold tracking-wider font-mono rounded bg-cyan-950/80 text-cyan-400 border border-cyan-700/50">FORENSIC SUITE</span>
+          </div>
+          <p class="text-xs text-slate-400">SIH-106 Autonomous Email Forensics & Threat Attribution Engine</p>
+        </div>
+      </div>
+
+      <!-- Telemetry Pills -->
+      <div class="hidden md:flex items-center space-x-3 text-xs font-mono">
+        <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-700/40 text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>ENGINES ONLINE</span>
+        </div>
+        <div class="px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/50 text-slate-300">
+          <span>PORT: 8000</span>
+        </div>
+        <div class="px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/50 text-cyan-400">
+          <span>SEC 65B CERTIFIED</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- MAIN WORKBENCH CONTAINER                                              -->
+  <!-- ===================================================================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- =================================================================== -->
+    <!-- SECTION A: EVIDENCE INGESTION & DROP ZONE                           -->
+    <!-- =================================================================== -->
+    <section id="uploadSection" class="relative">
+      <div class="bg-gradient-to-b from-slate-900/90 to-slate-950/90 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden p-6 sm:p-8">
+        
+        <div class="text-center max-w-2xl mx-auto mb-6">
+          <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Ingest Digital Evidence File</h2>
+          <p class="text-sm text-slate-400 mt-1">Upload raw <code class="text-cyan-400 font-mono">.eml</code> or <code class="text-cyan-400 font-mono">.msg</code> records to trace server hops, verify cryptographic signatures, and detonate embedded attack payloads.</p>
+        </div>
+
+        <!-- Hidden File Input (Outside dropZone to prevent click bubbling loops) -->
+        <input type="file" id="emlFileInput" accept=".eml,.msg,message/rfc822,text/plain,*/*" class="hidden" onchange="handleFileSelect(event)" />
+
+        <!-- Drag and Drop Target -->
+        <div id="dropZone" onclick="triggerFileInput(event)" class="group relative border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl p-8 text-center cursor-pointer transition-all duration-300 bg-slate-950/40 hover:bg-cyan-950/10">
+          
+          <div class="flex flex-col items-center justify-center space-y-3">
+            <div class="w-14 h-14 rounded-full bg-slate-900 border border-slate-700 group-hover:border-cyan-500/50 group-hover:scale-110 flex items-center justify-center transition-all duration-300 shadow-inner">
+              <!-- Upload Cloud SVG Icon -->
+              <svg class="w-7 h-7 text-slate-400 group-hover:text-cyan-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                <path d="M12 12v9"/>
+                <path d="m16 16-4-4-4 4"/>
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-slate-200">
+                Drag and drop your forensic <span class="text-cyan-400">.eml</span> file here
+              </p>
+              <p class="text-xs text-slate-500 mt-1">Supports RFC-5322 MIME messages, Outlook headers & multi-hop chains</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <button type="button" id="browseBtn" onclick="triggerFileInput(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-md shadow-cyan-600/20 flex items-center space-x-1.5 cursor-pointer">
+                <!-- Folder Icon SVG -->
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
+                  <path d="M2 10h20"/>
+                </svg>
+                <span>Browse Files</span>
+              </button>
+
+              <button type="button" id="sampleEmlBtn" onclick="loadSamplePhishingDemo(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/40 hover:border-cyan-600 transition-all flex items-center space-x-1.5 cursor-pointer">
+                <!-- Sparkles Icon SVG -->
+                <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                </svg>
+                <span>Load Live Phishing Attack Demo</span>
+              </button>
+
+              <button type="button" id="downloadSampleBtn" onclick="downloadSampleEml(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-500 transition-all flex items-center space-x-1.5 cursor-pointer" title="Download a sample .eml attack record to test manual upload">
+                <!-- Download Icon SVG -->
+                <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>Download Sample .eml</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scanning / Loading Radar Animation (Hidden by default) -->
+        <div id="loadingState" class="hidden mt-6 p-6 rounded-xl bg-slate-950/80 border border-cyan-900/60 flex flex-col items-center justify-center space-y-4">
+          <div class="relative w-20 h-20 flex items-center justify-center">
+            <!-- Radar Circle -->
+            <div class="absolute inset-0 rounded-full border border-cyan-500/30"></div>
+            <div class="absolute inset-3 rounded-full border border-cyan-500/50"></div>
+            <div class="absolute inset-6 rounded-full border border-cyan-500/70"></div>
+            <!-- Radar Sweeping Beam -->
+            <div class="absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-500/40 to-transparent radar-beam"></div>
+            <!-- Center Pulsing Core -->
+            <div class="w-3 h-3 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400 animate-ping"></div>
+          </div>
+
+          <div class="text-center">
+            <h3 class="text-sm font-semibold text-white uppercase tracking-wider font-mono">Executing 4-Layer Forensic Audit</h3>
+            <p id="loadingStatusText" class="text-xs text-cyan-400 font-mono mt-1 animate-pulse">
+              Computing SHA-256 Chain of Custody...
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- SECTION B: EXECUTIVE INCIDENT VERDICT (Un-hidden on analysis)       -->
+    <!-- =================================================================== -->
+    <section id="executiveVerdict" class="hidden">
+      <div id="verdictCard" class="rounded-2xl border p-6 sm:p-8 bg-slate-900/90 shadow-2xl relative overflow-hidden transition-all duration-500">
+        
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          
+          <!-- Left: Gauge & Main Verdict -->
+          <div class="flex items-center space-x-6">
+            <!-- Circular Threat Gauge -->
+            <div class="relative w-28 h-28 flex-shrink-0 flex items-center justify-center">
+              <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" stroke="#1e293b" stroke-width="9" fill="transparent"/>
+                <circle id="scoreCircle" cx="50" cy="50" r="42" stroke="#ef4444" stroke-width="9" stroke-linecap="round" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="0" class="transition-all duration-1000"/>
+              </svg>
+              <div class="absolute flex flex-col items-center justify-center text-center">
+                <span id="scoreNumber" class="text-2xl font-black font-mono tracking-tighter text-white">100</span>
+                <span class="text-[10px] uppercase font-mono tracking-wider text-slate-400">/ 100</span>
+              </div>
+            </div>
+
+            <!-- Verdict Titles & Details -->
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap items-center gap-2">
+                <span id="verdictBadge" class="px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-red-950/90 text-red-400 border border-red-700/60">
+                  CRITICAL FRAUD / PHISHING
+                </span>
+                <span id="attributionBadge" class="px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-slate-800 text-cyan-300 border border-cyan-800/40">
+                  ANONYMIZED_INFRASTRUCTURE
+                </span>
+              </div>
+              <h3 id="verdictHeadline" class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                Severe Cyber Incident Detected
+              </h3>
+              <p id="attributionDetails" class="text-xs text-slate-300 max-w-xl">
+                Originating IP is a known Tor exit node or anonymized VPN proxy. Identity spoofing detected via failed SPF & DMARC authentication.
+              </p>
+            </div>
+          </div>
+
+          <!-- Right: Action Buttons -->
+          <div class="flex flex-col sm:flex-row lg:flex-col gap-3 flex-shrink-0">
+            <button type="button" id="exportPdfBtn" onclick="exportDossierPdf(event)" class="px-5 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold tracking-wide uppercase font-mono shadow-lg shadow-red-600/30 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer">
+              <!-- File Down SVG -->
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M12 18v-6"/>
+                <path d="m9 15 3 3 3-3"/>
+              </svg>
+              <span>Export Court-Admissible PDF</span>
+            </button>
+            <button type="button" id="resetBtn" onclick="resetDashboard(event)" class="px-5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-semibold tracking-wide flex items-center justify-center space-x-2 transition-all cursor-pointer">
+              <!-- Reset SVG -->
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+              </svg>
+              <span>Ingest New Evidence</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- SECTION C: 3-COLUMN FORENSIC INVESTIGATION DASHBOARD                 -->
+    <!-- =================================================================== -->
+    <section id="dashboardGrid" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- ================================================================= -->
+      <!-- COLUMN 1: IDENTITY & TECHNICAL ENVELOPE (4 cols)                 -->
+      <!-- ================================================================= -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <!-- Critical BEC Warning Alert (Visible when reply_to_mismatch == true) -->
+        <div id="becAlertBox" class="hidden rounded-xl bg-gradient-to-br from-red-950/80 to-slate-900 border-2 border-red-500/80 p-4 shadow-xl glow-red animate-pulse">
+          <div class="flex items-start space-x-3">
+            <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div>
+              <h4 class="text-xs font-bold font-mono tracking-wider uppercase text-red-400">CRITICAL BEC DOMAIN SPOOFING</h4>
+              <p class="text-xs text-slate-200 mt-1 leading-relaxed">
+                The sender <strong class="text-white font-mono">From:</strong> address does not match the <strong class="text-red-400 font-mono">Reply-To:</strong> header! Replies will be silently redirected to an external fraudster mailbox.
+              </p>
+              <div class="mt-2 text-[11px] font-mono bg-black/50 p-2 rounded border border-red-800/50 break-all text-red-300" id="becDetailText">
+                Reply-To: phisher@scam.biz
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message Envelope Card -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="20" height="16" x="2" y="4" rx="2"/>
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+              </svg>
+              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Technical Envelope</h4>
+            </div>
+            <span class="text-[10px] font-mono text-slate-500">RFC-5322</span>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div>
+              <span class="text-[10px] font-mono uppercase text-slate-500 block">Subject</span>
+              <p id="metaSubject" class="font-semibold text-slate-100 break-words mt-0.5">URGENT: Unauthorized Wire Transfer Detected</p>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-mono uppercase text-slate-500 block">From (Visible Header)</span>
+              <p id="metaFrom" class="text-slate-300 font-mono text-[11px] break-all mt-0.5">security@paypal-verification.top</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <span class="text-[10px] font-mono uppercase text-slate-500 block">Sender Domain</span>
+                <span id="metaFromDomain" class="inline-block mt-0.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-cyan-300 font-mono text-[11px]">paypal-verification.top</span>
+              </div>
+              <div>
+                <span class="text-[10px] font-mono uppercase text-slate-500 block">Return-Path</span>
+                <p id="metaReturnPath" class="text-slate-400 font-mono text-[11px] break-all truncate mt-0.5">spoofed@sender.xyz</p>
+              </div>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-mono uppercase text-slate-500 block">To / Recipient</span>
+              <p id="metaTo" class="text-slate-300 font-mono text-[11px] break-all mt-0.5">victim.executive@company.com</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <span class="text-[10px] font-mono uppercase text-slate-500 block">Date Sent</span>
+                <p id="metaDate" class="text-slate-400 text-[11px] mt-0.5">Mon, 7 Sep 2026</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-mono uppercase text-slate-500 block">Total Hops</span>
+                <p id="metaHops" class="text-slate-200 font-mono font-bold text-[11px] mt-0.5">4 intermediate relays</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Protocol Authentication Card (SPF, DKIM, DMARC, MX) -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="m9 12 2 2 4-4"/>
+              </svg>
+              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Protocol Authentication</h4>
+            </div>
+            <span class="text-[10px] font-mono text-slate-500">DNS & CRYPTO</span>
+          </div>
+
+          <div class="space-y-3">
+            <!-- SPF -->
+            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <div>
+                <span class="text-xs font-bold font-mono text-slate-300 block">SPF Check</span>
+                <span id="spfDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Sender Policy Framework</span>
+              </div>
+              <span id="spfBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
+            </div>
+
+            <!-- DKIM -->
+            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <div>
+                <span class="text-xs font-bold font-mono text-slate-300 block">DKIM Signature</span>
+                <span id="dkimDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Cryptographic Key Audit</span>
+              </div>
+              <span id="dkimBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
+            </div>
+
+            <!-- DMARC -->
+            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <div>
+                <span class="text-xs font-bold font-mono text-slate-300 block">DMARC Policy</span>
+                <span id="dmarcDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Identifier Alignment</span>
+              </div>
+              <span id="dmarcBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
+            </div>
+
+            <!-- MX Infrastructure -->
+            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <div>
+                <span class="text-xs font-bold font-mono text-slate-300 block">MX Mail Exchanger</span>
+                <span id="mxDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Sender Mailbox Infrastructure</span>
+              </div>
+              <span id="mxBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">NO MX (BURNER)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- COLUMN 2: INTERACTIVE LEAFLET HOP MAP (4 cols)                    -->
+      <!-- ================================================================= -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4 flex flex-col h-full">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+                <circle cx="12" cy="10" r="3"/>
+              </svg>
+              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Transmission Hop Path</h4>
+            </div>
+            <span id="originCountryBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800/50">Germany</span>
+          </div>
+
+          <!-- Origin IP Sub-banner -->
+          <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] font-mono uppercase text-slate-500 block">Earliest Public Origin IP</span>
+              <span id="originIpText" class="text-sm font-mono font-bold text-white">185.220.101.5</span>
+            </div>
+            <div id="originProxyFlag" class="text-right">
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-700/50">TOR EXIT NODE</span>
+              <span id="originIspText" class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">M247 / Stiftung</span>
+            </div>
+          </div>
+
+          <!-- The Leaflet Map Canvas -->
+          <div id="map" class="h-[360px] w-full rounded-xl border border-slate-800 overflow-hidden shadow-inner relative z-10"></div>
+
+          <!-- Chronological Hop Path Accordion / List -->
+          <div class="space-y-2 flex-1 overflow-y-auto max-h-56 pr-1" id="hopsContainer">
+            <!-- Dynamically populated via renderHops() -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- COLUMN 3: AI NARRATIVE & LINK DETONATION (4 cols)                -->
+      <!-- ================================================================= -->
+      <div class="lg:col-span-4 space-y-6">
+
+        <!-- Executive Incident Narrative (Terminal Style) -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Forensic Incident Narrative</h4>
+            </div>
+            <span class="text-[10px] font-mono text-cyan-500 animate-pulse">● LIVE</span>
+          </div>
+
+          <!-- Terminal Window -->
+          <div class="bg-black/80 rounded-lg p-4 font-mono text-xs leading-relaxed text-slate-300 border border-slate-800/80 shadow-inner overflow-y-auto max-h-56 space-y-2" id="narrativeTerminal">
+            <p class="text-cyan-400">root@trustshield:~# inspect-forensic-dossier --evidence</p>
+            <div id="narrativeContent" class="space-y-2 text-slate-300 whitespace-pre-line text-[11px]">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Embedded Link Payload Detonation -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2">
+              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Hyperlink Payload Analysis</h4>
+            </div>
+            <span id="linkCountBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">2 Links</span>
+          </div>
+
+          <!-- Link List -->
+          <div id="linksContainer" class="space-y-3 overflow-y-auto max-h-64 pr-1">
+            <!-- Dynamically populated via renderLinks() -->
+          </div>
+        </div>
+
+        <!-- Cryptographic Chain of Custody Footer Card -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-4 shadow-xl">
+          <div class="flex items-center justify-between text-[11px] font-mono">
+            <span class="text-slate-400 font-semibold flex items-center space-x-1.5">
+              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="9" x2="20" y2="9"/>
+                <line x1="4" y1="15" x2="20" y2="15"/>
+                <line x1="10" y1="3" x2="8" y2="21"/>
+                <line x1="16" y1="3" x2="14" y2="21"/>
+              </svg>
+              <span>SHA-256 Chain of Custody</span>
+            </span>
+            <button type="button" id="copyHashBtn" onclick="copyEvidenceHash(event)" class="text-cyan-400 hover:text-cyan-300 flex items-center space-x-1 transition-colors cursor-pointer">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+              </svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <div class="mt-2 p-2 bg-slate-950 rounded border border-slate-800 font-mono text-[10px] text-slate-400 break-all select-all" id="sha256Digest">
+            Calculating...
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ===================================================================== -->
+  <!-- FOOTER                                                                -->
+  <!-- ===================================================================== -->
+  <footer class="mt-auto border-t border-slate-800/80 bg-[#090d16] py-4 text-center text-xs font-mono text-slate-500">
+    <p>TrustShield V2 Forensic Engineering // Certified Court-Admissible Electronic Record (Sec 65B Indian Evidence Act)</p>
+  </footer>
+
+  <!-- ===================================================================== -->
+  <!-- EMBEDDED FORENSIC JAVASCRIPT CONTROLLER (100% SELF-CONTAINED)          -->
+  <!-- ===================================================================== -->
+  <script>
+    // Global API Base resolution
+    var API_BASE = (window.location.port === '8000' && window.location.protocol.startsWith('http'))
+      ? ''
+      : 'http://localhost:8000';
+
+    var currentReport = null;
+    var mapInstance = null;
+    var mapMarkersGroup = null;
+    var mapPolyline = null;
+    var statusInterval = null;
+
+    // Synthetic Sample Phishing .eml for 1-Click Evaluation
+    var SAMPLE_PHISHING_EML = `Delivered-To: victim.executive@company.com\r
+Received: from mx.internal.company.com (mx.internal.company.com [10.0.2.15])\r
+\tby mailbox.company.com (Postfix) with ESMTP id 4X9F8D01;\r
+\tMon, 7 Sep 2026 14:35:12 +0000 (UTC)\r
+Received: from edge-relay.company.com (edge-relay.company.com [192.168.1.1])\r
+\tby mx.internal.company.com with ESMTP id 3B8C1A22;\r
+\tMon, 7 Sep 2026 14:35:10 +0000 (UTC)\r
+Received: from mail.spoofed-sender.xyz (unknown [185.220.101.5])\r
+\tby edge-relay.company.com (Postfix) with ESMTPS id 1A2B3C4D;\r
+\tMon, 7 Sep 2026 14:35:05 +0000 (UTC)\r
+Received: from attacker-laptop (unknown [10.0.0.5])\r
+\tby mail.spoofed-sender.xyz (Postfix) with ESMTPA id 99887766;\r
+\tMon, 7 Sep 2026 14:34:58 +0000 (UTC)\r
+Return-Path: <spoofed-account@spoofed-sender.xyz>\r
+From: "Executive Security Alert" <security@paypal-verification.top>\r
+To: victim.executive@company.com\r
+Subject: URGENT: Unauthorized Wire Transfer Detected - Verify Identity\r
+Date: Mon, 7 Sep 2026 14:34:55 +0000\r
+Message-ID: <20260907143455.ABC123XYZ@spoofed-sender.xyz>\r
+Reply-To: phisher-drop@external-scam.biz\r
+MIME-Version: 1.0\r
+Content-Type: multipart/alternative; boundary="----=_Part_12345_67890"\r
+\r
+------=_Part_12345_67890\r
+Content-Type: text/plain; charset=UTF-8\r
+Content-Transfer-Encoding: 7bit\r
+\r
+Urgent Notice:\r
+We detected an unauthorized login attempt from an unrecognized device.\r
+Please cancel this transaction immediately by visiting https://example.com/phish\r
+Alternatively review your case here: https://portal-resolve.top/ticket?id=99281\r
+\r
+------=_Part_12345_67890\r
+Content-Type: text/html; charset=UTF-8\r
+Content-Transfer-Encoding: 7bit\r
+\r
+<!DOCTYPE html>\r
+<html>\r
+<body>\r
+  <h2>Security Notification</h2>\r
+  <p>An unauthorized wire transfer of $14,850.00 was requested from foreign IP <strong>185.220.101.5</strong>.</p>\r
+  <p>If you did not authorize this, cancel immediately:</p>\r
+  <p><a href="https://example.com/phish" style="color:red; font-weight:bold;">Click Here to Cancel Transfer</a></p>\r
+  <p>Support Reference: <a href="https://portal-resolve.top/ticket?id=99281">Resolution Portal</a></p>\r
+</body>\r
+</html>\r
+------=_Part_12345_67890--\r
+`;
+
+    // Global Trigger Functions for HTML Event Handlers
+    window.triggerFileInput = function(e) {
+      if (e) {
+        if (e.target && e.target.id === 'emlFileInput') return;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const fileInput = document.getElementById('emlFileInput');
+      if (fileInput) {
+        fileInput.value = '';
+        fileInput.click();
+      }
+    };
+
+    window.handleFileSelect = function(e) {
+      if (e && e.target && e.target.files && e.target.files.length > 0) {
+        processEmlFile(e.target.files[0]);
+      }
+    };
+
+    window.loadSamplePhishingDemo = function(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const blob = new Blob([SAMPLE_PHISHING_EML], { type: 'message/rfc822' });
+      const sampleFile = new File([blob], 'URGENT_WIRE_TRANSFER_ATTACK.eml', { type: 'message/rfc822' });
+      processEmlFile(sampleFile);
+    };
+
+    window.downloadSampleEml = function(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      const blob = new Blob([SAMPLE_PHISHING_EML], { type: 'message/rfc822' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = 'URGENT_WIRE_TRANSFER_ATTACK.eml';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      a.remove();
+    };
+
+    window.exportDossierPdf = exportDossierPdf;
+    window.resetDashboard = resetDashboard;
+    window.copyEvidenceHash = copyEvidenceHash;
+
+    function copyEvidenceHash(e) {
+      if (e) e.stopPropagation();
+      const hashText = document.getElementById('sha256Digest').innerText;
+      if (hashText && hashText !== 'Calculating...') {
+        navigator.clipboard.writeText(hashText);
+        const copyBtn = document.getElementById('copyHashBtn');
+        copyBtn.innerHTML = `<span class="text-emerald-400 font-semibold">✓ Copied</span>`;
+        setTimeout(() => {
+          copyBtn.innerHTML = `
+            <svg class="w-3 h-3 inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <span>Copy</span>
+          `;
+        }, 2000);
+      }
+    }
+
+    // Drag & Drop Setup
+    function setupDragAndDrop() {
+      const dropZone = document.getElementById('dropZone');
+      if (!dropZone) return;
+
+      window.addEventListener('dragover', (e) => e.preventDefault());
+      window.addEventListener('drop', (e) => e.preventDefault());
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('border-cyan-400', 'bg-cyan-950/30');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('border-cyan-400', 'bg-cyan-950/30');
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length > 0) {
+          processEmlFile(dt.files[0]);
+        }
+      });
+    }
+
+    // Ingests file and calls backend
+    async function processEmlFile(file) {
+      if (!file) return;
+      showLoading(true);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch(`${API_BASE}/api/forensics/analyze-eml`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${response.status}: Analysis request failed`);
+        }
+
+        const data = await response.json();
+        currentReport = data;
+
+        renderDashboard(data);
+        showLoading(false);
+
+      } catch (error) {
+        showLoading(false);
+        alert(`Forensic Ingestion Error:\n${error.message}\n\nPlease ensure backend is running at ${API_BASE || 'http://localhost:8000'}`);
+        console.error('Forensic Analysis Error:', error);
+      }
+    }
+
+    function showLoading(isLoading) {
+      const loadingState = document.getElementById('loadingState');
+      const statusText = document.getElementById('loadingStatusText');
+      if (!loadingState) return;
+
+      if (isLoading) {
+        loadingState.classList.remove('hidden');
+        
+        const steps = [
+          'Computing SHA-256 Chain of Custody...',
+          'Tracing Received: Hops & Filtering RFC-1918 Private Subnets...',
+          'Querying SPF, DKIM, DMARC & MX Infrastructure...',
+          'Detonating Hyperlinks in Headless Chrome Sandbox...',
+          'Classifying Threat Actor Attribution Matrix...'
+        ];
+        let stepIdx = 0;
+        if (statusText) statusText.innerText = steps[0];
+        
+        if (statusInterval) clearInterval(statusInterval);
+        statusInterval = setInterval(() => {
+          stepIdx = (stepIdx + 1) % steps.length;
+          if (statusText) statusText.innerText = steps[stepIdx];
+        }, 1500);
+
+      } else {
+        loadingState.classList.add('hidden');
+        if (statusInterval) clearInterval(statusInterval);
+      }
+    }
+
+    function renderDashboard(data) {
+      const execSection = document.getElementById('executiveVerdict');
+      const dashGrid = document.getElementById('dashboardGrid');
+      if (execSection) execSection.classList.remove('hidden');
+      if (dashGrid) dashGrid.classList.remove('hidden');
+
+      renderVerdict(data);
+      renderMetadataAndAuth(data);
+      renderLeafletMap(data.origin_intelligence);
+      renderNarrativeAndLinks(data);
+
+      if (execSection) execSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderVerdict(data) {
+      const score = parseFloat(data.overall_threat_score || 0.0);
+      const scoreNumber = document.getElementById('scoreNumber');
+      const scoreCircle = document.getElementById('scoreCircle');
+      const verdictCard = document.getElementById('verdictCard');
+      const verdictBadge = document.getElementById('verdictBadge');
+      const attributionBadge = document.getElementById('attributionBadge');
+      const verdictHeadline = document.getElementById('verdictHeadline');
+      const attributionDetails = document.getElementById('attributionDetails');
+
+      if (scoreNumber) scoreNumber.innerText = Math.round(score);
+
+      const circumference = 263.89;
+      const offset = circumference - (score / 100) * circumference;
+      if (scoreCircle) scoreCircle.style.strokeDashoffset = offset;
+
+      const attr = data.threat_attribution || {};
+      if (attributionBadge) attributionBadge.innerText = attr.type || 'UNKNOWN';
+      if (attributionDetails) attributionDetails.innerText = attr.details || 'Evaluation completed across all telemetry engines.';
+
+      if (score >= 80.0) {
+        if (scoreCircle) scoreCircle.setAttribute('stroke', '#ef4444');
+        if (verdictCard) verdictCard.className = 'rounded-2xl border border-red-800/80 p-6 sm:p-8 bg-gradient-to-br from-red-950/40 via-slate-900 to-slate-950 shadow-2xl glow-red transition-all';
+        if (verdictBadge) {
+          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-red-950/90 text-red-400 border border-red-700/80';
+          verdictBadge.innerText = data.verdict || 'CRITICAL FRAUD / PHISHING';
+        }
+        if (verdictHeadline) verdictHeadline.innerText = 'Critical Cyber Attack & Identity Spoofing';
+      } else if (score >= 50.0) {
+        if (scoreCircle) scoreCircle.setAttribute('stroke', '#f59e0b');
+        if (verdictCard) verdictCard.className = 'rounded-2xl border border-amber-800/80 p-6 sm:p-8 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 shadow-2xl glow-amber transition-all';
+        if (verdictBadge) {
+          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-amber-950/90 text-amber-400 border border-amber-700/80';
+          verdictBadge.innerText = data.verdict || 'SUSPICIOUS / UNVERIFIED ORIGIN';
+        }
+        if (verdictHeadline) verdictHeadline.innerText = 'Suspicious Infrastructure & Unverified Identity';
+      } else {
+        if (scoreCircle) scoreCircle.setAttribute('stroke', '#10b981');
+        if (verdictCard) verdictCard.className = 'rounded-2xl border border-emerald-800/80 p-6 sm:p-8 bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 shadow-2xl glow-emerald transition-all';
+        if (verdictBadge) {
+          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-emerald-950/90 text-emerald-400 border border-emerald-700/80';
+          verdictBadge.innerText = data.verdict || 'LEGITIMATE / AUTHENTICATED';
+        }
+        if (verdictHeadline) verdictHeadline.innerText = 'Technical Envelope Verified Clean';
+      }
+    }
+
+    function renderMetadataAndAuth(data) {
+      const meta = data.metadata || {};
+      const auth = data.authentication || {};
+      const mx = data.sender_domain_intelligence || {};
+
+      const becBox = document.getElementById('becAlertBox');
+      if (becBox) {
+        if (meta.reply_to_mismatch) {
+          becBox.classList.remove('hidden');
+          const becDetail = document.getElementById('becDetailText');
+          if (becDetail) becDetail.innerText = `From: ${meta.from || 'N/A'}\nReply-To: ${meta.reply_to || 'N/A'}`;
+        } else {
+          becBox.classList.add('hidden');
+        }
+      }
+
+      const setElText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+      };
+
+      setElText('metaSubject', meta.subject || 'No Subject');
+      setElText('metaFrom', meta.from || 'Unknown Sender');
+      setElText('metaFromDomain', meta.from_domain || 'Unknown Domain');
+      setElText('metaReturnPath', meta.return_path || 'None');
+      setElText('metaTo', meta.to || 'Undisclosed Recipients');
+      setElText('metaDate', meta.date || 'Unknown Date');
+      setElText('metaHops', `${data.origin_intelligence?.total_hops || 0} intermediate hops`);
+
+      const setBadge = (elId, status, passText = 'PASS', failText = 'FAIL') => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        if (status) {
+          el.className = 'px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-700/60';
+          el.innerText = passText;
+        } else {
+          el.className = 'px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60';
+          el.innerText = failText;
+        }
+      };
+
+      setBadge('spfBadge', auth.spf_pass);
+      setElText('spfDetails', auth.spf_details || 'Sender Policy Framework evaluation');
+
+      setBadge('dkimBadge', auth.dkim_pass);
+      setElText('dkimDetails', auth.dkim_details || 'Cryptographic public key verification');
+
+      setBadge('dmarcBadge', auth.dmarc_pass);
+      setElText('dmarcDetails', auth.dmarc_details || 'Domain alignment and policy enforcement');
+
+      setBadge('mxBadge', mx.has_mx_records, 'VALID MX', 'NO MX (BURNER)');
+      setElText('mxDetails', mx.has_mx_records 
+        ? `Primary MX: ${mx.primary_mx || 'Configured'}`
+        : `Domain '${mx.from_domain}' lacks mail exchanger infrastructure`);
+    }
+
+    function renderLeafletMap(originIntel) {
+      if (!originIntel) return;
+      if (typeof L === 'undefined') {
+        console.warn('Leaflet not loaded');
+        return;
+      }
+
+      const routeMap = originIntel.route_map || [];
+      const originIp = originIntel.originating_ip || 'Unknown';
+      const originCountry = originIntel.origin_country || 'Unknown';
+      const originIsp = originIntel.origin_isp || 'Unknown';
+      const isAnonymized = originIntel.is_anonymized_node;
+
+      const setElText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+      };
+
+      setElText('originIpText', originIp);
+      setElText('originCountryBadge', originCountry);
+      setElText('originIspText', originIsp);
+
+      const originProxyFlag = document.getElementById('originProxyFlag');
+      if (originProxyFlag) {
+        if (isAnonymized) {
+          originProxyFlag.innerHTML = `
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-700/50">TOR EXIT NODE</span>
+            <span class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">${originIsp}</span>
+          `;
+        } else {
+          originProxyFlag.innerHTML = `
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-950 text-emerald-400 border border-emerald-700/50">STANDARD TRANSIT</span>
+            <span class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">${originIsp}</span>
+          `;
+        }
+      }
+
+      const mapEl = document.getElementById('map');
+      if (!mapEl) return;
+
+      if (!mapInstance) {
+        mapInstance = L.map('map', {
+          zoomControl: true,
+          attributionControl: false
+        }).setView([20, 0], 2);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" class="text-cyan-500">OpenStreetMap</a>'
+        }).addTo(mapInstance);
+
+        mapMarkersGroup = L.featureGroup().addTo(mapInstance);
+      } else {
+        mapMarkersGroup.clearLayers();
+        if (mapPolyline) mapInstance.removeLayer(mapPolyline);
+      }
+
+      setTimeout(() => {
+        if (mapInstance) mapInstance.invalidateSize();
+      }, 250);
+
+      const coordinates = [];
+      const hopsContainer = document.getElementById('hopsContainer');
+      if (hopsContainer) hopsContainer.innerHTML = '';
+
+      routeMap.forEach((hop) => {
+        const hasCoords = (hop.lat && hop.lon && (hop.lat !== 0 || hop.lon !== 0));
+        const isOrigin = (hop.ip === originIp || hop.is_suspicious_proxy);
+        const hopBadgeClass = isOrigin
+          ? 'border-red-600/70 bg-red-950/40 text-red-300'
+          : (hop.ip.startsWith('10.') || hop.ip.startsWith('192.168.') 
+              ? 'border-slate-700 bg-slate-950/40 text-slate-400' 
+              : 'border-cyan-800/60 bg-cyan-950/40 text-cyan-300');
+
+        if (hopsContainer) {
+          const hopItem = document.createElement('div');
+          hopItem.className = `p-2 rounded-lg border ${hopBadgeClass} text-xs font-mono flex items-center justify-between`;
+          hopItem.innerHTML = `
+            <div class="flex items-center space-x-2 truncate">
+              <span class="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-bold">#${hop.hop_number}</span>
+              <span class="font-bold">${hop.ip}</span>
+              <span class="text-slate-500 text-[10px] truncate">(${hop.city || 'LAN'}, ${hop.country || 'RFC-1918'})</span>
+            </div>
+            <div class="flex-shrink-0 text-right">
+              ${hop.is_suspicious_proxy 
+                ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-bold">TOR / VPN</span>' 
+                : '<span class="text-[9px] text-slate-500">RELAY</span>'}
+            </div>
+          `;
+          hopsContainer.appendChild(hopItem);
+        }
+
+        if (hasCoords && mapMarkersGroup) {
+          coordinates.push([hop.lat, hop.lon]);
+
+          const iconClass = isOrigin ? 'pulse-marker-origin' : 'pulse-marker-hop';
+          const customIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div class="${iconClass}"></div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          });
+
+          const popupHtml = `
+            <div class="font-mono">
+              <div class="text-xs font-bold ${isOrigin ? 'text-red-400' : 'text-cyan-400'} border-b border-slate-700 pb-1 mb-1">
+                HOP #${hop.hop_number}: ${hop.ip}
+              </div>
+              <div><strong>Location:</strong> ${hop.city}, ${hop.country}</div>
+              <div><strong>ISP:</strong> ${hop.isp} (${hop.asn})</div>
+              <div class="mt-1">
+                ${hop.is_suspicious_proxy 
+                  ? '<span class="px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-700 text-[9px] font-bold uppercase">🚨 Tor / VPN Proxy Detected</span>' 
+                  : '<span class="text-emerald-400 text-[9px]">✓ Verified Transit Node</span>'}
+              </div>
+            </div>
+          `;
+
+          const marker = L.marker([hop.lat, hop.lon], { icon: customIcon }).bindPopup(popupHtml);
+          mapMarkersGroup.addLayer(marker);
+        }
+      });
+
+      if (coordinates.length > 1 && mapInstance) {
+        mapPolyline = L.polyline(coordinates, {
+          color: '#ef4444',
+          weight: 2.5,
+          opacity: 0.8,
+          dashArray: '6, 8',
+          lineCap: 'round'
+        }).addTo(mapInstance);
+
+        mapInstance.fitBounds(mapPolyline.getBounds(), { padding: [40, 40] });
+      } else if (coordinates.length === 1 && mapInstance) {
+        mapInstance.setView(coordinates[0], 5);
+      }
+    }
+
+    function renderNarrativeAndLinks(data) {
+      const narrativeContainer = document.getElementById('narrativeContent');
+      if (narrativeContainer) narrativeContainer.innerText = data.incident_summary || 'No forensic narrative available.';
+
+      const links = data.link_investigation || [];
+      const linksContainer = document.getElementById('linksContainer');
+      const countBadge = document.getElementById('linkCountBadge');
+      if (countBadge) countBadge.innerText = `${links.length} Link(s)`;
+      
+      if (linksContainer) {
+        linksContainer.innerHTML = '';
+
+        if (links.length === 0) {
+          linksContainer.innerHTML = `
+            <div class="p-4 rounded-lg bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500 font-mono">
+              No embedded links detected in email payload
+            </div>
+          `;
+        } else {
+          links.forEach(link => {
+            const score = parseFloat(link.threat_score || 0.0);
+            const isCritical = score >= 80.0;
+            const isSuspicious = score >= 50.0 && score < 80.0;
+            
+            const badgeClass = isCritical
+              ? 'bg-red-950 text-red-400 border-red-700'
+              : (isSuspicious ? 'bg-amber-950 text-amber-400 border-amber-700' : 'bg-emerald-950 text-emerald-400 border-emerald-700');
+
+            const card = document.createElement('div');
+            card.className = `p-3 rounded-lg bg-slate-950/80 border ${isCritical ? 'border-red-900/60' : 'border-slate-800'} space-y-2 text-xs font-mono`;
+            card.innerHTML = `
+              <div class="flex items-center justify-between">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${badgeClass}">
+                  ${Math.round(score)}/100 • ${link.verdict || 'UNKNOWN'}
+                </span>
+                <span class="text-[10px] text-slate-500">${link.telemetry?.hard_override_triggered ? '🚨 Threat DB Match' : 'Sandbox Audit'}</span>
+              </div>
+              <div class="text-[11px] text-slate-300 break-all bg-black/40 p-1.5 rounded border border-slate-800/80">
+                ${link.url}
+              </div>
+              <div class="text-[10px] text-slate-400 truncate">
+                ${link.summary ? link.summary.split('\n')[0] : 'Payload evaluated in headless sandbox.'}
+              </div>
+            `;
+            linksContainer.appendChild(card);
+          });
+        }
+      }
+
+      const shaEl = document.getElementById('sha256Digest');
+      if (shaEl) shaEl.innerText = data.evidence_hash_sha256 || 'N/A';
+    }
+
+    async function exportDossierPdf(e) {
+      if (e) e.stopPropagation();
+      if (!currentReport) {
+        alert('No active forensic report to export.');
+        return;
+      }
+
+      const btn = document.getElementById('exportPdfBtn');
+      const originalHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="w-4 h-4 animate-spin inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>Compiling PDF Dossier...</span>`;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/forensics/export-pdf`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentReport)
+        });
+
+        if (!response.ok) {
+          throw new Error(`PDF Export failed with HTTP status ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const hashPrefix = (currentReport.evidence_hash_sha256 || 'dossier').substring(0, 10);
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.download = `TrustShield_Forensic_Dossier_${hashPrefix}.pdf`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        window.URL.revokeObjectURL(blobUrl);
+        downloadLink.remove();
+
+      } catch (error) {
+        alert(`Failed to export forensic dossier PDF:\n${error.message}`);
+        console.error('PDF Export Error:', error);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+      }
+    }
+
+    function resetDashboard(e) {
+      if (e) e.stopPropagation();
+      currentReport = null;
+      const fileInput = document.getElementById('emlFileInput');
+      if (fileInput) fileInput.value = '';
+      const execSection = document.getElementById('executiveVerdict');
+      const dashGrid = document.getElementById('dashboardGrid');
+      if (execSection) execSection.classList.add('hidden');
+      if (dashGrid) dashGrid.classList.add('hidden');
+      const uploadSec = document.getElementById('uploadSection');
+      if (uploadSec) uploadSec.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // Initial setup on load
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupDragAndDrop);
+    } else {
+      setupDragAndDrop();
+    }
+  </script>
+</body>
+</html>

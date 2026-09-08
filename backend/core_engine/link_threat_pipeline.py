@@ -22,19 +22,40 @@ from .final_decision_engine import FinalDecisionEngine
 
 logger = logging.getLogger(__name__)
 
-# High-reputation global domains that bypass sandbox interrogation
+# High-reputation global domains and official shorteners that bypass sandbox interrogation
 GLOBAL_CLEAN_DOMAINS = {
-    "google.com", "gmail.com", "accounts.google.com", "drive.google.com",
+    # Google Ecosystem
+    "google.com", "forms.gle", "docs.google.com", "drive.google.com", "forms.google.com",
+    "goo.gl", "g.co", "gmail.com", "youtube.com", "youtu.be", "googleusercontent.com", "gstatic.com",
+    "google.co.in", "google.co.uk", "google.ca", "google.de", "google.fr", "google.com.au",
+    
+    # Microsoft & Office / Teams Ecosystem
     "microsoft.com", "office.com", "live.com", "outlook.com", "office365.com", "windows.net",
-    "apple.com", "icloud.com",
-    "amazon.com", "amazon.in", "aws.amazon.com",
-    "paypal.com",
-    "netflix.com",
-    "github.com", "gitlab.com",
-    "linkedin.com", "twitter.com", "x.com",
-    "facebook.com", "instagram.com", "whatsapp.com",
+    "sharepoint.com", "microsoftonline.com", "teams.microsoft.com", "forms.office.com", "forms.microsoft.com",
+    "aka.ms", "msft.it", "bing.com", "msn.com",
+    
+    # Apple Ecosystem
+    "apple.com", "icloud.com", "apple.co",
+    
+    # Amazon & AWS
+    "amazon.com", "amazon.in", "amazon.co.uk", "amzn.to", "aws.amazon.com",
+    
+    # Financial & Payments
+    "paypal.com", "paypal.me",
+    
+    # Social & Professional Networks
+    "linkedin.com", "lnkd.in",
+    "twitter.com", "x.com", "t.co",
+    "facebook.com", "fb.com", "fb.me", "instagram.com", "instagr.am", "whatsapp.com", "wa.me",
+    "telegram.org", "t.me",
+    
+    # Form, Survey & Collaboration Platforms
+    "typeform.com", "jotform.com", "surveymonkey.com", "airtable.com", "zoho.com", "forms.zoho.com",
+    
+    # Developer & Infrastructure
+    "github.com", "git.io", "gitlab.com",
     "openai.com", "chatgpt.com",
-    "wikipedia.org", "cloudflare.com", "youtube.com"
+    "wikipedia.org", "cloudflare.com", "zoom.us", "canva.com", "notion.so", "spotify.com", "spoti.fi"
 }
 
 
@@ -214,3 +235,19 @@ def get_link_pipeline() -> LinkThreatPipeline:
     if _pipeline_instance is None:
         _pipeline_instance = LinkThreatPipeline()
     return _pipeline_instance
+
+
+def analyze_url(
+    url: str,
+    email_text_context: str = "",
+    nlp_score: float = 0.0,
+    skip_sandbox: bool = False
+) -> Dict[str, Any]:
+    """Module-level convenience wrapper to analyze a single URL."""
+    return get_link_pipeline().analyze_url(
+        url=url,
+        email_text_context=email_text_context,
+        nlp_score=nlp_score,
+        skip_sandbox=skip_sandbox
+    )
+

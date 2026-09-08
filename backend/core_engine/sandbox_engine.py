@@ -34,23 +34,27 @@ SUSPICIOUS_EXFILTRATION_HOSTS = [
 TARGETED_BRANDS = {
     "microsoft": {
         "keywords": ["microsoft", "office 365", "outlook", "onedrive", "sharepoint", "azure"],
-        "allowed_domains": ["microsoft.com", "live.com", "office.com", "office365.com", "microsoftonline.com", "windows.net"]
+        "allowed_domains": ["microsoft.com", "live.com", "office.com", "office365.com", "microsoftonline.com", "windows.net", "sharepoint.com", "aka.ms", "msft.it"]
     },
     "google": {
-        "keywords": ["google", "gmail", "google drive", "google workspace"],
-        "allowed_domains": ["google.com", "gmail.com", "google.co.in", "accounts.google.com"]
+        "keywords": ["google", "gmail", "google drive", "google workspace", "google forms", "google docs"],
+        "allowed_domains": [
+            "google.com", "gmail.com", "google.co.in", "accounts.google.com",
+            "forms.gle", "docs.google.com", "drive.google.com", "forms.google.com",
+            "goo.gl", "g.co", "youtube.com", "youtu.be"
+        ]
     },
     "paypal": {
         "keywords": ["paypal", "paypal security"],
-        "allowed_domains": ["paypal.com", "paypal-communication.com"]
+        "allowed_domains": ["paypal.com", "paypal.me", "paypal-communication.com"]
     },
     "amazon": {
         "keywords": ["amazon", "amazon prime", "aws"],
-        "allowed_domains": ["amazon.com", "amazon.in", "amazon.co.uk", "aws.amazon.com"]
+        "allowed_domains": ["amazon.com", "amazon.in", "amazon.co.uk", "amzn.to", "aws.amazon.com"]
     },
     "apple": {
         "keywords": ["apple id", "icloud", "apple support"],
-        "allowed_domains": ["apple.com", "icloud.com"]
+        "allowed_domains": ["apple.com", "icloud.com", "apple.co"]
     },
     "netflix": {
         "keywords": ["netflix", "netflix member"],
@@ -269,17 +273,31 @@ class VirtualSandboxAnalyzer:
             final_url = driver.current_url
             current_ext = tldextract.extract(final_url)
             current_reg_domain = current_ext.registered_domain.lower()
+            initial_ext = tldextract.extract(initial_url)
+            initial_reg_domain = initial_ext.registered_domain.lower()
             
-            # 4. Feature Extraction: Redirects
+            # Check if live page or source belongs to verified global tech ecosystems
+            from .link_threat_pipeline import GLOBAL_CLEAN_DOMAINS
+            is_trusted_auth_domain = current_reg_domain in GLOBAL_CLEAN_DOMAINS
+            
+            # 4. Feature Extraction: Redirects (Ignore standard OAuth/SSO login redirects)
             if initial_url.lower().strip('/') != final_url.lower().strip('/'):
-                print(f"   ⚠️ Redirect detected: {initial_url} -> {final_url}")
-                features['sandbox_num_redirects'] = 1
+                if initial_reg_domain in GLOBAL_CLEAN_DOMAINS and current_reg_domain in GLOBAL_CLEAN_DOMAINS:
+                    print(f"   ℹ️ Legitimate SSO / OAuth redirect: {initial_reg_domain} -> {current_reg_domain}")
+                    features['sandbox_num_redirects'] = 0
+                else:
+                    print(f"   ⚠️ Redirect detected: {initial_url} -> {final_url}")
+                    features['sandbox_num_redirects'] = 1
                 
             # 5. Feature Extraction: Password Harvesting Detection
             password_inputs = driver.find_elements(By.XPATH, "//input[@type='password']")
             if len(password_inputs) > 0:
-                print("   🚨 Credential Harvesting Form Detected!")
-                features['sandbox_has_password_field'] = 1
+                if is_trusted_auth_domain:
+                    print(f"   ℹ️ Verified Official SSO Login Form on {current_reg_domain} (Legitimate Authentication)")
+                    features['sandbox_has_password_field'] = 0
+                else:
+                    print("   🚨 Credential Harvesting Form Detected!")
+                    features['sandbox_has_password_field'] = 1
                 
             # 6. Feature 2: Form Exfiltration Destination Inspection
             forms = driver.find_elements(By.TAG_NAME, "form")
@@ -302,8 +320,12 @@ class VirtualSandboxAnalyzer:
                     
                     # Check 1: Action submits to a different registered domain
                     if action_reg_domain and current_reg_domain and action_reg_domain != current_reg_domain:
-                        print(f"   🚨 External Form Action Detected! Current: {current_reg_domain} -> Submits to: {action_reg_domain}")
-                        features['external_form_action'] = 1
+                        # Allow internal ecosystem cross-submissions (e.g. forms.gle -> google.com)
+                        if is_trusted_auth_domain and action_reg_domain in GLOBAL_CLEAN_DOMAINS:
+                            print(f"   ℹ️ Internal ecosystem form routing: {current_reg_domain} -> {action_reg_domain}")
+                        else:
+                            print(f"   🚨 External Form Action Detected! Current: {current_reg_domain} -> Submits to: {action_reg_domain}")
+                            features['external_form_action'] = 1
                     
                     # Check 2: Action targets known exfiltration channels or raw IPs
                     is_suspicious_endpoint = any(host in resolved_action.lower() for host in SUSPICIOUS_EXFILTRATION_HOSTS)
@@ -348,15 +370,26 @@ class VirtualSandboxAnalyzer:
             features['detected_target_brand'] = brand_info.get("impersonated_brand") or ""
                     
             # 9. Calculate internal Sandbox Threat Score
-            threat_score = 0
-            if features['sandbox_has_password_field']: threat_score += 45
-            if features['external_form_action']: threat_score += 40
-            if features['suspicious_exfiltration']: threat_score += 55
-            if features['brand_impersonation']: threat_score += 50
-            if features['newly_registered_domain']: threat_score += 35
-            if features['sandbox_title_mismatch']: threat_score += 30
-            if features['sandbox_num_redirects']: threat_score += 20
-            if features['sandbox_hidden_iframes'] > 0: threat_score += 25
+            if is_trusted_auth_domain and not features['suspicious_exfiltration']:
+                threat_score = 0
+            else:
+                threat_score = 0
+                is_credential_risk = (
+                    features['brand_impersonation'] or
+                    features['external_form_action'] or
+                    features['suspicious_exfiltration'] or
+                    features['newly_registered_domain'] or
+                    features['sandbox_title_mismatch']
+                )
+                if features['sandbox_has_password_field'] and is_credential_risk:
+                    threat_score += 45
+                if features['external_form_action']: threat_score += 40
+                if features['suspicious_exfiltration']: threat_score += 55
+                if features['brand_impersonation']: threat_score += 50
+                if features['newly_registered_domain']: threat_score += 35
+                if features['sandbox_title_mismatch']: threat_score += 30
+                if features['sandbox_num_redirects']: threat_score += 20
+                if features['sandbox_hidden_iframes'] > 0: threat_score += 25
             
             features['sandbox_threat_score'] = min(100, threat_score)
             
