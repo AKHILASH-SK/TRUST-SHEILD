@@ -28,16 +28,16 @@ class EnsembleMetaClassifier:
         """
         if joblib and RandomForestClassifier and os.path.exists(MODEL_PATH):
             try:
-                print("🧠 [META-CLASSIFIER] Loading pre-trained Ensemble Model...")
+                print("[*] [META-CLASSIFIER] Loading pre-trained Ensemble Model...")
                 self.model = joblib.load(MODEL_PATH)
             except Exception as e:
-                print(f"⚠️ [META-CLASSIFIER] Could not load model ({e}). Training fresh...")
+                print(f"[!] [META-CLASSIFIER] Could not load model ({e}). Training fresh...")
                 self._train_mock_model()
         elif joblib and RandomForestClassifier:
-            print("⚠️ [META-CLASSIFIER] Model file not found. Training a fresh Sandbox-Ensemble model on the fly...")
+            print("[!] [META-CLASSIFIER] Model file not found. Training a fresh Sandbox-Ensemble model on the fly...")
             self._train_mock_model()
         else:
-            print("ℹ️ [META-CLASSIFIER] Running in lightweight rule-weighted ensemble mode (Scikit-Learn optional).")
+            print("[*] [META-CLASSIFIER] Running in lightweight rule-weighted ensemble mode (Scikit-Learn optional).")
             self.model = None
 
     def _train_mock_model(self):
@@ -75,7 +75,7 @@ class EnsembleMetaClassifier:
         # Save it for future runs
         os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
         joblib.dump(self.model, MODEL_PATH)
-        print("✅ [META-CLASSIFIER] Ensemble Model trained and saved successfully.")
+        print("[+] [META-CLASSIFIER] Ensemble Model trained and saved successfully.")
 
     def predict_verdict(
         self, 
@@ -97,7 +97,7 @@ class EnsembleMetaClassifier:
                 probabilities = self.model.predict_proba(feature_vector)[0]
                 threat_score = probabilities[1] * 100 if len(probabilities) > 1 else (100.0 if self.model.predict(feature_vector)[0] == 1 else 0.0)
             except Exception as e:
-                print(f"⚠️ [META-CLASSIFIER] Predict error ({e}), using weighted scoring.")
+                print(f"[!] [META-CLASSIFIER] Predict error ({e}), using weighted scoring.")
                 threat_score = min(100.0, max(0.0, 0.3 * nlp_score + (35.0 if typosquat_risk else 0.0) + 0.35 * sandbox_threat + (20.0 if has_password_field else 0.0)))
         else:
             threat_score = min(100.0, max(0.0, 0.3 * nlp_score + (35.0 if typosquat_risk else 0.0) + 0.35 * sandbox_threat + (20.0 if has_password_field else 0.0)))

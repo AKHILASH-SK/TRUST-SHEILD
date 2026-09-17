@@ -30,14 +30,14 @@ class EmailNLPClassifier:
         self.classifier = None
         if pipeline is not None:
             try:
-                print(f"🧠 Initializing NLP Classifier with model: {model_name}...")
+                print(f"[*] Initializing NLP Classifier with model: {model_name}...")
                 self.classifier = pipeline("text-classification", model=model_name, truncation=True, max_length=512)
-                print("✅ Pre-trained NLP Classifier loaded successfully.")
+                print("[+] Pre-trained NLP Classifier loaded successfully.")
             except Exception as e:
-                print(f"⚠️ Warning: Could not load HuggingFace model ({e}). Using heuristic fallback.")
+                print(f"[!] Warning: Could not load HuggingFace model ({e}). Using heuristic fallback.")
                 self.classifier = None
         else:
-            print("ℹ️ Transformers/Torch not installed (Lightweight Cloud Mode). Using heuristic NLP analyzer.")
+            print("[*] Transformers/Torch not installed (Lightweight Cloud Mode). Using heuristic NLP analyzer.")
 
     def analyze_text(self, subject: str, body: str) -> Dict[str, Any]:
         combined_text = f"Subject: {subject}\n\nBody: {body}".lower()
@@ -101,10 +101,10 @@ class LinkFeatureExtractor:
         vt_api_key = os.getenv('VIRUSTOTAL_API_KEY')
         if vt_api_key and GoodDomainChecker:
             self.domain_checker = GoodDomainChecker(vt_api_key)
-            print("🛡️ Global Popularity Whitelist Active (ChatGPT, Claude, Google will bypass ML).")
+            print("[+] Global Popularity Whitelist Active (ChatGPT, Claude, Google will bypass ML).")
         else:
             self.domain_checker = None
-            print("⚠️ VT API Key missing. Global Whitelist disabled.")
+            print("[!] VT API Key missing. Global Whitelist disabled.")
 
     def extract_features(self, url: str) -> Dict[str, Any]:
         # Pre-Filter: Is this a massively popular domain like ChatGPT.com?

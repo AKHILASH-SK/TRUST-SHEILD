@@ -44,20 +44,20 @@ DB_CONFIG = {
     'password': os.getenv('DB_PASSWORD', 'postgres')
 }
 
-print(f"🔌 Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}")
+print(f"[*] Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}")
 
 # Initialize phishing feed importer (Tier 0)
 phishing_importer = PhishingFeedImporter()
 
 # Initialize V2 Multi-Modal AI Engine (Replacing V1 Sandbox)
 try:
-    print(f"🚀 Initializing V2 MultiModal AI Engine...")
+    print("[*] Initializing V2 MultiModal AI Engine...")
     ai_engine = MultiModalFusionEngine()
-    print(f"✅ V2 AI Engine initialized successfully!")
+    print("[+] V2 AI Engine initialized successfully!")
     sys.stdout.flush()
 except Exception as e:
     ai_engine = None
-    print(f"❌ Failed to initialize V2 AI Engine: {e}")
+    print(f"[-] Failed to initialize V2 AI Engine: {e}")
     sys.stdout.flush()
 
 sys.stdout.flush()
@@ -67,12 +67,12 @@ scheduler = BackgroundScheduler()
 
 def schedule_phishing_import():
     """Scheduled job to import phishing feeds"""
-    print("📥 [Scheduler] Running phishing feed import...")
+    print("[*] [Scheduler] Running phishing feed import...")
     try:
         inserted, updated = phishing_importer.import_all_feeds()
-        print(f"✅ [Scheduler] Phishing import complete: {inserted} new, {updated} updated")
+        print(f"[+] [Scheduler] Phishing import complete: {inserted} new, {updated} updated")
     except Exception as e:
-        print(f"❌ [Scheduler] Error importing phishing feeds: {e}")
+        print(f"[-] [Scheduler] Error importing phishing feeds: {e}")
 
 # Schedule to run every 6 hours
 scheduler.add_job(
@@ -84,13 +84,14 @@ scheduler.add_job(
     replace_existing=True
 )
 
-# Start scheduler
-if not scheduler.running:
-    scheduler.start()
-    print("✅ Phishing feed scheduler started (runs every 6 hours)")
+# Start scheduler only when explicitly enabled (prevents multi-thread fork deadlocks in Gunicorn)
+if os.environ.get("ENABLE_SCHEDULER", "false").lower() == "true":
+    if not scheduler.running:
+        scheduler.start()
+        print("[+] Phishing feed scheduler started (runs every 6 hours)")
 
 # Shut down the scheduler when exiting the app
-atexit.register(lambda: scheduler.shutdown())
+atexit.register(lambda: scheduler.shutdown(wait=False) if scheduler.running else None)
 
 # Helper functions
 def get_db_connection():
@@ -125,9 +126,11 @@ def is_short_url(url):
     except:
         return False
 
-@app.route('/', methods=['GET'])
+@app.route('/', methods=['GET', 'HEAD'])
+@app.route('/health', methods=['GET', 'HEAD'])
+@app.route('/healthz', methods=['GET', 'HEAD'])
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint for Render and local environments"""
     return jsonify({"message": "TrustShield Backend is running", "status": "healthy"}), 200
 
 @app.route('/portal')
