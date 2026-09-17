@@ -45,8 +45,8 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
     """
     clean_ip = str(ip_address).strip()
     
-    # Check cache first
-    if clean_ip in _GEO_CACHE:
+    # Check cache first (only return if successfully resolved)
+    if clean_ip in _GEO_CACHE and _GEO_CACHE[clean_ip].get("status") == "success":
         return dict(_GEO_CACHE[clean_ip])
 
     # Handle private / internal networks locally without wasting external API requests
@@ -80,6 +80,7 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
         "status": "fail"
     }
 
+    # Provider 1: ip-api.com
     try:
         url = IP_API_URL.format(ip=clean_ip)
         response = requests.get(url, timeout=timeout)
@@ -87,11 +88,8 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
         if response.status_code == 200:
             data = response.json()
             if data.get("status") == "success":
-                # Detect suspicious proxy: proxy=True (VPN/Tor/Public Proxy) OR hosting=True (Datacenter)
                 is_proxy = bool(data.get("proxy", False))
                 is_hosting = bool(data.get("hosting", False))
-                is_suspicious = is_proxy
-
                 result = {
                     "ip": clean_ip,
                     "city": data.get("city") or "Unknown",
@@ -100,7 +98,7 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
                     "lon": float(data.get("lon", 0.0)),
                     "isp": data.get("isp") or "Unknown",
                     "asn": data.get("as") or "Unknown",
-                    "is_suspicious_proxy": is_suspicious,
+                    "is_suspicious_proxy": is_proxy,
                     "is_proxy": is_proxy,
                     "is_hosting": is_hosting,
                     "is_private": False,
@@ -109,20 +107,40 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
                 _GEO_CACHE[clean_ip] = result
                 return dict(result)
             else:
-                logger.warning(f"IP-API returned fail status for {clean_ip}: {data.get('message')}")
-                fallback_result["message"] = data.get("message", "Lookup failed")
-        else:
-            logger.warning(f"IP-API HTTP error {response.status_code} for {clean_ip}")
-            fallback_result["message"] = f"HTTP {response.status_code}"
-
-    except requests.exceptions.Timeout:
-        logger.warning(f"IP-API lookup timed out after {timeout}s for {clean_ip}")
-        fallback_result["message"] = "Lookup timeout"
+                logger.warning(f"IP-API returned fail for {clean_ip}: {data.get('message')}")
     except Exception as e:
-        logger.warning(f"Unexpected error resolving IP {clean_ip}: {str(e)}")
-        fallback_result["message"] = str(e)
+        logger.warning(f"Primary IP-API lookup failed for {clean_ip}: {e}")
 
-    _GEO_CACHE[clean_ip] = fallback_result
+    # Provider 2 Fallback: ipwho.is
+    try:
+        url2 = f"https://ipwho.is/{clean_ip}"
+        res2 = requests.get(url2, timeout=timeout)
+        if res2.status_code == 200:
+            d2 = res2.json()
+            if d2.get("success"):
+                conn = d2.get("connection", {})
+                lat = float(d2.get("latitude", 0.0))
+                lon = float(d2.get("longitude", 0.0))
+                result = {
+                    "ip": clean_ip,
+                    "city": d2.get("city") or "Unknown",
+                    "country": d2.get("country") or "Unknown",
+                    "lat": lat,
+                    "lon": lon,
+                    "isp": conn.get("isp") or "Unknown",
+                    "asn": str(conn.get("asn") or "Unknown"),
+                    "is_suspicious_proxy": False,
+                    "is_proxy": False,
+                    "is_hosting": False,
+                    "is_private": False,
+                    "status": "success"
+                }
+                _GEO_CACHE[clean_ip] = result
+                return dict(result)
+    except Exception as e:
+        logger.warning(f"Secondary IPWHO.IS lookup failed for {clean_ip}: {e}")
+
+    # Do NOT cache failures in _GEO_CACHE so subsequent scans can retry!
     return dict(fallback_result)
 
 

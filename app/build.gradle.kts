@@ -31,7 +31,7 @@ android {
             envProperties.load(FileInputStream(envFile))
         }
         val backendEnv = envProperties.getProperty("BACKEND_ENV", "local")
-        val backendIp = envProperties.getProperty("BACKEND_IP", "192.168.137.1")
+        val backendIp = envProperties.getProperty("BACKEND_IP", "172.168.68.215")
         val backendPort = envProperties.getProperty("BACKEND_PORT", "8000")
         val hostedUrl = envProperties.getProperty("HOSTED_BACKEND_URL", "https://trust-sheild.onrender.com/")
 

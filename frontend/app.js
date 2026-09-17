@@ -719,7 +719,7 @@ function renderMetadataAndAuth(data) {
 
   setText('metaSubject', meta.subject || '(No Subject)');
   setText('metaFrom', meta.from || 'Unknown Sender');
-  setText('metaFromDomain', meta.sender_domain || 'Unknown');
+  setText('metaFromDomain', meta.from_domain || meta.sender_domain || 'Unknown');
   setText('metaReturnPath', meta.return_path || 'None');
   setText('metaTo', meta.to || 'Unknown');
   setText('metaDate', meta.date || 'Unknown');
