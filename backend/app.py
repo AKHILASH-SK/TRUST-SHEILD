@@ -49,18 +49,7 @@ print(f"[*] Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_
 # Initialize phishing feed importer (Tier 0)
 phishing_importer = PhishingFeedImporter()
 
-# Initialize V2 Multi-Modal AI Engine (Replacing V1 Sandbox)
-try:
-    print("[*] Initializing V2 MultiModal AI Engine...")
-    ai_engine = MultiModalFusionEngine()
-    print("[+] V2 AI Engine initialized successfully!")
-    sys.stdout.flush()
-except Exception as e:
-    ai_engine = None
-    print(f"[-] Failed to initialize V2 AI Engine: {e}")
-    sys.stdout.flush()
 
-sys.stdout.flush()
 
 # Initialize background scheduler for auto-fetching phishing data
 scheduler = BackgroundScheduler()
