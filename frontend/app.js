@@ -3,10 +3,10 @@
  * Autonomous Telemetry & Interactive Progress Controller
  */
 
-// Global API Base resolution
-var API_BASE = (window.location.port === '8000' && window.location.protocol.startsWith('http'))
-  ? ''
-  : 'http://localhost:8000';
+// Global API Base resolution: use current origin when hosted, fallback to Render cloud if opened as local file
+var API_BASE = window.location.protocol.startsWith('http')
+  ? window.location.origin
+  : 'https://trust-sheild.onrender.com';
 
 var currentReport = null;
 var rawEmlContent = '';
