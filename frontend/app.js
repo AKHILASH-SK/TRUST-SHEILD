@@ -3,9 +3,11 @@
  * Autonomous Telemetry & Interactive Progress Controller
  */
 
-// Global API Base resolution: use current origin when hosted, fallback to Render cloud if opened as local file
+// Global API Base resolution:
+// When served over HTTP/HTTPS (localhost or Render cloud), use relative path ('')
+// When opened directly as a local file (file://), fallback to Render cloud
 var API_BASE = window.location.protocol.startsWith('http')
-  ? window.location.origin
+  ? ''
   : 'https://trust-sheild.onrender.com';
 
 var currentReport = null;
@@ -625,7 +627,7 @@ async function processEmlFile(file) {
   } catch (error) {
     if (progressTimerInterval) clearInterval(progressTimerInterval);
     appendTerminalLog('ERROR', `Pipeline Execution Fault: ${error.message}`, 'alert');
-    alert(`Forensic Ingestion Error:\n${error.message}\n\nPlease ensure backend is running at ${API_BASE || 'http://localhost:8000'}`);
+    alert(`Forensic Ingestion Error:\n${error.message}\n\nPlease ensure the backend server is reachable at ${window.location.origin || 'https://trust-sheild.onrender.com'}`);
     console.error('Forensic Analysis Error:', error);
   }
 }
