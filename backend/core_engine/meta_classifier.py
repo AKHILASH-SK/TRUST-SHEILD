@@ -1,7 +1,13 @@
 import os
-import joblib
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+
+try:
+    import joblib
+    import numpy as np
+    from sklearn.ensemble import RandomForestClassifier
+except (ImportError, ModuleNotFoundError):
+    joblib = None
+    np = None
+    RandomForestClassifier = None
 
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trained_models", "meta_model.pkl")
 
@@ -9,7 +15,7 @@ class EnsembleMetaClassifier:
     """
     Stage 6: The Final Ensemble ML Model.
     Takes the extracted features from NLP, Link Analysis, and Sandbox,
-    and runs them through a trained Random Forest to get the Final Verdict.
+    and runs them through a trained Random Forest or smart weighted heuristic to get the Final Verdict.
     """
     def __init__(self):
         self.model = None
@@ -17,21 +23,31 @@ class EnsembleMetaClassifier:
 
     def _load_or_mock_model(self):
         """
-        Loads the trained RandomForest model. If it doesn't exist (e.g. fresh clone),
-        it trains a lightweight mock model instantly so the MVP works out-of-the-box.
+        Loads the trained RandomForest model. If it doesn't exist or sklearn is not installed,
+        falls back cleanly so the platform works 100% reliably out-of-the-box.
         """
-        if os.path.exists(MODEL_PATH):
-            print("🧠 [META-CLASSIFIER] Loading pre-trained Ensemble Model...")
-            self.model = joblib.load(MODEL_PATH)
-        else:
+        if joblib and RandomForestClassifier and os.path.exists(MODEL_PATH):
+            try:
+                print("🧠 [META-CLASSIFIER] Loading pre-trained Ensemble Model...")
+                self.model = joblib.load(MODEL_PATH)
+            except Exception as e:
+                print(f"⚠️ [META-CLASSIFIER] Could not load model ({e}). Training fresh...")
+                self._train_mock_model()
+        elif joblib and RandomForestClassifier:
             print("⚠️ [META-CLASSIFIER] Model file not found. Training a fresh Sandbox-Ensemble model on the fly...")
             self._train_mock_model()
+        else:
+            print("ℹ️ [META-CLASSIFIER] Running in lightweight rule-weighted ensemble mode (Scikit-Learn optional).")
+            self.model = None
 
     def _train_mock_model(self):
         """
         Trains the Scikit-Learn RandomForestClassifier using a dataset of features:
         [nlp_score, typosquat_risk, sandbox_threat_score, mimics_login]
         """
+        if not (joblib and RandomForestClassifier and np):
+            return
+
         # Feature Columns:
         # 1. NLP Text Risk (0-100)
         # 2. Typosquat Risk (0 or 1)
@@ -75,13 +91,16 @@ class EnsembleMetaClassifier:
         """
         Runs the final prediction with multi-modal ensemble model & defense-in-depth guardrails.
         """
-        # Prepare the feature vector exactly as the model expects it
-        feature_vector = np.array([[nlp_score, typosquat_risk, sandbox_threat, has_password_field]])
-        
-        # Probabilities: [prob_legitimate, prob_phishing]
-        probabilities = self.model.predict_proba(feature_vector)[0]
-        # Threat score is the percentage probability of phishing (0 to 100)
-        threat_score = probabilities[1] * 100 if len(probabilities) > 1 else (100.0 if self.model.predict(feature_vector)[0] == 1 else 0.0)
+        if self.model is not None and np is not None:
+            try:
+                feature_vector = np.array([[nlp_score, typosquat_risk, sandbox_threat, has_password_field]])
+                probabilities = self.model.predict_proba(feature_vector)[0]
+                threat_score = probabilities[1] * 100 if len(probabilities) > 1 else (100.0 if self.model.predict(feature_vector)[0] == 1 else 0.0)
+            except Exception as e:
+                print(f"⚠️ [META-CLASSIFIER] Predict error ({e}), using weighted scoring.")
+                threat_score = min(100.0, max(0.0, 0.3 * nlp_score + (35.0 if typosquat_risk else 0.0) + 0.35 * sandbox_threat + (20.0 if has_password_field else 0.0)))
+        else:
+            threat_score = min(100.0, max(0.0, 0.3 * nlp_score + (35.0 if typosquat_risk else 0.0) + 0.35 * sandbox_threat + (20.0 if has_password_field else 0.0)))
         
         # Hard security guardrails (Defense in Depth):
         if suspicious_exfiltration == 1 and has_password_field == 1:
