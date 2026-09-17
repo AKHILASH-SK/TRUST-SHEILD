@@ -16,7 +16,7 @@
     "nodemon": "^2.0.20"
   },
   "engines": {
-    "node": "14.x"
+    "node": ">=18.x"
   },
   "keywords": ["phishing", "security", "trustshield", "android"],
   "author": "TrustShield Team",

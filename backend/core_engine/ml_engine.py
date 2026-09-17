@@ -12,46 +12,79 @@ try:
 except ImportError:
     GoodDomainChecker = None
 
-from transformers import pipeline
+try:
+    from transformers import pipeline
+except (ImportError, ModuleNotFoundError):
+    pipeline = None
 
 from core_engine.sandbox_engine import VirtualSandboxAnalyzer
 from core_engine.meta_classifier import EnsembleMetaClassifier
 
 class EmailNLPClassifier:
     """
-    State-of-the-art Transformer-based NLP Classifier for Email Text.
-    Uses Transfer Learning (pre-trained HuggingFace models) instead of training from scratch.
+    NLP Classifier for Email Text.
+    Uses Transfer Learning (pre-trained HuggingFace models) when torch/transformers are available,
+    or a fast, memory-safe heuristic analyzer in lightweight cloud environments (e.g. Render Free Tier).
     """
     def __init__(self, model_name: str = "ealvaradob/bert-finetuned-phishing"):
-        print(f"🧠 Initializing NLP Classifier with pre-trained HuggingFace model: {model_name}...")
-        try:
-            self.classifier = pipeline("text-classification", model=model_name, truncation=True, max_length=512)
-            print("✅ Pre-trained NLP Classifier loaded successfully.")
-        except Exception as e:
-            print(f"⚠️ Warning: Could not load specific phishing model. Using fallback.")
-            self.classifier = pipeline("text-classification", model="distilbert-base-uncased-finetuned-sst-2-english", truncation=True, max_length=512)
+        self.classifier = None
+        if pipeline is not None:
+            try:
+                print(f"🧠 Initializing NLP Classifier with model: {model_name}...")
+                self.classifier = pipeline("text-classification", model=model_name, truncation=True, max_length=512)
+                print("✅ Pre-trained NLP Classifier loaded successfully.")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not load HuggingFace model ({e}). Using heuristic fallback.")
+                self.classifier = None
+        else:
+            print("ℹ️ Transformers/Torch not installed (Lightweight Cloud Mode). Using heuristic NLP analyzer.")
 
     def analyze_text(self, subject: str, body: str) -> Dict[str, Any]:
-        combined_text = f"Subject: {subject}\n\nBody: {body}"
-        results = self.classifier(combined_text)
-        print(f"DEBUG RAW MODEL OUTPUT: {results}")
-        
-        prediction = results[0]
-        label = prediction['label']
-        score = prediction['score']
-        
-        if 'PHISH' in label.upper() or label.upper() == 'NEGATIVE':
-            risk_score = score * 100
-            threat_type = "Phishing / BEC Intent Detected"
+        combined_text = f"Subject: {subject}\n\nBody: {body}".lower()
+        if self.classifier is not None:
+            try:
+                results = self.classifier(combined_text[:512])
+                prediction = results[0]
+                label = prediction['label']
+                score = prediction['score']
+                
+                if 'PHISH' in label.upper() or label.upper() == 'NEGATIVE':
+                    risk_score = score * 100
+                    threat_type = "Phishing / BEC Intent Detected"
+                else:
+                    risk_score = (1.0 - score) * 100
+                    threat_type = "Legitimate / Safe"
+                    
+                return {
+                    "risk_score": round(risk_score, 2),
+                    "threat_type": threat_type,
+                    "confidence": round(score * 100, 2),
+                    "raw_label": label
+                }
+            except Exception as e:
+                print(f"⚠️ NLP inference error ({e}), using heuristic fallback.")
+
+        # Lightweight Heuristic Fallback (Runs in < 1ms, 0MB RAM)
+        phish_keywords = [
+            "urgent", "verify your account", "action required", "suspended",
+            "password reset", "unauthorized access", "bank", "invoice", "wire transfer",
+            "security alert", "confirm your identity", "login immediately", "threat detected"
+        ]
+        matches = [kw for kw in phish_keywords if kw in combined_text]
+        if matches:
+            risk_score = min(40.0 + len(matches) * 20.0, 95.0)
+            threat_type = f"Suspicious Social Engineering Intent ({', '.join(matches[:2])})"
+            confidence = 85.0
         else:
-            risk_score = (1.0 - score) * 100
-            threat_type = "Legitimate / Safe"
-            
+            risk_score = 10.0
+            threat_type = "Legitimate / Standard Message"
+            confidence = 80.0
+
         return {
             "risk_score": round(risk_score, 2),
             "threat_type": threat_type,
-            "confidence": round(score * 100, 2),
-            "raw_label": label
+            "confidence": round(confidence, 2),
+            "raw_label": "HEURISTIC"
         }
 
 class LinkFeatureExtractor:
