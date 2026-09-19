@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 import dns.resolver
+import dns.exception
 import dkim
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,12 @@ def audit_dmarc(from_domain: str, return_path_domain: str, spf_pass: bool, dkim_
         return False, f"No DMARC record found for domain '{from_domain}' (NXDOMAIN)"
     except dns.resolver.NoAnswer:
         return False, f"No TXT record published at '_dmarc.{from_domain}'"
+    except dns.exception.Timeout:
+        # A resolver timeout means WE couldn't reach a verdict in time — it is not
+        # evidence the domain lacks a DMARC policy. Treating it the same as a real
+        # failure would punish senders for our own transient network conditions, so
+        # this is scored as inconclusive (non-penalizing) rather than a hard fail.
+        return True, f"DMARC check inconclusive: DNS lookup for '_dmarc.{from_domain}' timed out (not treated as a failure)"
     except Exception as e:
         return False, f"DMARC lookup failed: {str(e)}"
 

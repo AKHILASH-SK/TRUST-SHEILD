@@ -1,101 +1,129 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <base href="/portal/" />
-  <title>TrustShield V2 // Forensic Intelligence & SOC Threat Portal</title>
-  
-  <!-- Fonts: Inter & JetBrains Mono -->
+  <title>TrustShield — Forensic Intelligence Platform</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            brand: {
-              50: '#ecfeff',
-              400: '#22d3ee',
-              500: '#06b6d4',
-              600: '#0891b2',
-              900: '#164e63',
-            }
+            sans: ['Inter', 'ui-sans-serif', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
           }
         }
       }
     }
   </script>
 
-  <!-- Leaflet.js CSS & JS CDN -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
-    ::-webkit-scrollbar-track { background: #0b0f19; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* Glow Effects */
-    .glow-red { box-shadow: 0 0 25px -4px rgba(239, 68, 68, 0.4); }
-    .glow-cyan { box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.35); }
-    .glow-amber { box-shadow: 0 0 25px -4px rgba(245, 158, 11, 0.35); }
-    .glow-emerald { box-shadow: 0 0 25px -4px rgba(16, 185, 129, 0.35); }
+    #sideNav::-webkit-scrollbar-track { background: transparent; }
+    #sideNav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
 
-    /* Pulsing animations */
-    @keyframes pulse-cyan {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(1.05); }
+    /* ============ Sidebar navigation rail ============ */
+    #sidebar { background: #14122a; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: calc(100% - 16px);
+      margin: 1px 8px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: #8d89ad;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: transparent;
+      border-left: 3px solid transparent;
+      transition: color .15s ease, background-color .15s ease, border-color .15s ease;
     }
-    .animate-pulse-cyan { animation: pulse-cyan 2s infinite ease-in-out; }
+    .nav-item svg { flex-shrink: 0; }
+    .nav-item:hover { background: rgba(255,255,255,.06); color: #eeecfb; }
+    .nav-item.active { background: rgba(255,255,255,.08); color: var(--accent); border-left-color: var(--accent); }
+    .nav-item.tab-disabled { opacity: .35; pointer-events: none; }
+    .nav-label { white-space: nowrap; overflow: hidden; }
 
-    /* OpenStreetMap Free Dark Inversion (100% Free - Zero API Key Required) */
-    .leaflet-tile-pane {
-      filter: invert(100%) hue-rotate(180deg) brightness(88%) contrast(92%);
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .verdict-stamp {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border: 2px solid currentColor;
+      padding: 0.3rem 0.85rem;
+      transform: rotate(-1.2deg);
+      letter-spacing: 0.04em;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 11px;
+      line-height: 1.1;
+      border-radius: 4px;
     }
+    @keyframes stampIn {
+      0% { opacity: 0; transform: scale(1.3) rotate(-7deg); }
+      55% { opacity: 1; transform: scale(0.95) rotate(0.5deg); }
+      100% { opacity: 1; transform: scale(1) rotate(-1.2deg); }
+    }
+    .anim-stamp-in { animation: stampIn 0.5s cubic-bezier(.2,.8,.2,1) both; }
+
+    .ledger-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .ledger-row:last-child { border-bottom: none; }
+    .ledger-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      flex-shrink: 0;
+    }
+    .ledger-value {
+      font-size: 12.5px;
+      color: #1e293b;
+      text-align: right;
+      word-break: break-all;
+    }
+
     .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-      background: #0d1322 !important;
+      background: #0f172a !important;
       color: #e2e8f0 !important;
       border: 1px solid #1e293b;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.8);
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
       border-radius: 6px;
     }
-    .leaflet-popup-content {
-      margin: 8px 12px;
-      line-height: 1.4;
-      font-size: 11px;
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .leaflet-container { background: #080b11 !important; }
+    .leaflet-popup-content { margin: 8px 12px; line-height: 1.4; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .leaflet-container { background: #0b1120 !important; }
+    .leaflet-tile-pane { filter: brightness(0.62) contrast(1.05) saturate(0.85) hue-rotate(180deg) invert(1); }
 
-    /* Custom Pulsing Markers */
     .pulse-marker-origin {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: #ef4444;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 14px #ef4444;
-      animation: pulse-ring 1.8s infinite;
+      width: 16px; height: 16px; border-radius: 50%; background: #ef4444;
+      border: 2px solid #ffffff; box-shadow: 0 0 14px #ef4444; animation: pulse-ring 1.8s infinite;
     }
     .pulse-marker-hop {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #06b6d4;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 8px #06b6d4;
+      width: 10px; height: 10px; border-radius: 50%; background: #10b981;
+      border: 2px solid #ffffff; box-shadow: 0 0 8px #10b981;
     }
     @keyframes pulse-ring {
       0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.85); }
@@ -103,781 +131,779 @@
       100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
     }
 
-    /* Terminal blinking cursor */
-    .terminal-cursor::after {
-      content: '█';
-      animation: blink 1s step-end infinite;
-      color: #22d3ee;
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 4rem 1.5rem; color: #94a3b8;
     }
-    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .ioc-row:hover { background: #f8fafc; }
+
+    /* Grid/flex children default to min-width:auto, so wide unwrapped content
+       (long ledger values, badges) can silently force the whole page wider
+       than the viewport instead of wrapping. This is the fix: every grid
+       and its items get min-width:0 so content shrinks/wraps instead of
+       pushing the page into a horizontal-scroll state, and html/body get a
+       hard overflow-x cutoff as a backstop. Panels that need their own
+       horizontal scroll (IOC table, attack graph) already have an explicit
+       overflow-x-auto wrapper, so this never clips them. */
+    html, body { overflow-x: hidden; max-width: 100vw; }
+    .grid { min-width: 0; }
+    .grid > * { min-width: 0; }
+    .ledger-row > * { min-width: 0; }
+    .ledger-value { overflow-wrap: anywhere; }
   </style>
 </head>
 
-<body class="bg-[#080b11] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+<body class="bg-slate-50 text-slate-800 font-sans flex min-h-screen">
 
   <!-- ===================================================================== -->
-  <!-- 1. TOP NAVBAR & SOC TELEMETRY HUD                                    -->
+  <!-- SIDEBAR — case identity + section rail                              -->
   <!-- ===================================================================== -->
-  <header class="border-b border-slate-800/80 bg-[#0d1322]/95 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-      
-      <!-- Brand & Title -->
-      <div class="flex items-center space-x-3">
-        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 p-0.5 flex items-center justify-center shadow-md shadow-cyan-500/20">
-          <div class="w-full h-full bg-slate-950 rounded-[6px] flex items-center justify-center">
-            <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <path d="m9 12 2 2 4-4"/>
-            </svg>
-          </div>
+  <aside id="sidebar" class="w-[72px] lg:w-64 flex-shrink-0 sticky top-0 h-screen flex flex-col z-40">
+
+    <!-- Brand / case -->
+    <div class="px-3 lg:px-4 py-4 border-b border-white/10">
+      <div class="flex items-center gap-3 justify-center lg:justify-start">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-indigo-900/40 flex-shrink-0">
+          <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
         </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="text-sm font-extrabold tracking-wider text-white uppercase font-mono">TrustShield V2</h1>
-            <span class="px-1.5 py-0.5 text-[9px] font-bold tracking-wider font-mono rounded bg-cyan-950/90 text-cyan-300 border border-cyan-700/60">SOC FORENSIC SUITE</span>
-          </div>
-          <p class="text-[11px] text-slate-400 font-mono">SIH-106 Autonomous Email Forensics & Threat Attribution Console</p>
+        <div class="hidden lg:block leading-tight min-w-0">
+          <h1 class="text-[14px] font-extrabold text-white tracking-tight">TrustShield</h1>
+          <p class="text-[10px] text-indigo-300/80 font-mono truncate">SIH-106 Forensic Console</p>
         </div>
       </div>
 
-      <!-- Live Security HUD Pills -->
-      <div class="hidden md:flex items-center space-x-2 text-[11px] font-mono">
-        <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-700/40 text-emerald-400">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>KERNEL: ONLINE</span>
-        </div>
-        <div class="px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-cyan-300 flex items-center space-x-1">
-          <svg class="w-3 h-3 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <span>SEC 65B CERTIFIED</span>
-        </div>
-        <div class="px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-slate-300">
-          <span>PORT: 8000</span>
-        </div>
+      <div class="hidden lg:flex items-center gap-1.5 mt-3">
+        <span id="caseId" class="px-2 py-1 rounded-md bg-white/5 border border-white/10 text-[11px] font-mono font-bold text-indigo-200 truncate">TSF-000000</span>
+        <span id="caseStatusPill" class="px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-white/5 border border-white/10 text-slate-400 flex-shrink-0">Idle</span>
       </div>
     </div>
-  </header>
+
+    <!-- Section rail -->
+    <nav id="sideNav" class="flex-1 overflow-y-auto py-3">
+      <button type="button" class="nav-item active" style="--accent:#818cf8" data-tab="dashboard" onclick="switchTab('dashboard')" title="Dashboard">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <span class="nav-label hidden lg:inline">Dashboard</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#60a5fa" data-tab="email" onclick="switchTab('email')" title="Email Analysis">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <span class="nav-label hidden lg:inline">Email Analysis</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#fb7185" data-tab="threat" onclick="switchTab('threat')" title="Threat Result">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span class="nav-label hidden lg:inline flex-1">Threat Result</span>
+        <span id="navScoreBadge" class="hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-rose-500/20 text-rose-300">0/100</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#a78bfa" data-tab="xai" onclick="switchTab('xai')" title="Explainable AI">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <span class="nav-label hidden lg:inline">Explainable AI</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#22d3ee" data-tab="network" onclick="switchTab('network')" title="Network Intel">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="14" width="6" height="6" rx="1"/><rect x="9" y="4" width="6" height="6" rx="1"/><rect x="16" y="14" width="6" height="6" rx="1"/><path d="M5 14v-2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2M12 10v2"/></svg>
+        <span class="nav-label hidden lg:inline">Network Intel</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#34d399" data-tab="geo" onclick="switchTab('geo')" title="Geolocation">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="nav-label hidden lg:inline">Geolocation</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#fbbf24" data-tab="ioc" onclick="switchTab('ioc')" title="IOC Explorer">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span class="nav-label hidden lg:inline flex-1">IOC Explorer</span>
+        <span id="navIocBadge" class="hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300">0</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#e879f9" data-tab="graph" onclick="switchTab('graph')" title="Attack Graph">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M5 9v2a4 4 0 0 0 4 4M19 9v2a4 4 0 0 1-4 4"/></svg>
+        <span class="nav-label hidden lg:inline">Attack Graph</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#2dd4bf" data-tab="vault" onclick="switchTab('vault')" title="Evidence Vault">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span class="nav-label hidden lg:inline flex-1">Evidence Vault</span>
+        <span id="navVaultBadge" class="hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-teal-500/20 text-teal-300">SEALED</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#fb923c" data-tab="timeline" onclick="switchTab('timeline')" title="Timeline">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-label hidden lg:inline">Timeline</span>
+      </button>
+      <button type="button" class="nav-item tab-disabled" style="--accent:#818cf8" data-tab="report" onclick="switchTab('report')" title="Report">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        <span class="nav-label hidden lg:inline">Report</span>
+      </button>
+    </nav>
+
+    <!-- Utility footer -->
+    <div class="px-3 py-3 border-t border-white/10 space-y-2">
+      <button type="button" id="sampleEmlBtn" onclick="loadSamplePhishingDemo(event)" class="w-full px-3 py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-fuchsia-500 hover:from-indigo-400 hover:to-fuchsia-400 text-white text-xs font-bold shadow-sm flex items-center justify-center lg:justify-start gap-2 transition-all cursor-pointer">
+        <svg class="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span class="hidden lg:inline">Load Demo Incident</span>
+      </button>
+
+      <button type="button" id="resetBtn" onclick="resetDashboard(event)" class="w-full px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 text-[11px] font-medium flex items-center justify-center lg:justify-start gap-2 transition-all cursor-pointer">
+        <svg class="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        <span class="hidden lg:inline">Reset case</span>
+      </button>
+
+      <div class="flex items-center justify-center lg:justify-start gap-1.5 px-1 py-1 text-[10px] font-mono font-semibold text-emerald-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0"></span>
+        <span class="hidden lg:inline">ENGINE ONLINE</span>
+      </div>
+
+      <div class="hidden lg:flex items-center gap-2 pt-2 border-t border-white/10">
+        <div class="w-7 h-7 rounded-full bg-white/10 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">TS</div>
+        <div class="leading-tight min-w-0">
+          <p class="text-[11px] font-semibold text-slate-200 truncate">Inv. TrustShield AI</p>
+          <p class="text-[10px] text-slate-500 truncate">SOC Lead</p>
+        </div>
+      </div>
+
+      <p class="hidden lg:block text-[9px] text-slate-600 font-mono leading-relaxed pt-1">Sec. 63, Bharatiya Sakshya Adhiniyam &middot; Court-Admissible Record</p>
+    </div>
+  </aside>
 
   <!-- ===================================================================== -->
-  <!-- 2. MAIN WORKSPACE CONTAINER                                          -->
+  <!-- ANALYSIS PROGRESS OVERLAY                                            -->
   <!-- ===================================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+  <div id="progressTrackerSection" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm overflow-y-auto py-10 px-4">
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-2xl p-6 space-y-5">
 
-    <!-- =================================================================== -->
-    <!-- SECTION A: INGESTION DROP ZONE & QUICK ACTION TOOLBAR               -->
-    <!-- =================================================================== -->
-    <section id="uploadSection" class="relative">
-      <div class="bg-[#0e1424] rounded-xl border border-slate-800/90 shadow-xl p-5">
-        
-        <!-- Action Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/70">
-          <div>
-            <h2 class="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center space-x-2">
-              <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-              <span>Evidence Ingestion Gateway</span>
-            </h2>
-            <p class="text-xs text-slate-400 mt-0.5">Ingest raw <code class="text-cyan-300 font-mono">.eml</code> / <code class="text-cyan-300 font-mono">.msg</code> records to trace server relay hops, verify cryptographic signatures, and detonate attack links.</p>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center">
+            <svg class="w-4 h-4 text-indigo-600 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.2" fill="none"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"/>
+            </svg>
           </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-bold text-slate-900">Forensic Pipeline Execution</h3>
+              <span class="px-1.5 py-0.5 text-[9px] font-bold rounded bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse">ACTIVE</span>
+            </div>
+            <p id="progressSubstatus" class="text-[11px] text-slate-500 font-mono mt-0.5">Dissecting RFC-5322 email headers and extracting cryptographic telemetry...</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-4 font-mono text-xs">
+          <div class="text-right">
+            <span class="text-[10px] text-slate-400 block">Elapsed</span>
+            <span id="elapsedTimer" class="font-bold text-indigo-600">0.00s</span>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] text-slate-400 block">Progress</span>
+            <span id="progressPercent" class="font-bold text-emerald-600 text-sm">0%</span>
+          </div>
+        </div>
+      </div>
 
-          <!-- Quick Action Buttons -->
+      <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+        <div id="progressBarFill" class="h-full bg-gradient-to-r from-indigo-500 via-fuchsia-500 to-emerald-500 rounded-full transition-all duration-300" style="width: 5%;"></div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div id="stageCard1" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">01</span><span id="stageBadge1" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Evidence Hashing</h4>
+          <p id="stageDesc1" class="text-[9px] font-mono text-slate-400 truncate">SHA-256 Digest</p>
+        </div>
+        <div id="stageCard2" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">02</span><span id="stageBadge2" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Envelope &amp; Identity</h4>
+          <p id="stageDesc2" class="text-[9px] font-mono text-slate-400 truncate">Display &amp; Return-Path</p>
+        </div>
+        <div id="stageCard3" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">03</span><span id="stageBadge3" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Protocols Audit</h4>
+          <p id="stageDesc3" class="text-[9px] font-mono text-slate-400 truncate">SPF / DKIM / DMARC</p>
+        </div>
+        <div id="stageCard4" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">04</span><span id="stageBadge4" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Geo-Tracer</h4>
+          <p id="stageDesc4" class="text-[9px] font-mono text-slate-400 truncate">Relay Hops</p>
+        </div>
+        <div id="stageCard5" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">05</span><span id="stageBadge5" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Sandbox Detonation</h4>
+          <p id="stageDesc5" class="text-[9px] font-mono text-slate-400 truncate">Stealth DOM</p>
+        </div>
+        <div id="stageCard6" class="relative p-2.5 rounded-lg border border-slate-200 flex flex-col gap-1 transition-all duration-300">
+          <div class="flex items-center justify-between"><span class="text-[10px] font-mono text-slate-400 font-bold">06</span><span id="stageBadge6" class="w-2 h-2 rounded-full bg-slate-300"></span></div>
+          <h4 class="text-[11px] font-semibold text-slate-700 truncate">Threat Attribution</h4>
+          <p id="stageDesc6" class="text-[9px] font-mono text-slate-400 truncate">Sec. 63 (BSA) Dossier</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-950 rounded-lg overflow-hidden shadow-inner">
+        <div class="bg-black/40 px-3 py-1.5 border-b border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
+          <div class="flex items-center gap-2">
+            <div class="flex gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500/80"></span><span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span><span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span></div>
+            <span class="text-slate-300 font-semibold">FORENSIC TELEMETRY CONSOLE</span>
+          </div>
+          <div class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span class="text-emerald-400">STREAMING</span></div>
+        </div>
+        <div id="terminalLogContainer" class="p-3 font-mono text-[11px] leading-relaxed text-slate-300 max-h-40 overflow-y-auto space-y-1 select-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- MAIN CONTENT                                                         -->
+  <!-- ===================================================================== -->
+  <div class="flex-1 min-w-0">
+    <main class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ================================================================= -->
+    <!-- TAB: DASHBOARD (indigo)                                           -->
+    <!-- ================================================================= -->
+    <section id="tab-dashboard" class="tab-panel active space-y-5">
+
+      <div id="uploadSection" class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <h2 class="text-[15px] font-bold text-slate-900 flex items-center gap-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+              <span>Evidence Intake Bay</span>
+            </h2>
+            <p class="text-xs text-slate-500 mt-1 max-w-2xl">Submit a raw <code class="text-indigo-700 font-mono bg-indigo-50 px-1 rounded">.eml</code> / <code class="text-indigo-700 font-mono bg-indigo-50 px-1 rounded">.msg</code> record to trace relay hops, verify cryptographic signatures, and detonate embedded attack links.</p>
+          </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="liveAttackStudioBtn" onclick="openAttackStudioModal(event)" class="px-3 py-1.5 text-xs font-bold rounded bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-red-500 text-white shadow-md shadow-rose-900/40 flex items-center space-x-1.5 transition-all cursor-pointer">
-              <svg class="w-3.5 h-3.5 text-amber-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-              </svg>
-              <span>⚡ Live Attack Studio</span>
+            <button type="button" id="liveAttackStudioBtn" onclick="openAttackStudioModal(event)" class="px-3 py-1.5 text-xs font-bold rounded-md bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white shadow-sm flex items-center gap-1.5 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>Live Attack Studio</span>
             </button>
-
-            <button type="button" id="sampleEmlBtn" onclick="loadSamplePhishingDemo(event)" class="px-3 py-1.5 text-xs font-semibold rounded bg-cyan-600/90 hover:bg-cyan-500 text-white shadow-md shadow-cyan-600/20 flex items-center space-x-1.5 transition-all cursor-pointer">
-              <svg class="w-3.5 h-3.5 text-cyan-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-              </svg>
-              <span>Load Sample Phishing Attack Demo</span>
-            </button>
-
-            <button type="button" id="browseBtn" onclick="triggerFileInput(event)" class="px-3 py-1.5 text-xs font-semibold rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center space-x-1.5 transition-all cursor-pointer">
-              <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
-              </svg>
+            <button type="button" id="browseBtn" onclick="triggerFileInput(event)" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 flex items-center gap-1.5 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
               <span>Browse .eml</span>
             </button>
-
-            <button type="button" id="downloadSampleBtn" onclick="downloadSampleEml(event)" class="px-3 py-1.5 text-xs font-medium rounded bg-slate-850 hover:bg-slate-800 text-slate-400 border border-slate-700/60 flex items-center space-x-1.5 transition-all cursor-pointer" title="Download raw sample .eml for testing">
-              <svg class="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
+            <button type="button" id="downloadSampleBtn" onclick="downloadSampleEml(event)" class="px-3 py-1.5 text-xs font-medium rounded-md text-slate-500 hover:bg-slate-50 border border-transparent hover:border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer" title="Download raw sample .eml for testing">
+              <svg class="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               <span>Download Test .eml</span>
             </button>
           </div>
         </div>
 
-        <!-- Hidden File Input -->
         <input type="file" id="emlFileInput" accept=".eml,.msg,message/rfc822,text/plain,*/*" class="hidden" onchange="handleFileSelect(event)" />
 
-        <!-- Compact Drag & Drop Target -->
-        <div id="dropZone" onclick="triggerFileInput(event)" class="mt-4 border-2 border-dashed border-slate-700/80 hover:border-cyan-500/80 rounded-lg p-5 text-center cursor-pointer transition-all duration-200 bg-[#090d16]/70 hover:bg-cyan-950/15 group">
-          <div class="flex items-center justify-center space-x-3">
-            <div class="w-10 h-10 rounded-lg bg-slate-900 border border-slate-700 group-hover:border-cyan-500/60 flex items-center justify-center transition-colors">
-              <svg class="w-5 h-5 text-slate-400 group-hover:text-cyan-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
-                <path d="M12 12v9"/>
-                <path d="m16 16-4-4-4 4"/>
-              </svg>
+        <div id="dropZone" onclick="triggerFileInput(event)" class="mt-4 border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-lg p-5 text-center cursor-pointer transition-all duration-200 bg-slate-50 hover:bg-indigo-50/40 group">
+          <div class="flex items-center justify-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-white border border-slate-200 group-hover:border-indigo-300 flex items-center justify-center transition-colors shadow-sm">
+              <svg class="w-5 h-5 text-slate-400 group-hover:text-indigo-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
             </div>
             <div class="text-left">
-              <p class="text-xs font-semibold text-slate-200">
-                Drop your forensic <span class="text-cyan-400 font-mono font-bold">.eml</span> file here or <span class="text-cyan-400 underline underline-offset-2">browse filesystem</span>
-              </p>
-              <p class="text-[11px] text-slate-500 font-mono mt-0.5">Supports RFC-5322 MIME messages, Outlook headers & multi-hop relay chains</p>
+              <p class="text-xs font-semibold text-slate-700">Drop the <span class="text-indigo-700 font-mono font-bold">.eml</span> evidence file here, or <span class="text-indigo-700 underline underline-offset-2">browse your filesystem</span></p>
+              <p class="text-[11px] text-slate-400 font-mono mt-0.5">Accepts RFC-5322 MIME messages, Outlook headers &amp; multi-hop relay chains</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Case Overview summary tiles (populated after analysis) -->
+      <div id="dashboardSummaryEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No active case</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Load the demo incident or submit an .eml above to populate the case overview and unlock every investigation section.</p>
+      </div>
+      <div id="dashboardSummaryContent" class="hidden">
+        <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2.5">Case overview</h3>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" id="dashboardTiles"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: EMAIL ANALYSIS (blue)                                        -->
+    <!-- ================================================================= -->
+    <section id="tab-email" class="tab-panel space-y-4">
+      <div id="emailEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No evidence loaded</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to view its RFC-5322 envelope and authentication protocol matrix.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-blue-700 hover:text-blue-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="emailContent" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="space-y-4">
+          <div id="becAlertBox" class="hidden bg-red-50 border border-red-200 rounded-lg p-3.5 shadow-sm">
+            <div class="flex items-start gap-2.5">
+              <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div>
+                <h4 class="text-[12px] font-bold text-red-700">Critical BEC identity spoofing</h4>
+                <p class="text-[11px] text-red-900/80 mt-0.5 leading-snug">Visible sender <strong class="text-red-900">From:</strong> does not match <strong class="text-red-700">Reply-To:</strong>. Replies will silently divert to an external attacker.</p>
+                <div class="mt-1.5 text-[10px] font-mono bg-white p-1.5 rounded border border-red-200 break-all text-red-700" id="becDetailText">Reply-To: phisher@scam.biz</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-1">
+              <div class="flex items-center gap-1.5 text-slate-900 font-bold text-[13px]">
+                <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                <span>Envelope &amp; identity</span>
+              </div>
+              <span class="text-[9px] font-mono text-slate-400">RFC-5322</span>
+            </div>
+            <div class="ledger-row"><span class="ledger-label">Subject</span><span id="metaSubject" class="ledger-value font-semibold">URGENT: Unauthorized Wire Transfer Detected</span></div>
+            <div class="ledger-row"><span class="ledger-label">From (visible)</span><span id="metaFrom" class="ledger-value font-mono">security@paypal-verification.top</span></div>
+            <div class="ledger-row"><span class="ledger-label">Sender domain</span><span id="metaFromDomain" class="ledger-value font-mono text-blue-700">paypal-verification.top</span></div>
+            <div class="ledger-row"><span class="ledger-label">Return-Path</span><span id="metaReturnPath" class="ledger-value font-mono">spoofed@sender.xyz</span></div>
+            <div class="ledger-row"><span class="ledger-label">To / recipient</span><span id="metaTo" class="ledger-value font-mono">victim.executive@company.com</span></div>
+            <div class="ledger-row"><span class="ledger-label">Date sent</span><span id="metaDate" class="ledger-value">Mon, 7 Sep 2026</span></div>
+            <div class="ledger-row"><span class="ledger-label">Total hops</span><span id="metaHops" class="ledger-value font-mono font-bold">4 intermediate relays</span></div>
+          </div>
+
+          <button type="button" onclick="openRawHeadersModal(event)" class="w-full px-3.5 py-2 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+            <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>View Raw RFC-822 Headers</span>
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 h-fit">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-1">
+            <div class="flex items-center gap-1.5 text-slate-900 font-bold text-[13px]">
+              <svg class="w-3.5 h-3.5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              <span>Security protocol matrix</span>
+            </div>
+            <span class="text-[9px] font-mono text-slate-400">DNS &amp; CRYPTO</span>
+          </div>
+          <div class="ledger-row"><div><span class="text-[12px] font-semibold text-slate-800 block">SPF alignment</span><span id="spfDetails" class="text-[9px] text-slate-400 block">Sender Policy Framework</span></div><span id="spfBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-100 text-red-700 border border-red-200">FAIL</span></div>
+          <div class="ledger-row"><div><span class="text-[12px] font-semibold text-slate-800 block">DKIM signature</span><span id="dkimDetails" class="text-[9px] text-slate-400 block">Cryptographic key audit</span></div><span id="dkimBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-100 text-red-700 border border-red-200">FAIL</span></div>
+          <div class="ledger-row"><div><span class="text-[12px] font-semibold text-slate-800 block">DMARC policy</span><span id="dmarcDetails" class="text-[9px] text-slate-400 block">Identifier alignment</span></div><span id="dmarcBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-100 text-red-700 border border-red-200">FAIL</span></div>
+          <div class="ledger-row"><div><span class="text-[12px] font-semibold text-slate-800 block">MX mail server</span><span id="mxDetails" class="text-[9px] text-slate-400 block">DNS MX verification</span></div><span id="mxBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-100 text-red-700 border border-red-200">NO MX</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: THREAT RESULT (rose)                                         -->
+    <!-- ================================================================= -->
+    <section id="tab-threat" class="tab-panel space-y-4">
+      <div id="threatEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No verdict yet</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to generate a fraud-risk score and forensic narrative.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-rose-700 hover:text-rose-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="threatContent" class="hidden space-y-4">
+        <div id="verdictCard" class="rounded-xl border p-6 bg-white shadow-sm relative overflow-hidden transition-all duration-300">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div class="flex items-center gap-6">
+              <div class="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
+                <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="48" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 5" fill="none"/>
+                  <circle cx="50" cy="50" r="42" stroke="#f1f5f9" stroke-width="9" fill="transparent"/>
+                  <circle id="scoreCircle" cx="50" cy="50" r="42" stroke="#ef4444" stroke-width="9" stroke-linecap="round" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="0" class="transition-all duration-1000"/>
+                </svg>
+                <div class="absolute flex flex-col items-center justify-center text-center">
+                  <span id="scoreNumber" class="text-2xl font-black tracking-tight text-slate-900">100</span>
+                  <span class="text-[9px] font-mono tracking-wider text-slate-400">/ 100</span>
+                </div>
+              </div>
+              <div class="space-y-1.5">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span id="verdictBadge" class="verdict-stamp anim-stamp-in text-red-600 bg-red-50">CRITICAL FRAUD / PHISHING</span>
+                  <span id="attributionBadge" class="px-2 py-0.5 border border-rose-200 rounded text-[10px] font-mono uppercase tracking-wide text-rose-700 bg-rose-50">CREDENTIAL_HARVESTING</span>
+                  <span id="analysisDurationBadge" class="px-2 py-0.5 text-[10px] font-mono text-slate-400">Audit: 1.4s</span>
+                </div>
+                <h3 id="verdictHeadline" class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">High-Impact Cyber Threat Detected</h3>
+                <p id="attributionDetails" class="text-[13px] text-slate-500 max-w-2xl leading-relaxed">Originating IP is an anonymized relay node. Identity spoofing detected via failed SPF &amp; DMARC authentication with credential harvesting payload.</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap lg:flex-col gap-2 flex-shrink-0">
+              <button type="button" onclick="switchTab('report')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                <span>Go to Report</span>
+              </button>
+              <button type="button" onclick="switchTab('xai')" class="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                <span>Why this verdict?</span>
+              </button>
             </div>
           </div>
         </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div class="flex items-center gap-1.5 text-slate-900 font-bold text-[13px]"><svg class="w-3.5 h-3.5 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Incident narrative</span></div>
+              <span class="text-[9px] font-mono text-emerald-600">DETERMINISTIC</span>
+            </div>
+            <div class="space-y-3" id="structuredNarrativeContainer">
+              <div class="flex gap-2.5"><span class="text-[10px] font-mono text-rose-600 font-bold pt-0.5">01</span><div><span class="text-[10px] uppercase tracking-wide font-bold text-rose-700 block mb-0.5">Threat summary</span><p id="narrativeThreatSummary" class="text-slate-600 text-[12px] leading-relaxed">Loading threat evaluation...</p></div></div>
+              <div class="flex gap-2.5"><span class="text-[10px] font-mono text-amber-600 font-bold pt-0.5">02</span><div><span class="text-[10px] uppercase tracking-wide font-bold text-amber-700 block mb-0.5">Key forensic evidence</span><p id="narrativeEvidence" class="text-slate-600 text-[12px] leading-relaxed">Loading evidence points...</p></div></div>
+              <div class="flex gap-2.5"><span class="text-[10px] font-mono text-emerald-600 font-bold pt-0.5">03</span><div><span class="text-[10px] uppercase tracking-wide font-bold text-emerald-700 block mb-0.5">Recommended SOC containment</span><p id="narrativeAction" class="text-slate-600 text-[12px] leading-relaxed">Loading recommended action...</p></div></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div class="flex items-center gap-1.5 text-slate-900 font-bold text-[13px]"><svg class="w-3.5 h-3.5 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Payload exhibits</span></div>
+              <span id="linkCountBadge" class="px-2 py-0.5 rounded text-[9px] font-mono bg-slate-100 text-slate-600 border border-slate-200">0 Links</span>
+            </div>
+            <div id="linksContainer" class="space-y-2 overflow-y-auto max-h-72 pr-1"></div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- =================================================================== -->
-    <!-- SECTION B: REAL-TIME MULTI-STAGE FORENSIC PROGRESS TRACKER         -->
-    <!-- (Active during analysis; shows real-time progress & live logs)      -->
-    <!-- =================================================================== -->
-    <section id="progressTrackerSection" class="hidden">
-      <div class="bg-[#0e1424] rounded-xl border border-cyan-800/60 shadow-2xl p-5 space-y-5">
-        
-        <!-- Progress Tracker Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-          <div class="flex items-center space-x-3">
-            <div class="w-7 h-7 rounded bg-cyan-950/80 border border-cyan-500/60 flex items-center justify-center">
-              <svg class="w-4 h-4 text-cyan-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25" fill="none"/>
-                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor"/>
-              </svg>
+    <!-- ================================================================= -->
+    <!-- TAB: EXPLAINABLE AI (violet)                                      -->
+    <!-- ================================================================= -->
+    <section id="tab-xai" class="tab-panel space-y-4">
+      <div id="xaiEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">Nothing to explain yet</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Once a case is analyzed, this view shows exactly why the engine reached its verdict, citing verifiable evidence.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-violet-700 hover:text-violet-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="xaiContent" class="hidden space-y-4">
+        <div>
+          <div class="flex items-center gap-1.5 text-violet-700 text-[11px] font-bold uppercase tracking-wide mb-1">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+            <span>Explainable AI engine (XAI)</span>
+          </div>
+          <h2 class="text-xl font-extrabold text-slate-900">Why was this email flagged?</h2>
+          <p class="text-xs text-slate-500 mt-1">Transparent forensic justification linking every AI finding directly to verifiable evidence.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[12px] font-bold text-slate-900">01. Detection engine</span>
+              <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">Rules + Heuristic ML</span>
             </div>
+            <p class="text-xs text-slate-500 leading-relaxed">Detection decisions are calculated deterministically using heuristic rules, SPF/DKIM/DMARC specification checks, sandboxed DOM interrogation and trained risk classifiers &mdash; not a black box.</p>
+          </div>
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[12px] font-bold text-slate-900">02. AI explanation</span>
+              <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase bg-violet-50 text-violet-700 border border-violet-200">Evidence-Based</span>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">Generates a natural, human-readable rationale grounded strictly in empirical forensic evidence collected for this case. The narrative model explains the decision; it does not make it.</p>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl shadow-sm p-5">
+          <span class="text-[10px] font-bold uppercase tracking-wide text-violet-400">Executive threat rationale</span>
+          <p id="xaiRationale" class="text-[13px] text-slate-200 leading-relaxed mt-2">Awaiting analysis...</p>
+        </div>
+
+        <div>
+          <h3 class="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2" id="xaiCitationCount">Evidence reference citations (0)</h3>
+          <div id="xaiCitationsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: NETWORK INTEL (cyan)                                         -->
+    <!-- ================================================================= -->
+    <section id="tab-network" class="tab-panel space-y-4">
+      <div id="networkEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="14" width="6" height="6" rx="1"/><rect x="9" y="4" width="6" height="6" rx="1"/><rect x="16" y="14" width="6" height="6" rx="1"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No infrastructure data</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to fingerprint its sending infrastructure and relay network.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-cyan-700 hover:text-cyan-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="networkContent" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <h4 class="text-[13px] font-bold text-slate-900 border-b border-slate-100 pb-2">Origin infrastructure</h4>
+          <div class="ledger-row"><span class="ledger-label">Public IP</span><span id="netOriginIp" class="ledger-value font-mono font-bold">0.0.0.0</span></div>
+          <div class="ledger-row"><span class="ledger-label">Country</span><span id="netOriginCountry" class="ledger-value">Unknown</span></div>
+          <div class="ledger-row"><span class="ledger-label">Hosting / ISP</span><span id="netOriginIsp" class="ledger-value">Unknown</span></div>
+          <div class="ledger-row"><span class="ledger-label">Anonymization</span><span id="netAnonBadge" class="ledger-value">&mdash;</span></div>
+          <div class="ledger-row"><span class="ledger-label">Relay depth</span><span id="netHopCount" class="ledger-value font-mono">0 hops</span></div>
+        </div>
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <h4 class="text-[13px] font-bold text-slate-900 border-b border-slate-100 pb-2 mb-2">Relay infrastructure chain</h4>
+          <div id="networkHopsContainer" class="space-y-1.5 max-h-64 overflow-y-auto pr-1"></div>
+        </div>
+        <div class="lg:col-span-3 bg-cyan-50 border border-cyan-200 rounded-xl p-4">
+          <h4 class="text-[12px] font-bold text-cyan-800 mb-1">Infrastructure risk assessment</h4>
+          <p id="networkRiskNarrative" class="text-xs text-cyan-900/80 leading-relaxed">Awaiting analysis...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: GEOLOCATION (emerald)                                        -->
+    <!-- ================================================================= -->
+    <section id="tab-geo" class="tab-panel space-y-4">
+      <div id="geoEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No trace route yet</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to plot its relay hop path and originating geolocation.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="geoContent" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div class="flex items-center gap-1.5 text-slate-900 font-bold text-[13px]"><svg class="w-3.5 h-3.5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span>Hop path &amp; origin trace</span></div>
+            <span id="originCountryBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-50 text-emerald-700 border border-emerald-200">Unknown</span>
+          </div>
+          <div class="p-2.5 bg-slate-900 rounded-lg flex items-center justify-between text-xs">
+            <div><span class="text-[9px] text-slate-400 block">Earliest public origin IP</span><span id="originIpText" class="text-xs font-mono font-bold text-white">0.0.0.0</span></div>
+            <div id="originProxyFlag" class="text-right"><span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-red-500/20 text-red-300 border border-red-500/40">TOR / PROXY</span><span id="originIspText" class="block text-[9px] text-slate-400 font-mono truncate max-w-[160px]">Unknown ISP</span></div>
+          </div>
+          <div id="map" class="h-72 w-full rounded-lg border border-slate-200 overflow-hidden shadow-inner relative z-10"></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+          <h4 class="text-[13px] font-bold text-slate-900 border-b border-slate-100 pb-2 mb-2">Chronological hop path</h4>
+          <div id="hopsContainer" class="space-y-1.5 max-h-[26rem] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: IOC EXPLORER (amber)                                         -->
+    <!-- ================================================================= -->
+    <section id="tab-ioc" class="tab-panel space-y-4">
+      <div id="iocEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No indicators extracted</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to extract IPs, domains, URLs and hashes as searchable indicators of compromise.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-amber-700 hover:text-amber-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="iocContent" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h4 class="text-[13px] font-bold text-slate-900">Indicators of compromise</h4>
+            <p id="iocSummaryText" class="text-[11px] text-slate-400 mt-0.5">0 indicators extracted from this case</p>
+          </div>
+          <div class="relative">
+            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="iocSearchInput" type="text" oninput="filterIocTable()" placeholder="Filter indicators..." class="pl-8 pr-3 py-1.5 text-xs rounded-md border border-slate-300 focus:border-amber-500 focus:outline-none w-64" />
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 text-slate-500">
+              <tr>
+                <th class="text-left font-semibold px-4 py-2">Type</th>
+                <th class="text-left font-semibold px-4 py-2">Value</th>
+                <th class="text-left font-semibold px-4 py-2">Risk</th>
+                <th class="text-left font-semibold px-4 py-2">Source</th>
+              </tr>
+            </thead>
+            <tbody id="iocTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: ATTACK GRAPH (fuchsia)                                       -->
+    <!-- ================================================================= -->
+    <section id="tab-graph" class="tab-panel space-y-4">
+      <div id="graphEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5" cy="6" r="3"/><circle cx="19" cy="6" r="3"/><circle cx="12" cy="18" r="3"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No correlation graph yet</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to correlate sender infrastructure, relay hops and payload domains into a single attack graph.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-fuchsia-700 hover:text-fuchsia-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="graphContent" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+          <h4 class="text-[13px] font-bold text-slate-900">Entity correlation graph</h4>
+          <div class="flex items-center gap-3 text-[10px] font-mono text-slate-400">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span>Infrastructure</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>Malicious</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>Suspicious</span>
+          </div>
+        </div>
+        <div id="attackGraphSvgWrap" class="w-full overflow-x-auto"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: EVIDENCE VAULT (teal)                                        -->
+    <!-- ================================================================= -->
+    <section id="tab-vault" class="tab-panel space-y-4">
+      <div id="vaultEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">Vault empty</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to cryptographically seal it into the evidence vault with a tamper-evident chain of custody.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-teal-700 hover:text-teal-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="vaultContent" class="hidden space-y-4">
+        <div>
+          <div class="flex items-center gap-1.5 text-teal-700 text-[11px] font-bold uppercase tracking-wide mb-1">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Automatic evidence preservation vault</span>
+          </div>
+          <h2 class="text-xl font-extrabold text-slate-900">Cryptographic forensic evidence vault</h2>
+          <p class="text-xs text-slate-500 mt-1">Immutable digital archive secured with cryptographic SHA-256 hash digest verification.</p>
+        </div>
+
+        <div class="bg-white rounded-xl border border-teal-200 shadow-sm p-5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
-              <div class="flex items-center space-x-2">
-                <h3 class="text-xs font-bold font-mono tracking-wider text-white uppercase">Forensic Pipeline Execution</h3>
-                <span class="px-1.5 py-0.5 text-[9px] font-bold font-mono rounded bg-cyan-900/60 text-cyan-300 border border-cyan-700/50 animate-pulse">ACTIVE ANALYSIS</span>
-              </div>
-              <p id="progressSubstatus" class="text-[11px] text-slate-400 font-mono mt-0.5">Dissecting RFC-5322 email headers and extracting cryptographic telemetry...</p>
+              <div class="flex items-center gap-1.5 text-teal-700 text-[11px] font-bold uppercase tracking-wide"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Status: preserved &amp; sealed</span></div>
+              <h3 class="text-base font-bold text-slate-900 mt-0.5">Cryptographic integrity verified</h3>
             </div>
-          </div>
-
-          <!-- Live Timers & Progress Percentage -->
-          <div class="flex items-center space-x-4 font-mono text-xs">
-            <div class="text-right">
-              <span class="text-[10px] uppercase text-slate-500 block">Elapsed Time</span>
-              <span id="elapsedTimer" class="font-bold text-cyan-400">0.00s</span>
-            </div>
-            <div class="text-right">
-              <span class="text-[10px] uppercase text-slate-500 block">Audit Progress</span>
-              <span id="progressPercent" class="font-bold text-emerald-400 text-sm">0%</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Segmented Glowing Progress Bar -->
-        <div class="space-y-1.5">
-          <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800 p-0.5">
-            <div id="progressBarFill" class="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-400 rounded-full transition-all duration-300 shadow-lg shadow-cyan-500/50" style="width: 5%;"></div>
-          </div>
-        </div>
-
-        <!-- 6 Interactive Milestone Stage Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
-          
-          <!-- Stage 1 -->
-          <div id="stageCard1" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">01</span>
-              <span id="stageBadge1" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Evidence Hashing</h4>
-            <p id="stageDesc1" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">SHA-256 Digest</p>
-          </div>
-
-          <!-- Stage 2 -->
-          <div id="stageCard2" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">02</span>
-              <span id="stageBadge2" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Envelope & Identity</h4>
-            <p id="stageDesc2" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">Display & Return-Path</p>
-          </div>
-
-          <!-- Stage 3 -->
-          <div id="stageCard3" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">03</span>
-              <span id="stageBadge3" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Protocols Audit</h4>
-            <p id="stageDesc3" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">SPF / DKIM / DMARC / MX</p>
-          </div>
-
-          <!-- Stage 4 -->
-          <div id="stageCard4" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">04</span>
-              <span id="stageBadge4" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Geo-Tracer Topology</h4>
-            <p id="stageDesc4" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">Relay Hops & Origin IP</p>
-          </div>
-
-          <!-- Stage 5 -->
-          <div id="stageCard5" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">05</span>
-              <span id="stageBadge5" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Sandbox Detonation</h4>
-            <p id="stageDesc5" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">Stealth DOM Interrogation</p>
-          </div>
-
-          <!-- Stage 6 -->
-          <div id="stageCard6" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between transition-all duration-300">
-            <div class="flex items-center justify-between mb-1">
-              <span class="text-[10px] font-mono text-slate-500 font-bold">06</span>
-              <span id="stageBadge6" class="w-2 h-2 rounded-full bg-slate-700"></span>
-            </div>
-            <h4 class="text-[11px] font-semibold text-slate-300 truncate">Threat Attribution</h4>
-            <p id="stageDesc6" class="text-[9px] font-mono text-slate-500 truncate mt-0.5">Sec 65B Court Dossier</p>
-          </div>
-
-        </div>
-
-        <!-- Live Streaming Cyber Console Terminal Window -->
-        <div class="rounded-lg bg-black/95 border border-slate-800 overflow-hidden shadow-inner">
-          <!-- Terminal Titlebar -->
-          <div class="bg-[#0b0f19] px-3 py-1.5 border-b border-slate-800/80 flex items-center justify-between text-[10px] font-mono text-slate-400">
-            <div class="flex items-center space-x-2">
-              <div class="flex space-x-1.5">
-                <span class="w-2.5 h-2.5 rounded-full bg-rose-500/80"></span>
-                <span class="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
-              </div>
-              <span class="text-slate-300 font-semibold">LIVE FORENSIC TELEMETRY CONSOLE</span>
-              <span class="text-slate-600">//</span>
-              <span class="text-cyan-400">PID: 8000</span>
-            </div>
-            <div class="flex items-center space-x-2">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span class="text-emerald-400">STREAMING</span>
-            </div>
-          </div>
-
-          <!-- Terminal Output Container -->
-          <div id="terminalLogContainer" class="p-3 font-mono text-[11px] leading-relaxed text-slate-300 max-h-48 overflow-y-auto space-y-1 select-text">
-            <!-- Dynamically populated via logStream() -->
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- =================================================================== -->
-    <!-- SECTION C: EXECUTIVE INCIDENT COMMAND BANNER (Revealed on analysis)-->
-    <!-- =================================================================== -->
-    <section id="executiveVerdict" class="hidden">
-      <div id="verdictCard" class="rounded-xl border p-5 bg-[#0e1424] shadow-2xl relative overflow-hidden transition-all duration-300">
-        
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-          
-          <!-- Threat Score Gauge & Headlines -->
-          <div class="flex items-center space-x-5">
-            
-            <!-- Compact 72px Donut Threat Gauge -->
-            <div class="relative w-20 h-20 flex-shrink-0 flex items-center justify-center">
-              <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" stroke="#172033" stroke-width="10" fill="transparent"/>
-                <circle id="scoreCircle" cx="50" cy="50" r="42" stroke="#ef4444" stroke-width="10" stroke-linecap="round" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="0" class="transition-all duration-1000"/>
-              </svg>
-              <div class="absolute flex flex-col items-center justify-center text-center">
-                <span id="scoreNumber" class="text-xl font-black font-mono tracking-tighter text-white">100</span>
-                <span class="text-[9px] uppercase font-mono tracking-wider text-slate-400">/ 100</span>
-              </div>
-            </div>
-
-            <!-- Verdict Titles & Details -->
-            <div class="space-y-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <span id="verdictBadge" class="px-2.5 py-0.5 rounded text-[11px] font-bold font-mono tracking-wide uppercase bg-red-950 text-red-400 border border-red-700/60">
-                  CRITICAL FRAUD / PHISHING
-                </span>
-                <span id="attributionBadge" class="px-2.5 py-0.5 rounded text-[11px] font-bold font-mono tracking-wide uppercase bg-slate-800 text-cyan-300 border border-cyan-800/40">
-                  CREDENTIAL_HARVESTING
-                </span>
-                <span id="analysisDurationBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-900 text-slate-400 border border-slate-800">
-                  Audit: 1.4s
-                </span>
-              </div>
-              <h3 id="verdictHeadline" class="text-lg sm:text-xl font-extrabold text-white tracking-tight">
-                High-Impact Cyber Threat Detected
-              </h3>
-              <p id="attributionDetails" class="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                Originating IP is an anonymized relay node. Identity spoofing detected via failed SPF & DMARC authentication with credential harvesting payload.
-              </p>
-            </div>
-          </div>
-
-          <!-- Action Command Buttons -->
-          <div class="flex flex-wrap lg:flex-col gap-2 flex-shrink-0">
-            <button type="button" id="exportPdfBtn" onclick="exportDossierPdf(event)" class="px-4 py-2 rounded-lg bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold tracking-wide uppercase font-mono shadow-md shadow-red-600/30 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-                <path d="M12 18v-6"/>
-                <path d="m9 15 3 3 3-3"/>
-              </svg>
-              <span>Export Section 65B PDF</span>
-            </button>
-
-            <button type="button" id="rawHeadersBtn" onclick="openRawHeadersModal(event)" class="px-3.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 text-slate-200 text-xs font-semibold tracking-wide flex items-center justify-center space-x-1.5 transition-all cursor-pointer">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="4 17 10 11 4 5"/>
-                <line x1="12" y1="19" x2="20" y2="19"/>
-              </svg>
-              <span>View RFC-822 Headers</span>
-            </button>
-
-            <button type="button" id="resetBtn" onclick="resetDashboard(event)" class="px-3.5 py-1.5 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-700/60 text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center justify-center space-x-1.5 transition-all cursor-pointer">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                <path d="M3 3v5h5"/>
-              </svg>
-              <span>Scan New Evidence</span>
+            <button type="button" id="resealBtn" onclick="reSealEvidence(event)" class="px-3.5 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              <span>Re-compute SHA-256 vault seal</span>
             </button>
           </div>
-
-        </div>
-
-      </div>
-    </section>
-
-    <!-- =================================================================== -->
-    <!-- SECTION D: 3-COLUMN COMPACT FORENSIC INVESTIGATION GRID             -->
-    <!-- =================================================================== -->
-    <section id="dashboardGrid" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-5">
-
-      <!-- ================================================================= -->
-      <!-- COLUMN 1: IDENTITY & TECHNICAL ENVELOPE (4 cols)                 -->
-      <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-4">
-
-        <!-- Critical BEC Spoofing Banner (Visible when reply_to_mismatch == true) -->
-        <div id="becAlertBox" class="hidden rounded-lg bg-gradient-to-br from-red-950/90 to-slate-900 border border-red-500/80 p-3.5 shadow-lg glow-red">
-          <div class="flex items-start space-x-2.5">
-            <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            <div>
-              <h4 class="text-[11px] font-bold font-mono tracking-wider uppercase text-red-400">CRITICAL BEC IDENTITY SPOOFING</h4>
-              <p class="text-[11px] text-slate-200 mt-0.5 leading-snug">
-                Visible sender <strong class="text-white font-mono">From:</strong> does not match <strong class="text-red-300 font-mono">Reply-To:</strong>. Replies will silently divert to external attacker!
-              </p>
-              <div class="mt-1.5 text-[10px] font-mono bg-black/60 p-1.5 rounded border border-red-800/60 break-all text-red-300" id="becDetailText">
-                Reply-To: phisher@scam.biz
-              </div>
+          <div class="mt-3 p-3 bg-slate-900 rounded-lg flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <span class="text-[9px] font-bold uppercase tracking-wide text-teal-400 block mb-1">SHA-256 digest integrity seal</span>
+              <div id="sha256Digest" class="font-mono text-[12px] text-teal-300 break-all select-all leading-tight">Calculating...</div>
             </div>
-          </div>
-        </div>
-
-        <!-- Evidence Chain of Custody Card -->
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-2.5">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 text-[11px] font-mono">
-            <div class="flex items-center space-x-1.5 text-slate-300 font-semibold">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              <span>Chain of Custody</span>
-            </div>
-            <button type="button" id="copyHashBtn" onclick="copyEvidenceHash(event)" class="text-cyan-400 hover:text-cyan-300 flex items-center space-x-1 transition-colors cursor-pointer text-[10px]">
+            <button type="button" id="copyHashBtn" onclick="copyEvidenceHash(event)" class="flex-shrink-0 px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-[10px] font-mono flex items-center gap-1 transition-colors cursor-pointer">
               <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-              <span>Copy SHA-256</span>
+              <span>Copy</span>
             </button>
           </div>
-          <div class="p-2 bg-black/70 rounded border border-slate-800/80 font-mono text-[10px] text-cyan-300 break-all select-all leading-tight" id="sha256Digest">
-            Calculating...
-          </div>
-          <div class="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-0.5">
-            <span>Section 65B Indian Evidence Act</span>
-            <span class="text-emerald-400 font-semibold">✓ Tamper-Evident</span>
-          </div>
+          <div class="mt-2 text-[10px] font-mono text-slate-400" id="vaultEvidenceIdText">EVIDENCE ID: &mdash; &middot; SEALED AT: &mdash;</div>
         </div>
 
-        <!-- Technical Envelope Card -->
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <div class="flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect width="20" height="16" x="2" y="4" rx="2"/>
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">RFC-5322 Envelope</h4>
-            </div>
-            <span class="text-[10px] font-mono text-slate-500">MIME HEADERS</span>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+            <h4 class="text-[13px] font-bold text-slate-900 flex items-center gap-1.5"><svg class="w-3.5 h-3.5 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 7 6 6-6 6M2 13h19"/></svg>Chain of custody audit log</h4>
+            <span class="text-[10px] font-mono text-teal-600 font-semibold">LOG IMMUTABLE</span>
           </div>
-
-          <div class="space-y-2 text-xs">
-            <div>
-              <span class="text-[9px] font-mono uppercase text-slate-500 block">Subject</span>
-              <p id="metaSubject" class="font-semibold text-slate-100 break-words mt-0.5 text-[11px]">URGENT: Unauthorized Wire Transfer Detected</p>
-            </div>
-
-            <div>
-              <span class="text-[9px] font-mono uppercase text-slate-500 block">From (Visible Header)</span>
-              <p id="metaFrom" class="text-slate-300 font-mono text-[10px] break-all mt-0.5">security@paypal-verification.top</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <span class="text-[9px] font-mono uppercase text-slate-500 block">Sender Domain</span>
-                <span id="metaFromDomain" class="inline-block mt-0.5 px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700/60 text-cyan-300 font-mono text-[10px] truncate max-w-full">paypal-verification.top</span>
-              </div>
-              <div>
-                <span class="text-[9px] font-mono uppercase text-slate-500 block">Return-Path</span>
-                <p id="metaReturnPath" class="text-slate-400 font-mono text-[10px] break-all truncate mt-0.5">spoofed@sender.xyz</p>
-              </div>
-            </div>
-
-            <div>
-              <span class="text-[9px] font-mono uppercase text-slate-500 block">To / Recipient</span>
-              <p id="metaTo" class="text-slate-300 font-mono text-[10px] break-all mt-0.5">victim.executive@company.com</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60">
-              <div>
-                <span class="text-[9px] font-mono uppercase text-slate-500 block">Date Sent</span>
-                <p id="metaDate" class="text-slate-400 text-[10px] mt-0.5 truncate">Mon, 7 Sep 2026</p>
-              </div>
-              <div>
-                <span class="text-[9px] font-mono uppercase text-slate-500 block">Total Hops</span>
-                <p id="metaHops" class="text-slate-200 font-mono font-bold text-[10px] mt-0.5">4 intermediate relays</p>
-              </div>
-            </div>
-          </div>
+          <div id="custodyLogContainer" class="divide-y divide-slate-100"></div>
         </div>
 
-        <!-- Protocol Authentication Matrix (SPF, DKIM, DMARC, MX) -->
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-2.5">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <div class="flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <path d="m9 12 2 2 4-4"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Security Protocols Matrix</h4>
-            </div>
-            <span class="text-[10px] font-mono text-slate-500">DNS & CRYPTO</span>
-          </div>
-
-          <div class="grid grid-cols-1 gap-2">
-            <!-- SPF -->
-            <div class="flex items-center justify-between p-2 rounded bg-slate-950/70 border border-slate-800/70">
-              <div>
-                <span class="text-[11px] font-bold font-mono text-slate-300 block">SPF Alignment</span>
-                <span id="spfDetails" class="text-[9px] text-slate-500 truncate max-w-[180px] block">Sender Policy Framework</span>
-              </div>
-              <span id="spfBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- DKIM -->
-            <div class="flex items-center justify-between p-2 rounded bg-slate-950/70 border border-slate-800/70">
-              <div>
-                <span class="text-[11px] font-bold font-mono text-slate-300 block">DKIM Signature</span>
-                <span id="dkimDetails" class="text-[9px] text-slate-500 truncate max-w-[180px] block">Cryptographic Key Audit</span>
-              </div>
-              <span id="dkimBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- DMARC -->
-            <div class="flex items-center justify-between p-2 rounded bg-slate-950/70 border border-slate-800/70">
-              <div>
-                <span class="text-[11px] font-bold font-mono text-slate-300 block">DMARC Policy</span>
-                <span id="dmarcDetails" class="text-[9px] text-slate-500 truncate max-w-[180px] block">Identifier Alignment</span>
-              </div>
-              <span id="dmarcBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- MX Infrastructure -->
-            <div class="flex items-center justify-between p-2 rounded bg-slate-950/70 border border-slate-800/70">
-              <div>
-                <span class="text-[11px] font-bold font-mono text-slate-300 block">MX Mail Server</span>
-                <span id="mxDetails" class="text-[9px] text-slate-500 truncate max-w-[180px] block">DNS MX Verification</span>
-              </div>
-              <span id="mxBadge" class="px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">NO MX</span>
-            </div>
-          </div>
+        <div class="flex items-center justify-between text-[10px] font-mono text-slate-400">
+          <span>Sec. 63, Bharatiya Sakshya Adhiniyam</span>
+          <span class="text-teal-600 font-semibold">Tamper-evident</span>
         </div>
-
       </div>
-
-      <!-- ================================================================= -->
-      <!-- COLUMN 2: FORENSIC NARRATIVE & PAYLOADS (4 cols)                 -->
-      <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-4">
-
-        <!-- Executive Findings Narrative -->
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-2.5">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <div class="flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="4 17 10 11 4 5"/>
-                <line x1="12" y1="19" x2="20" y2="19"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Incident Intelligence Dossier</h4>
-            </div>
-            <span class="text-[9px] font-mono text-emerald-400 font-semibold">● DETERMINISTIC</span>
-          </div>
-
-          <!-- 3 Structured Incident Intelligence Cards -->
-          <div class="space-y-2 font-mono text-[11px]" id="structuredNarrativeContainer">
-            
-            <div class="p-2.5 rounded bg-slate-950/80 border border-slate-800/70">
-              <span class="text-[9px] uppercase font-bold text-cyan-400 block mb-0.5">Threat Summary</span>
-              <p id="narrativeThreatSummary" class="text-slate-200 text-[11px] leading-relaxed">
-                Loading threat evaluation...
-              </p>
-            </div>
-
-            <div class="p-2.5 rounded bg-slate-950/80 border border-slate-800/70">
-              <span class="text-[9px] uppercase font-bold text-amber-400 block mb-0.5">Key Forensic Evidence</span>
-              <p id="narrativeEvidence" class="text-slate-300 text-[11px] leading-relaxed">
-                Loading evidence points...
-              </p>
-            </div>
-
-            <div class="p-2.5 rounded bg-slate-950/80 border border-slate-800/70">
-              <span class="text-[9px] uppercase font-bold text-emerald-400 block mb-0.5">Recommended SOC Containment</span>
-              <p id="narrativeAction" class="text-slate-300 text-[11px] leading-relaxed">
-                Loading recommended action...
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        <!-- Embedded Link Payload Detonation Card -->
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <div class="flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Dissected Payloads & Hyperlinks</h4>
-            </div>
-            <span id="linkCountBadge" class="px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-300">0 Links</span>
-          </div>
-
-          <!-- Link List -->
-          <div id="linksContainer" class="space-y-2.5 overflow-y-auto max-h-72 pr-1">
-            <!-- Dynamically populated via renderLinks() -->
-          </div>
-        </div>
-
-      </div>
-
-      <!-- ================================================================= -->
-      <!-- COLUMN 3: GEOLOCATION & TRANSMISSION ROUTE MAP (4 cols)           -->
-      <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-4">
-
-        <div class="bg-[#0e1424] rounded-lg border border-slate-800 p-4 space-y-3 flex flex-col h-full">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <div class="flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Hop Path & Origin Geo-Tracer</h4>
-            </div>
-            <span id="originCountryBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800/50">Unknown</span>
-          </div>
-
-          <!-- Origin IP Sub-banner -->
-          <div class="p-2.5 rounded bg-slate-950/80 border border-slate-800/80 flex items-center justify-between text-xs">
-            <div>
-              <span class="text-[9px] font-mono uppercase text-slate-500 block">Earliest Public Origin IP</span>
-              <span id="originIpText" class="text-xs font-mono font-bold text-white">0.0.0.0</span>
-            </div>
-            <div id="originProxyFlag" class="text-right">
-              <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-700/50">TOR / PROXY</span>
-              <span id="originIspText" class="block text-[9px] text-slate-400 font-mono truncate max-w-[140px]">Unknown ISP</span>
-            </div>
-          </div>
-
-          <!-- Leaflet Map Canvas (Dark OpenStreetMap) -->
-          <div id="map" class="h-60 w-full rounded-lg border border-slate-800 overflow-hidden shadow-inner relative z-10"></div>
-
-          <!-- Chronological Hop Path Accordion / List -->
-          <div class="space-y-1.5 flex-1 overflow-y-auto max-h-48 pr-1" id="hopsContainer">
-            <!-- Dynamically populated via renderHops() -->
-          </div>
-        </div>
-
-      </div>
-
     </section>
 
-  </main>
+    <!-- ================================================================= -->
+    <!-- TAB: TIMELINE (orange)                                            -->
+    <!-- ================================================================= -->
+    <section id="tab-timeline" class="tab-panel space-y-4">
+      <div id="timelineEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No timeline yet</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to reconstruct its relay sequence and this session's investigation timeline.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-orange-700 hover:text-orange-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="timelineContent" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h4 class="text-[13px] font-bold text-slate-900 mb-4">Incident reconstruction timeline</h4>
+        <div id="timelineContainer" class="relative border-l-2 border-slate-100 ml-2 space-y-6"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB: REPORT (indigo)                                              -->
+    <!-- ================================================================= -->
+    <section id="tab-report" class="tab-panel space-y-4">
+      <div id="reportEmpty" class="empty-state">
+        <svg class="w-10 h-10 text-slate-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        <h3 class="text-sm font-semibold text-slate-500">No report available</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm">Analyze an email to generate a court-admissible Section 63 (BSA) forensic dossier.</p>
+        <button type="button" onclick="switchTab('dashboard')" class="mt-3 text-xs font-semibold text-indigo-700 hover:text-indigo-800">Go to Dashboard &rarr;</button>
+      </div>
+      <div id="reportContent" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <h4 class="text-[13px] font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3">Report summary</h4>
+          <div class="ledger-row"><span class="ledger-label">Case ID</span><span id="reportCaseId" class="ledger-value font-mono font-bold">TSF-000000</span></div>
+          <div class="ledger-row"><span class="ledger-label">Verdict</span><span id="reportVerdictSummary" class="ledger-value font-semibold">&mdash;</span></div>
+          <div class="ledger-row"><span class="ledger-label">Fraud risk score</span><span id="reportScore" class="ledger-value font-mono font-bold">0 / 100</span></div>
+          <div class="ledger-row"><span class="ledger-label">Analyst</span><span class="ledger-value">Inv. TrustShield AI &middot; SOC Lead</span></div>
+          <div class="ledger-row"><span class="ledger-label">Generated</span><span id="reportGeneratedAt" class="ledger-value font-mono">&mdash;</span></div>
+          <div class="ledger-row"><span class="ledger-label">Legal standard</span><span class="ledger-value">Sec. 63, Bharatiya Sakshya Adhiniyam</span></div>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex flex-col">
+          <h4 class="text-[13px] font-bold text-slate-900 border-b border-slate-100 pb-2 mb-3">Report contents</h4>
+          <ul class="text-xs text-slate-600 space-y-2 flex-1">
+            <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Executive verdict &amp; risk score</li>
+            <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>RFC-5322 envelope &amp; protocol matrix</li>
+            <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Geolocation &amp; relay hop trace</li>
+            <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Payload &amp; sandbox detonation findings</li>
+            <li class="flex items-center gap-2"><svg class="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>SHA-256 chain-of-custody seal</li>
+          </ul>
+          <button type="button" id="exportPdfBtn" onclick="exportDossierPdf(event)" class="mt-4 w-full px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
+            <span>Export Section 63 (BSA) PDF</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <p class="pt-2 text-[10px] font-mono text-slate-400 text-center">TrustShield Forensic Intelligence Platform &mdash; Certified Court-Admissible Electronic Record (Sec. 63, Bharatiya Sakshya Adhiniyam) &mdash; Built for Smart India Hackathon 2026, Problem Statement SIH-106</p>
+
+    </main>
+  </div>
 
   <!-- ===================================================================== -->
-  <!-- 3. RAW RFC-822 HEADERS MODAL (Hidden by default)                     -->
+  <!-- RAW HEADERS MODAL                                                    -->
   <!-- ===================================================================== -->
-  <div id="rawHeadersModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-[#0e1424] rounded-xl border border-slate-700 max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-      <!-- Modal Header -->
-      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900">
-        <div class="flex items-center space-x-2">
-          <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-white">Raw RFC-822 Email Headers</h3>
+  <div id="rawHeadersModal" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-slate-200 max-w-4xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <h3 class="text-[13px] font-bold text-slate-900">Raw RFC-822 email headers</h3>
         </div>
-        <div class="flex items-center space-x-2">
-          <button type="button" onclick="copyRawHeaders(event)" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[11px] font-mono flex items-center space-x-1 border border-slate-700 cursor-pointer">
-            <span>Copy Headers</span>
-          </button>
-          <button type="button" onclick="closeRawHeadersModal(event)" class="text-slate-400 hover:text-white p-1 cursor-pointer">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="copyRawHeaders(event)" class="px-2.5 py-1 rounded-md bg-white hover:bg-slate-100 text-blue-700 text-[11px] font-mono flex items-center gap-1 border border-slate-300 cursor-pointer"><span>Copy headers</span></button>
+          <button type="button" onclick="closeRawHeadersModal(event)" class="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       </div>
-      <!-- Modal Body -->
-      <div class="p-4 overflow-y-auto font-mono text-[11px] text-slate-300 bg-black/90 select-text whitespace-pre-wrap leading-relaxed flex-1" id="rawHeadersText">
-        Loading headers...
-      </div>
+      <div class="p-4 overflow-y-auto font-mono text-[11px] text-slate-700 bg-slate-50 select-text whitespace-pre-wrap leading-relaxed flex-1" id="rawHeadersText">Loading headers...</div>
     </div>
   </div>
 
   <!-- ===================================================================== -->
-  <!-- 3.5. LIVE ATTACK INJECTION STUDIO MODAL (Live Telemetry & EML Crafter) -->
+  <!-- LIVE ATTACK INJECTION STUDIO MODAL                                   -->
   <!-- ===================================================================== -->
-  <div id="attackStudioModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="bg-[#0e1424] rounded-2xl border border-rose-600/60 max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden glow-red">
-      
-      <!-- Modal Header -->
-      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-[#131b2d] to-slate-900">
-        <div class="flex items-center space-x-2.5">
-          <div class="w-6 h-6 rounded bg-rose-950 border border-rose-600/60 flex items-center justify-center">
-            <svg class="w-3.5 h-3.5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
+  <div id="attackStudioModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl border border-red-200 max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-red-50 via-white to-amber-50">
+        <div class="flex items-center gap-2.5">
+          <div class="w-6 h-6 rounded-md bg-red-100 border border-red-200 flex items-center justify-center">
+            <svg class="w-3.5 h-3.5 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           </div>
           <div>
-            <h3 class="text-xs font-bold font-mono uppercase tracking-wider text-white">Live Threat Actor Injection Studio</h3>
-            <p class="text-[10px] text-slate-400 font-mono">Dynamic RFC-5322 Attack Packet Generator // Non-Hardcoded Network Prover</p>
+            <h3 class="text-[13px] font-bold text-slate-900">Live threat actor injection studio</h3>
+            <p class="text-[10px] text-slate-400 font-mono">Dynamic RFC-5322 attack packet generator // non-hardcoded network prover</p>
           </div>
         </div>
-        <button type="button" onclick="closeAttackStudioModal(event)" class="text-slate-400 hover:text-white p-1 cursor-pointer">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+        <button type="button" onclick="closeAttackStudioModal(event)" class="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
-      <!-- Modal Body -->
-      <div class="p-5 space-y-4 overflow-y-auto font-sans text-xs">
-        
-        <!-- Live Internet Gateway Telemetry Card (Proof of No Hardcoding) -->
-        <div class="p-3.5 rounded-xl bg-slate-950 border border-cyan-800/60 space-y-2">
+      <div class="p-5 space-y-4 overflow-y-auto text-xs">
+        <div class="p-3.5 rounded-xl bg-slate-900 space-y-2">
           <div class="flex items-center justify-between text-[11px] font-mono">
-            <span class="text-cyan-400 font-bold flex items-center space-x-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>LIVE ACTIVE MACHINE TELEMETRY</span>
-            </span>
-            <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-              REAL-TIME INTERNET PROBE
-            </span>
+            <span class="text-fuchsia-400 font-bold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>LIVE MACHINE TELEMETRY</span></span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-fuchsia-500/10 text-fuchsia-300 border border-fuchsia-500/30">REAL-TIME PROBE</span>
           </div>
-
           <div class="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1">
-            <div class="p-2 rounded bg-[#0e1424] border border-slate-800">
-              <span class="text-[9px] uppercase text-slate-500 block">External Public IP</span>
-              <span id="studioLiveIp" class="text-white font-bold text-xs">Querying gateway...</span>
-            </div>
-            <div class="p-2 rounded bg-[#0e1424] border border-slate-800">
-              <span class="text-[9px] uppercase text-slate-500 block">Physical Location</span>
-              <span id="studioLiveCity" class="text-cyan-300 font-bold">Querying location...</span>
-            </div>
-            <div class="p-2 rounded bg-[#0e1424] border border-slate-800">
-              <span class="text-[9px] uppercase text-slate-500 block">Internet Service Provider (ISP)</span>
-              <span id="studioLiveIsp" class="text-slate-300 truncate block">Querying ISP...</span>
-            </div>
-            <div class="p-2 rounded bg-[#0e1424] border border-slate-800">
-              <span class="text-[9px] uppercase text-slate-500 block">Autonomous System (ASN)</span>
-              <span id="studioLiveAsn" class="text-slate-400 truncate block">Querying routing...</span>
-            </div>
+            <div class="p-2 rounded bg-white/5 border border-white/10"><span class="text-[9px] uppercase text-slate-400 block">External public IP</span><span id="studioLiveIp" class="text-white font-bold text-xs">Querying gateway...</span></div>
+            <div class="p-2 rounded bg-white/5 border border-white/10"><span class="text-[9px] uppercase text-slate-400 block">Physical location</span><span id="studioLiveCity" class="text-fuchsia-300 font-bold">Querying location...</span></div>
+            <div class="p-2 rounded bg-white/5 border border-white/10"><span class="text-[9px] uppercase text-slate-400 block">Internet Service Provider</span><span id="studioLiveIsp" class="text-slate-300 truncate block">Querying ISP...</span></div>
+            <div class="p-2 rounded bg-white/5 border border-white/10"><span class="text-[9px] uppercase text-slate-400 block">Autonomous System (ASN)</span><span id="studioLiveAsn" class="text-slate-400 truncate block">Querying routing...</span></div>
           </div>
-          <p class="text-[10px] text-slate-400 font-mono italic">
-            * This IP and city are queried live from your active outbound network connection. If your friend in Tirupur runs this, it will automatically resolve to Tirupur.
-          </p>
+          <p class="text-[10px] text-slate-400 font-mono italic">This IP and city are queried live from your active outbound network connection.</p>
         </div>
 
-        <!-- Attack Packet Parameters Form -->
         <div class="space-y-3 font-mono text-[11px]">
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[10px] text-slate-400 uppercase mb-1">Spoofed Visible Header (From:)</label>
-              <input type="text" id="studioFrom" value='"Executive Security Alert" &lt;security@paypal-verification.top&gt;' class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-400 uppercase mb-1">Envelope Return-Path (Sender IP Alignment)</label>
-              <input type="text" id="studioReturnPath" value="scammer-drop@external-spoof.biz" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none" />
-            </div>
+            <div><label class="block text-[10px] text-slate-500 mb-1">Spoofed visible header (From:)</label><input type="text" id="studioFrom" value='"Executive Security Alert" &lt;security@paypal-verification.top&gt;' class="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-700 text-xs focus:border-fuchsia-500 focus:outline-none" /></div>
+            <div><label class="block text-[10px] text-slate-500 mb-1">Envelope Return-Path (sender IP alignment)</label><input type="text" id="studioReturnPath" value="scammer-drop@external-spoof.biz" class="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-700 text-xs focus:border-fuchsia-500 focus:outline-none" /></div>
           </div>
-
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-[10px] text-slate-400 uppercase mb-1">Target Recipient (To:)</label>
-              <input type="text" id="studioTo" value="victim.executive@company.com" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none" />
-            </div>
-            <div>
-              <label class="block text-[10px] text-slate-400 uppercase mb-1">BEC Spoofed Divert (Reply-To:)</label>
-              <input type="text" id="studioReplyTo" value="fraudster-collect@unauthorized-mailbox.net" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-red-300 text-xs focus:border-red-500 focus:outline-none" />
-            </div>
+            <div><label class="block text-[10px] text-slate-500 mb-1">Target recipient (To:)</label><input type="text" id="studioTo" value="victim.executive@company.com" class="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-700 text-xs focus:border-fuchsia-500 focus:outline-none" /></div>
+            <div><label class="block text-[10px] text-slate-500 mb-1">BEC spoofed divert (Reply-To:)</label><input type="text" id="studioReplyTo" value="fraudster-collect@unauthorized-mailbox.net" class="w-full bg-red-50 border border-red-200 rounded px-2.5 py-1.5 text-red-700 text-xs focus:border-red-500 focus:outline-none" /></div>
           </div>
-
-          <div>
-            <label class="block text-[10px] text-slate-400 uppercase mb-1">Phishing Attack Subject</label>
-            <input type="text" id="studioSubject" value="URGENT: Unauthorized Wire Transfer Detected - Verify Identity" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-200 text-xs focus:border-cyan-500 focus:outline-none" />
-          </div>
-
-          <div>
-            <label class="block text-[10px] text-slate-400 uppercase mb-1">Embedded Threat Payload URL</label>
-            <input type="text" id="studioUrl" value="https://linked1n.vercel.app/" class="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-amber-300 text-xs focus:border-amber-500 focus:outline-none" />
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Modal Footer Action Buttons -->
-      <div class="px-5 py-3.5 border-t border-slate-800 bg-[#0a0f1d] flex flex-wrap items-center justify-between gap-3">
-        <span class="text-[10px] font-mono text-slate-400">
-          RFC-5322 MIME Envelope + Sec 65B Certified
-        </span>
-        <div class="flex items-center space-x-2">
-          <button type="button" onclick="downloadStudioLiveEml(event)" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold flex items-center space-x-1.5 border border-slate-700 cursor-pointer transition-all">
-            <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Download Live .eml</span>
-          </button>
-
-          <button type="button" onclick="executeLiveStudioInjection(event)" class="px-4 py-2 rounded-lg bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-mono font-bold uppercase shadow-lg shadow-red-600/30 flex items-center space-x-1.5 cursor-pointer transition-all hover:scale-[1.02]">
-            <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>⚡ Inject & Analyze Now</span>
-          </button>
+          <div><label class="block text-[10px] text-slate-500 mb-1">Phishing attack subject</label><input type="text" id="studioSubject" value="URGENT: Unauthorized Wire Transfer Detected - Verify Identity" class="w-full bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-slate-700 text-xs focus:border-fuchsia-500 focus:outline-none" /></div>
+          <div><label class="block text-[10px] text-slate-500 mb-1">Embedded threat payload URL</label><input type="text" id="studioUrl" value="https://linked1n.vercel.app/" class="w-full bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5 text-amber-700 text-xs focus:border-amber-500 focus:outline-none" /></div>
         </div>
       </div>
 
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
+        <span class="text-[10px] font-mono text-slate-400">RFC-5322 MIME envelope + Sec. 63 (BSA) certified</span>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="downloadStudioLiveEml(event)" class="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-700 text-xs font-mono font-semibold flex items-center gap-1.5 border border-slate-300 cursor-pointer transition-all"><svg class="w-3.5 h-3.5 text-fuchsia-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Download live .eml</span></button>
+          <button type="button" onclick="executeLiveStudioInjection(event)" class="px-4 py-2 rounded-lg bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white text-xs font-mono font-bold uppercase shadow-sm flex items-center gap-1.5 cursor-pointer transition-all"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Inject &amp; analyze now</span></button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- ===================================================================== -->
-  <!-- 4. FOOTER                                                            -->
-  <!-- ===================================================================== -->
-  <footer class="mt-auto border-t border-slate-800/80 bg-[#090d16] py-3 text-center text-[11px] font-mono text-slate-500">
-    <p>TrustShield V2 Forensic Engineering // Certified Court-Admissible Electronic Record (Sec 65B Indian Evidence Act)</p>
-  </footer>
-
-  <!-- Script Controller -->
   <script src="app.js"></script>
 </body>
 </html>

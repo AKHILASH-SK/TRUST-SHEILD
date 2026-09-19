@@ -18,6 +18,24 @@ DEFAULT_TIMEOUT = 3.0
 # Simple in-memory cache to prevent redundant lookups and respect rate limits
 _GEO_CACHE: Dict[str, Dict[str, Any]] = {}
 
+# Free IP-intelligence APIs flag entire cloud/hosting ASN ranges as "proxy" even
+# when the IP is a legitimate provider's own outbound mail server (e.g. Gmail's
+# sending IPs sit in Google's own datacenter ASN, which trips the generic
+# "hosting = possible proxy" heuristic). Without this allowlist, any email routed
+# through a major provider gets mislabeled as anonymized/Tor infrastructure.
+_KNOWN_LEGITIMATE_MAIL_PROVIDERS = (
+    "google", "microsoft", "outlook", "amazon", "yahoo",
+    "zoho", "mailgun", "sendgrid", "proofpoint", "mimecast",
+)
+
+
+def _is_known_legitimate_mail_provider(isp: str, asn: str) -> bool:
+    """True if the ISP/ASN string matches a well-known legitimate mail provider,
+    so a raw 'proxy'/'hosting' flag from a free geo-IP API shouldn't be trusted
+    as evidence of anonymized/Tor infrastructure."""
+    haystack = f"{isp or ''} {asn or ''}".lower()
+    return any(name in haystack for name in _KNOWN_LEGITIMATE_MAIL_PROVIDERS)
+
 
 def is_rfc1918_or_private(ip_str: str) -> bool:
     """Checks if an IP is private, loopback, or reserved."""
@@ -88,16 +106,21 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT) -> Di
         if response.status_code == 200:
             data = response.json()
             if data.get("status") == "success":
+                isp_name = data.get("isp") or "Unknown"
+                asn_name = data.get("as") or "Unknown"
                 is_proxy = bool(data.get("proxy", False))
                 is_hosting = bool(data.get("hosting", False))
+                if is_proxy and _is_known_legitimate_mail_provider(isp_name, asn_name):
+                    logger.info(f"Overriding proxy flag for {clean_ip}: matches known mail provider '{isp_name}'")
+                    is_proxy = False
                 result = {
                     "ip": clean_ip,
                     "city": data.get("city") or "Unknown",
                     "country": data.get("country") or "Unknown",
                     "lat": float(data.get("lat", 0.0)),
                     "lon": float(data.get("lon", 0.0)),
-                    "isp": data.get("isp") or "Unknown",
-                    "asn": data.get("as") or "Unknown",
+                    "isp": isp_name,
+                    "asn": asn_name,
                     "is_suspicious_proxy": is_proxy,
                     "is_proxy": is_proxy,
                     "is_hosting": is_hosting,

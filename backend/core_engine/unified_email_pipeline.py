@@ -22,7 +22,9 @@ def classify_threat_attribution(
     auth_data: Dict[str, Any],
     origin_data: Dict[str, Any],
     metadata: Dict[str, Any],
-    mx_data: Dict[str, Any]
+    mx_data: Dict[str, Any],
+    max_link_score: float = 0.0,
+    overall_threat_score: float = 0.0
 ) -> Dict[str, str]:
     """
     Classifies the incident into an explicit threat actor attribution category based on SIH 106 criteria.
@@ -31,7 +33,15 @@ def classify_threat_attribution(
       2. SPOOFED_IDENTITY_UNAUTHENTICATED: Sender identity forged; fails DNS authorization (SPF & DMARC fail).
       3. COMPROMISED_LEGITIMATE_ACCOUNT: BEC tactic detected: Reply-To routes to external infrastructure while SPF passed.
       4. DIRECT_MALICIOUS_MTA: Sender domain lacks MX infrastructure; burner/throwaway domain.
-      5. BENIGN_AUTHENTICATED: Email routed normally.
+      5. MALICIOUS_PAYLOAD_AUTHENTICATED_CHANNEL: envelope/identity checks are clean, but the message
+         carries a confirmed malicious payload (e.g. a compromised account or abused free-hosting link).
+      6. BENIGN_AUTHENTICATED: Email routed normally, no malicious indicators found anywhere.
+
+    max_link_score / overall_threat_score are passed in so this function can never emit a
+    reassuring attribution (BENIGN_AUTHENTICATED) for an email the fusion engine has already
+    scored as critical — that self-contradiction (e.g. "100/100 CRITICAL" next to "benign,
+    routed normally") is exactly the kind of inconsistency that undermines a forensic tool's
+    credibility, so it's treated as a hard invariant rather than left to chance.
     """
     if origin_data.get("is_anonymized_node") is True:
         return {
@@ -59,6 +69,18 @@ def classify_threat_attribution(
             "type": "DIRECT_MALICIOUS_MTA",
             "confidence": "HIGH",
             "details": "Sender domain lacks MX infrastructure; burner/throwaway domain."
+        }
+
+    # Envelope/identity/infrastructure all look clean — but if the sandbox confirmed a
+    # dangerous payload (or the fused score is elevated for any other reason), a "benign"
+    # label would contradict the verdict. Attribute it to the channel being abused instead.
+    if max_link_score >= 70.0 or overall_threat_score >= 50.0:
+        return {
+            "type": "MALICIOUS_PAYLOAD_AUTHENTICATED_CHANNEL",
+            "confidence": "MEDIUM_HIGH" if max_link_score >= 70.0 else "MEDIUM",
+            "details": "Sender infrastructure passes authentication, but the message carries a "
+                       "confirmed malicious payload — indicates likely account compromise or "
+                       "abuse of legitimate third-party hosting."
         }
 
     return {
@@ -315,7 +337,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         auth_data=auth,
         origin_data=origin_intelligence,
         metadata=metadata,
-        mx_data=mx_data
+        mx_data=mx_data,
+        max_link_score=max_link_score,
+        overall_threat_score=overall_threat_score
     )
 
     # =========================================================================

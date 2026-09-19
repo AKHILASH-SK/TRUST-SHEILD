@@ -432,7 +432,8 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
     # Sign-off footer
     footer_text = Paragraph(
         "<i>This technical dossier was automatically assembled and cryptographically hashed by TrustShield V2 SIH-106 "
-        "Autonomous Forensics Engine. Certified court-admissible electronic record under Section 65B of the Indian Evidence Act.</i>",
+        "Autonomous Forensics Engine. Certified court-admissible electronic record under Section 63 of the Bharatiya Sakshya "
+        "Adhiniyam, 2023 (successor to Section 65B, Indian Evidence Act, 1872).</i>",
         subtitle_style
     )
     story.append(footer_text)
