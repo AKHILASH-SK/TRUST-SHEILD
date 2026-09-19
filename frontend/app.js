@@ -832,7 +832,8 @@ function renderMetadataAndAuth(data) {
   setText('metaDate', meta.date || 'Unknown');
 
   const originIntel = data.origin_intelligence || {};
-  setText('metaHops', `${originIntel.total_hops || 0} intermediate relay hops`);
+  const hops = originIntel.route_map || [];
+  setText('metaHops', `${hops.length} intermediate relay hops`);
 
   // Protocol Badges (SPF, DKIM, DMARC, MX)
   const setProtocol = (badgeId, detailsId, passed, detailsText, passLabel = 'PASS', failLabel = 'FAIL') => {
