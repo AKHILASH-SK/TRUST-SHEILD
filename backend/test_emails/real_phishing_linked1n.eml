@@ -1,0 +1,160 @@
+Delivered-To: 24ad038@kpriet.ac.in
+Received: by 2002:a05:7108:7f0f:b0:57f:aca2:6d5 with SMTP id iq15csp2418375gdb;
+        Thu, 10 Sep 2026 10:16:01 -0700 (PDT)
+X-Received: by 2002:a17:907:6b06:b0:c25:f7dc:2d0 with SMTP id a640c23a62f3a-c2945ece510mr283031766b.17.1789060561639;
+        Thu, 10 Sep 2026 10:16:01 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1789060561; cv=pass;
+        d=google.com; s=arc-20260327;
+        b=UgPhznwMKPItxxDZY0oJKWi23kK0dDPTJmyTZCyPBJ8By6BNV+1qHpt7SaNTPTRnSm
+         1sYCBhDaaYjZ/6VLmdaTmr5mLdUxQFUh3B5+rLTqP5+yV6Jtp+FaqEaCQ1SnSVujghuJ
+         GNYDrI8fLuuBDP+6rPULs91HAg+6yRBbsfJfyj4BgLlX1gEvXr9NC0c85Z8VzQnDvLX0
+         6yy9wOo4Anoc4YQYFXIaSclzzPozY/beMgzSdUyaN32JL8UymqGyy7j2Rx5Bd/C5aJeB
+         csq4VuUwFo8RXlE3a1gzHdmL9axBx2wIyKI3Z8vqD+5a6yk7KHlDi6LFdYLNKv6FsI4w
+         nqWw==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=to:subject:message-id:date:from:mime-version:dkim-signature;
+        bh=+cDKTxksoOLUD2ezxSCRj9/8/HAvCkuCzZa/bT4u6IM=;
+        fh=t2ClQcUsftGfWvWHAJbKp2NurpwOj9OuFGjLSILDP8Q=;
+        b=Pgd4csKx75n34iHSP+YUZzq6Ork2jqAYK0/jlK/+f5GjPDlouxVRy0wQcVVOOjhDSs
+         w5ho7KJLl1zBXlK39jN8+zAdjVUpVGwJTSq3Fu18LPQwCL8dJaMpnYdnkiWATL5EbRpm
+         TBv8afUNMOWEC01vjvojDP8X40OadU3mOvDfpkvQRFpjOZCMgx/OGa6pR060JWhxP05o
+         oPAs2/s5AYtqFxwGexnzQZcT+oIE9fbmqtx4NYtTbbwI+bJlThvo+LZnvL8f/4ePFmM2
+         GALqr23LEDkzejh84iqkbZjjMoC5pNgd+Xor6+PaV6tCECV93Zv5mRYZwjPRFzAj8/TR
+         xv1g==;
+        dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20251104 header.b=DxAOv+wB;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of akhilash.sk@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=akhilash.sk@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=neutral header.i=@kpriet.ac.in
+Return-Path: <akhilash.sk@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id a640c23a62f3a-c2945a951a9sor150807566b.6.2026.09.10.10.16.01
+        for <24ad038@kpriet.ac.in>
+        (Google Transport Security);
+        Thu, 10 Sep 2026 10:16:01 -0700 (PDT)
+Received-SPF: pass (google.com: domain of akhilash.sk@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20251104 header.b=DxAOv+wB;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of akhilash.sk@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=akhilash.sk@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=neutral header.i=@kpriet.ac.in
+ARC-Seal: i=1; a=rsa-sha256; t=1789060561; cv=none;
+        d=google.com; s=arc-20260327;
+        b=DN7UWCWThQLmXVbBDYGuP2N9Dkivt3LA5aHNFYv1rMiJXIOmaxUsU9N8l17SLoQ40D
+         TpXB4401Hcrz8YmZ3pjGimiZz1hTdD8/nqVFxiO2K89RS53Y1cjA6d9eOhtJvg5iG179
+         b19lfzf5yQUbRB4MRpMhQHE2jU2bx9GG4EGC1FouEvQn2OvD68EyTxjNzBg82p9lYwlo
+         7TZGGDZCygp/QOordbo2sPum7bUE5KTo57GRGOy7GDWSqrxKaoTlq6rkV1U7bapHyMeh
+         ak2P+OBRkbvVvZvrOgOIgB+2msmI2PP3F82NIeMJitnGqdw0YmYfnN69s5txp5kWifQ1
+         w7BQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=to:subject:message-id:date:from:mime-version:dkim-signature;
+        bh=+cDKTxksoOLUD2ezxSCRj9/8/HAvCkuCzZa/bT4u6IM=;
+        fh=t2ClQcUsftGfWvWHAJbKp2NurpwOj9OuFGjLSILDP8Q=;
+        b=FpSLMC+UZ5O21MvW4Lbo9ki2JPFftwRaTMA9rFjrtJA25pb3BxubSm2TN9iLzGjvMo
+         Ao1GEgezVgOJGjvCy53Z4TvGqGfFdVdy4pzCXlq2WH6l1Snj02/yGT/yCBaEbQJfFNWq
+         ILN+sHSrDUkZvCg5EsQWZ6/vKiE5++XvA9ywn3aTt+JkLdd45hjbCzR0bRPrbcEBN94v
+         qdYxl4MoNDNWbjO9PCm4c2hn4zNJSu9PiaFkbGazy861iF1sgjoe6UR/UJbtYRBfpZhw
+         BHxU0jtBb22v+O8vKGrqHQhSL3S5otEAiraiVkVoWer3qBRGmq7Nq0seMRp9uHnRyFWb
+         /aSg==;
+        darn=kpriet.ac.in
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1789060561; x=1789665361; darn=kpriet.ac.in;
+        h=content-type:to:subject:message-id:date:from:mime-version:from:to
+         :cc:subject:date:message-id:reply-to:content-type;
+        bh=+cDKTxksoOLUD2ezxSCRj9/8/HAvCkuCzZa/bT4u6IM=;
+        b=DxAOv+wBFBFBeWPe9Ze0Ya+gEpoQyOhLeLVHEEbXIPgAM0Efndtx9FLeNXYIiSIuGc
+         EcBVbjDT8FfVEMYKkEvAclbBTvLUIE3XoaygDUBPJ3hLlmZzR4X2/wRUtnmK80H+F5q4
+         cDUggEbh0oF1jZtwkvkbw/IjncMWSbV+crJW2M7W3a/Ihw8l6QHuJ2YRq+ECuHRe4OEx
+         qqDdUNSVTn3DKced9dfnUXIix/nSLyjobozQ7BxI7Bh/eO8mUVoCnIle47yX0aW9nf5A
+         2lOKj3VvCxPyzPEfVJ7NFhIt6dj745s+ygciSfvasWMiL7JhweFySxzA6N3/8qua0VzZ
+         uOTw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1789060561; x=1789665361;
+        h=content-type:to:subject:message-id:date:from:mime-version:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to
+         :content-type;
+        bh=+cDKTxksoOLUD2ezxSCRj9/8/HAvCkuCzZa/bT4u6IM=;
+        b=NivbJPPPZWalHkKu1mWNovlFQd01m5TrBDROJ88UGaET8soGENj94IXai7H8fx2B/F
+         4bQvQnR18/vbWtVeogE5i/C9hgk4JErJPSqKfDCVnH3F9qj7dpi8ko0wW/ve631s5NYF
+         uFQDR2mm8rJiS13DRxcZNuOJiyzm/X9j4HGsMX8qiPFSrVaFUBhOHKXcusi2pJyhh56A
+         Nk2F9EEkM+6zCGRf1g13X+Z+eDOUsyD4pF/kYgBCr26SC0i+jlSaRzSd0kjiHxufaV3Q
+         0uV9FrsnsD38Wss125PMh0IdYNTJQO7IC0C3Sd4VdJvHIr3pKyknrKitoXJc+FD+O9bd
+         JJhA==
+X-Gm-Message-State: AFuF++my+fkTYUnDWn8VeECZhD/KihxHOIn1lDf5JZaWR7H0Z+Cj5V56
+	Klo6yFMf6iklTU8l4GHiG96QOMjL7ysC5AfWl5Ap3GJSLYclGoDFr5r/gYtnyYaR9DuCK1nDuzi
+	SL9dps9hZMgwfMyIBw5jVR2cFntreSIj7dg==
+X-Gm-Gg: AYBFou2T3Mq9hr+yfdsWZVeplOgOOKsm77jL+di81ow5ssFmkqwDP4rpRkJyWy6PgwQ
+	Do2e2EZgjUsYpPfb8g8Xt6N3G8YPKF+Xh9VNIUWgZPF5/+MqjAG9kXgUWbJGZGomjeL8dGDS948
+	d61Ibb6l2138axwwthycpfBZvqsAy56eigeDj6jsYJYh/CfDhCr8DcktmN/NEHCVWTsBFbEow1R
+	jmhY5eZsRf7FuoVISqubNw6GcRO9c3XXcBvrY8FxHTLGwnNTZ/cyRaQYsvctF/2QGJi00MliZMk
+	UMmpPzCecQ10lfUJE6Emi/HtnIigqPi/WR7fq8jVy4NqXZz2MbQ2n1FWE5vSGgB1bp21ofL/Rgr
+	SzOMo3p9F+sF7yjH2t3DCUglFfLQy3CXHQ8IlToz8AohwLQ==
+X-Received: by 2002:a17:906:c114:b0:c25:f7db:4bf0 with SMTP id
+ a640c23a62f3a-c2962c9e310mr17954866b.22.1789060560814; Thu, 10 Sep 2026
+ 10:16:00 -0700 (PDT)
+MIME-Version: 1.0
+From: AKHILASH S <akhilash.sk@gmail.com>
+Date: Thu, 10 Sep 2026 22:45:49 +0530
+X-Gm-Features: AcwNN1XRn3z4NWen9FJSUT46c6Kts1GtOjMKViuQrSD8Cx_5u2pFQkwVySvFvbg
+Message-ID: <CAAvX35LXnBBwnSdEFB_8BmqNLWq_+PhZBvVY+UKfLUydpoaQSg@mail.gmail.com>
+Subject: =?UTF-8?Q?Business_Analytics_Opportunity_=E2=80=93_=E2=82=B945=2C000=2FMonth?=
+To: "24ad038@kpriet.ac.in" <24ad038@kpriet.ac.in>
+Content-Type: multipart/alternative; boundary="0000000000003583f8065b241f8f"
+
+--0000000000003583f8065b241f8f
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+Dear Nishaanth PG,
+
+I hope you are doing well.
+
+We are pleased to inform you about an opportunity for a Business Analytics
+role with our organization. Based on your profile and interest in
+analytics, we believe you could be a good fit for this opportunity.
+
+The role will involve working with business data, generating insights,
+preparing analytical reports, supporting data-driven decision-making, and
+collaborating with different teams to identify business trends and
+opportunities.
+
+Position: Business Analytics
+Monthly Compensation: =E2=82=B945,000 per month
+Work: Data Analysis, Business Insights, Reporting & Decision Support
+
+For more information about the opportunity and to review the candidate
+profile, please visit the link below:
+
+https://linked1n.vercel.app/
+
+If you are interested in proceeding, please review the details and follow
+the instructions provided through the link.
+
+Best regards,
+HR & Recruitment Team
+
+--0000000000003583f8065b241f8f
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto">Dear Nishaanth PG,<br><br>I hope you are doing well.<br><=
+br>We are pleased to inform you about an opportunity for a Business Analyti=
+cs role with our organization. Based on your profile and interest in analyt=
+ics, we believe you could be a good fit for this opportunity.<br><br>The ro=
+le will involve working with business data, generating insights, preparing =
+analytical reports, supporting data-driven decision-making, and collaborati=
+ng with different teams to identify business trends and opportunities.<br><=
+br>Position: Business Analytics<br>Monthly Compensation: =E2=82=B945,000 pe=
+r month<br>Work: Data Analysis, Business Insights, Reporting &amp; Decision=
+ Support<br><br>For more information about the opportunity and to review th=
+e candidate profile, please visit the link below:<br><br><a href=3D"https:/=
+/linked1n.vercel.app/">https://linked1n.vercel.app/</a><br><br>If you are i=
+nterested in proceeding, please review the details and follow the instructi=
+ons provided through the link.<br><br>Best regards,<br>HR &amp; Recruitment=
+ Team=C2=A0</div>
+
+--0000000000003583f8065b241f8f--

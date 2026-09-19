@@ -15,6 +15,7 @@ import re
 from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse
 
+import html
 from bs4 import BeautifulSoup
 import dns.resolver
 import dkim
@@ -341,17 +342,21 @@ def extract_payload_and_links(msg: email.message.EmailMessage) -> Tuple[str, Lis
                 html_text = soup.get_text(separator=' ', strip=True)
                 body_text_parts.append(html_text)
 
-                # Extract all <a href="..."> links
+                # Extract all <a href="..."> links (unescape HTML entities like &amp;)
                 for a_tag in soup.find_all('a', href=True):
-                    href = a_tag['href'].strip()
+                    href = html.unescape(a_tag['href'].strip())
                     if href.startswith(("http://", "https://")):
                         extracted_urls.append(href)
                         
                 # Also check form actions
                 for form in soup.find_all('form', action=True):
-                    action = form['action'].strip()
+                    action = html.unescape(form['action'].strip())
                     if action.startswith(("http://", "https://")):
                         extracted_urls.append(action)
+
+                # Extract bare URLs present within HTML text/decoded content
+                raw_html_urls = URL_REGEX.findall(decoded_text)
+                extracted_urls.extend([html.unescape(u) for u in raw_html_urls])
 
         except Exception as e:
             logger.debug(f"Error extracting part payload: {e}")
@@ -362,7 +367,7 @@ def extract_payload_and_links(msg: email.message.EmailMessage) -> Tuple[str, Lis
     seen = set()
     for url in extracted_urls:
         # Strip trailing punctuation often caught in plain text
-        cleaned = re.sub(r'[\s,;:?!\.\>\)\]]+$', '', url.strip())
+        cleaned = re.sub(r'[\s,;:?!\.\>\)\]"\']+$', '', url.strip())
         if cleaned and cleaned not in seen:
             seen.add(cleaned)
             clean_urls.append(cleaned)
@@ -411,6 +416,18 @@ def parse_email_file(file_bytes: bytes) -> Dict[str, Any]:
     spf_pass, spf_details = audit_spf(return_path_domain, originating_ip)
     dkim_pass, dkim_details = audit_dkim(file_bytes)
     dmarc_pass, dmarc_details = audit_dmarc(from_domain, return_path_domain, spf_pass, dkim_pass)
+
+    # Ingest gateway Authentication-Results / ARC headers if present (Standard in real-world downloaded emails)
+    auth_headers = (str(msg.get("Authentication-Results", "")) + " " + str(msg.get("ARC-Authentication-Results", ""))).lower()
+    if not spf_pass and "spf=pass" in auth_headers:
+        spf_pass = True
+        spf_details = "SPF verified pass via receiving gateway Authentication-Results"
+    if not dkim_pass and "dkim=pass" in auth_headers:
+        dkim_pass = True
+        dkim_details = "DKIM verified pass via receiving gateway Authentication-Results"
+    if not dmarc_pass and ("dmarc=pass" in auth_headers or (spf_pass and dkim_pass)):
+        dmarc_pass = True
+        dmarc_details = "DMARC verified pass via receiving gateway Authentication-Results"
 
     # Feature 4: Payload Body & Link Extraction
     body_text, extracted_links = extract_payload_and_links(msg)

@@ -80,6 +80,96 @@ def generate_synthetic_phishing_eml() -> bytes:
     return raw_eml.encode("utf-8")
 
 
+def generate_synthetic_bec_eml() -> bytes:
+    """
+    Constructs a synthetic Business Email Compromise (BEC) / Executive Spoofing email:
+    - From: "CEO Office" <ceo@corporate-execs.com>
+    - Reply-To: fraud-disbursements@external-offshore.biz (Spoofing mismatch!)
+    - Subject: Urgent & Confidential Wire Transfer - Vendor Acquisition
+    - Body: Social engineering pressure requesting immediate wire payment.
+    """
+    raw_eml = (
+        "Delivered-To: controller@company.com\r\n"
+        "Received: from mx.internal.company.com (mx.internal.company.com [10.0.2.15])\r\n"
+        "\tby mailbox.company.com (Postfix) with ESMTP id 5Y8E7D22;\r\n"
+        "\tTue, 8 Sep 2026 10:14:02 +0000 (UTC)\r\n"
+        "Received: from mail-relay.corporate-execs.com (unknown [198.51.100.45])\r\n"
+        "\tby mx.internal.company.com with ESMTP id 2C7B4D11;\r\n"
+        "\tTue, 8 Sep 2026 10:13:58 +0000 (UTC)\r\n"
+        "Return-Path: <spoofed-exec@corporate-execs.com>\r\n"
+        "From: \"Chief Executive Officer\" <ceo@corporate-execs.com>\r\n"
+        "To: controller@company.com\r\n"
+        "Subject: URGENT & CONFIDENTIAL: Wire Transfer Request - Project Apex Closeout\r\n"
+        "Date: Tue, 8 Sep 2026 10:13:55 +0000\r\n"
+        "Message-ID: <20260908101355.CEO789@corporate-execs.com>\r\n"
+        "Reply-To: fraud-disbursements@external-offshore.biz\r\n"
+        "MIME-Version: 1.0\r\n"
+        "Content-Type: text/plain; charset=UTF-8\r\n"
+        "\r\n"
+        "Hi Alex,\r\n"
+        "\r\n"
+        "I am in a closed-door acquisition meeting and cannot take calls right now.\r\n"
+        "We need to finalize the confidential retainer payment of $48,200.00 today to secure the closing terms.\r\n"
+        "Please confirm you are at your desk so I can send the updated routing instructions.\r\n"
+        "Process this immediately and reply directly to this email.\r\n"
+        "\r\n"
+        "Best regards,\r\n"
+        "Chief Executive Officer\r\n"
+    )
+    return raw_eml.encode("utf-8")
+
+
+def generate_synthetic_legitimate_eml() -> bytes:
+    """
+    Constructs a synthetic legitimate internal corporate communication:
+    - From: "Engineering Operations" <devops@company.com>
+    - Return-Path: <devops@company.com>
+    - Reply-To: devops@company.com
+    - Link to trusted internal corporate documentation (company.com)
+    - Aligned SPF/DKIM/DMARC headers.
+    """
+    raw_eml = (
+        "Delivered-To: engineer.lead@company.com\r\n"
+        "Authentication-Results: mx.internal.company.com; spf=pass; dkim=pass; dmarc=pass\r\n"
+        "Received: from mx.internal.company.com (mx.internal.company.com [10.0.2.15])\r\n"
+        "\tby mailbox.company.com (Postfix) with ESMTP id 9A1B2C3D;\r\n"
+        "\tWed, 9 Sep 2026 09:00:00 +0000 (UTC)\r\n"
+        "Received: from mail.internal.company.com (unknown [192.0.2.10])\r\n"
+        "\tby mx.internal.company.com with ESMTP id 8F7E6D5C;\r\n"
+        "\tWed, 9 Sep 2026 08:59:55 +0000 (UTC)\r\n"
+        "Return-Path: <devops@company.com>\r\n"
+        "From: \"Engineering Operations\" <devops@company.com>\r\n"
+        "To: engineer.lead@company.com\r\n"
+        "Subject: Scheduled Maintenance Window: Core Database Upgrade\r\n"
+        "Date: Wed, 9 Sep 2026 08:59:50 +0000\r\n"
+        "Message-ID: <20260909085950.DEVOPS101@company.com>\r\n"
+        "Reply-To: devops@company.com\r\n"
+        "MIME-Version: 1.0\r\n"
+        "Content-Type: multipart/alternative; boundary=\"----=_Part_9988_7766\"\r\n"
+        "\r\n"
+        "------=_Part_9988_7766\r\n"
+        "Content-Type: text/plain; charset=UTF-8\r\n"
+        "\r\n"
+        "Team,\r\n"
+        "Please note the planned cluster maintenance window scheduled for Saturday at 02:00 UTC.\r\n"
+        "Review runbooks at https://company.com/runbooks/maintenance\r\n"
+        "\r\n"
+        "------=_Part_9988_7766\r\n"
+        "Content-Type: text/html; charset=UTF-8\r\n"
+        "\r\n"
+        "<!DOCTYPE html>\r\n"
+        "<html>\r\n"
+        "<body>\r\n"
+        "  <p>Team,</p>\r\n"
+        "  <p>Please note the planned cluster maintenance window scheduled for Saturday at 02:00 UTC.</p>\r\n"
+        "  <p>Review runbooks at <a href=\"https://company.com/runbooks/maintenance\">Engineering Runbooks</a>.</p>\r\n"
+        "</body>\r\n"
+        "</html>\r\n"
+        "------=_Part_9988_7766--\r\n"
+    )
+    return raw_eml.encode("utf-8")
+
+
 def test_email_forensics_pipeline():
     print("=" * 80)
     print("🛡️  TESTING TRUSTSHIELD V2: EMAIL FORENSICS & INGESTION ENGINE")

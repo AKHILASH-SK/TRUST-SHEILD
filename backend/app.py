@@ -945,14 +945,79 @@ def analyze_eml_endpoint():
             return jsonify({"error": "No .eml file or data uploaded. Send as multipart/form-data ('file') or raw body."}), 400
 
         skip_sandbox = request.args.get('skip_sandbox', 'false').lower() in ('true', '1')
+        demo_mode = request.args.get('demo_mode', 'false').lower() in ('true', '1')
+        if demo_mode:
+            skip_sandbox = True
         from core_engine.unified_email_pipeline import analyze_email_pipeline
-        result = analyze_email_pipeline(eml_bytes, skip_link_sandbox=skip_sandbox)
+        result = analyze_email_pipeline(eml_bytes, skip_link_sandbox=skip_sandbox, demo_mode=demo_mode)
         return jsonify(result), 200
 
     except Exception as e:
-
         print(f"❌ [Forensics API] Error processing .eml: {e}")
+        return jsonify({"error": str(e), "analysis_status": "FAILED", "fallback_applied": False}), 500
+
+
+@app.route('/api/forensics/demo/<scenario>', methods=['GET'])
+def get_forensic_demo_scenario(scenario):
+    """
+    Returns instant forensic analysis for the 3 built-in hackathon demonstration cases:
+    - 'phishing': Critical Phishing / Credential Harvesting (Score 100/100)
+    - 'bec': High-Risk Business Email Compromise / Executive Spoofing (Score ~65/100)
+    - 'legitimate': Authenticated Corporate Communication (Score < 10/100)
+    """
+    try:
+        from core_engine.test_email_forensics import (
+            generate_synthetic_phishing_eml,
+            generate_synthetic_bec_eml,
+            generate_synthetic_legitimate_eml
+        )
+        from core_engine.unified_email_pipeline import analyze_email_pipeline
+        
+        scenario_lower = scenario.lower().strip()
+        if scenario_lower in ('phishing', 'credential-harvesting', 'case1'):
+            eml_bytes = generate_synthetic_phishing_eml()
+        elif scenario_lower in ('bec', 'spoofing', 'case2'):
+            eml_bytes = generate_synthetic_bec_eml()
+        elif scenario_lower in ('legitimate', 'clean', 'case3'):
+            eml_bytes = generate_synthetic_legitimate_eml()
+        else:
+            return jsonify({"error": f"Unknown demo scenario '{scenario}'. Available: 'phishing', 'bec', 'legitimate'"}), 400
+            
+        demo_mode = True
+        skip_sandbox = request.args.get('skip_sandbox', 'true').lower() in ('true', '1')
+            
+        result = analyze_email_pipeline(eml_bytes, skip_link_sandbox=skip_sandbox, demo_mode=demo_mode)
+        return jsonify(result), 200
+    except Exception as e:
+        print(f"❌ [Demo Scenario Error]: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/sample-eml', methods=['GET'])
+def download_sample_eml_endpoint():
+    """Returns downloadable .eml file for manual upload testing across all 3 scenarios."""
+    from flask import Response
+    from core_engine.test_email_forensics import (
+        generate_synthetic_phishing_eml,
+        generate_synthetic_bec_eml,
+        generate_synthetic_legitimate_eml
+    )
+    case_type = request.args.get('type', 'phishing').lower()
+    if case_type in ('bec', 'spoofing'):
+        data = generate_synthetic_bec_eml()
+        filename = "URGENT_WIRE_TRANSFER_BEC_ATTACK.eml"
+    elif case_type in ('legitimate', 'clean'):
+        data = generate_synthetic_legitimate_eml()
+        filename = "SCHEDULED_MAINTENANCE_LEGITIMATE.eml"
+    else:
+        data = generate_synthetic_phishing_eml()
+        filename = "PAYPAL_CREDENTIAL_PHISHING_ATTACK.eml"
+
+    return Response(
+        data,
+        mimetype="message/rfc822",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @app.route('/api/forensics/export-pdf', methods=['POST'])

@@ -8,6 +8,7 @@ from urllib.parse import urlparse, urljoin
 
 import tldextract
 import whois
+import socket
 
 # Using Selenium for the custom headless browser sandbox
 from selenium import webdriver
@@ -162,15 +163,22 @@ class VirtualSandboxAnalyzer:
                 return -1, 0, 0
                 
             def _fetch_whois():
-                w = whois.whois(reg_domain)
-                creation_date = w.creation_date
-                if isinstance(creation_date, list):
-                    creation_date = creation_date[0]
-                return creation_date
+                try:
+                    w = None
+                    if hasattr(whois, 'whois'):
+                        w = whois.whois(reg_domain)
+                    elif hasattr(whois, 'query'):
+                        w = whois.query(reg_domain)
+                    creation_date = getattr(w, 'creation_date', None) if w else None
+                    if isinstance(creation_date, list) and len(creation_date) > 0:
+                        creation_date = creation_date[0]
+                    return creation_date
+                except Exception:
+                    return None
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_fetch_whois)
-                creation_date = future.result(timeout=3.0)
+                creation_date = future.result(timeout=1.5)
 
             if creation_date and isinstance(creation_date, datetime):
                 now = datetime.now(creation_date.tzinfo) if creation_date.tzinfo else datetime.now()
@@ -224,11 +232,25 @@ class VirtualSandboxAnalyzer:
         features['newly_registered_domain'] = new_domain_flag
         features['domain_risk_score'] = domain_risk
         
+        # Fast Pre-Flight Check: Test DNS resolution before launching expensive Chrome browser
+        try:
+            parsed_target = urlparse(url)
+            target_host = parsed_target.netloc.split(':')[0]
+            if target_host:
+                socket.setdefaulttimeout(1.0)
+                socket.getaddrinfo(target_host, None)
+        except Exception as dns_err:
+            print(f"   ⚠️ Domain failed DNS resolution (ERR_NAME_NOT_RESOLVED) - Flagged as Suspicious Unreachable Domain: {dns_err}")
+            features['sandbox_unreachable'] = 1
+            features['sandbox_error'] = "ERR_NAME_NOT_RESOLVED"
+            features['sandbox_threat_score'] = 60
+            return features
+
         driver = None
         try:
             # 2. Initialize the Stealth Sandbox Browser
             driver = webdriver.Chrome(options=self.chrome_options)
-            driver.set_page_load_timeout(15)
+            driver.set_page_load_timeout(6)
             
             # Feature 1: Strip navigator.webdriver via CDP script before any page script executes
             driver.execute_cdp_cmd(

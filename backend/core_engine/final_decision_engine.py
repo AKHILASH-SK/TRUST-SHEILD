@@ -16,17 +16,23 @@ def generate_llm_incident_summary(
     url: str,
     threat_score: float,
     verdict: str,
-    telemetry: Dict[str, Any]
+    telemetry: Dict[str, Any],
+    skip_external: bool = False
 ) -> str:
     """
     Synthesizes a 3-bullet forensic report using Google Gemini (gemini-3.6-flash),
     Groq Llama 3, OpenAI, or a zero-latency deterministic template fallback.
     """
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if skip_external:
+        gemini_api_key = None
+        groq_api_key = None
+        openai_api_key = None
+    else:
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        groq_api_key = os.getenv("GROQ_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
     
-    # 1. Primary: Google Gemini API (official google-genai SDK) with strict 6s timeout
+    # 1. Primary: Google Gemini API (official google-genai SDK) with strict 2.5s timeout
     if gemini_api_key:
         def _call_gemini():
             from google import genai
@@ -50,15 +56,17 @@ Synthesize a professional, concise 3-bullet incident summary for a mobile user a
                 return resp.text.strip()
             return None
 
+        import concurrent.futures
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         try:
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_call_gemini)
-                gemini_text = future.result(timeout=6.0)
-                if gemini_text:
-                    return gemini_text
+            future = executor.submit(_call_gemini)
+            gemini_text = future.result(timeout=2.5)
+            if gemini_text:
+                return gemini_text
         except Exception as e:
-            logger.warning(f"Google Gemini summary generation timed out/failed, checking alternatives: {e}")
+            logger.info(f"Google Gemini optional summary completed with fallback: {e}")
+        finally:
+            executor.shutdown(wait=False)
 
     # 2. Secondary: Groq (Llama-3.1-8b-instant) if available
     if groq_api_key:
@@ -203,7 +211,9 @@ class FinalDecisionEngine:
         url_entropy_risk: int = 0,
         typosquat_risk: int = 0,
         sandbox_threat: float = 0.0,
-        vt_risk_score: float = 0.0
+        vt_risk_score: float = 0.0,
+        skip_llm: bool = False,
+        is_unreachable: bool = False
     ) -> Dict[str, Any]:
         """
         Fuses all 12+ telemetry features with deterministic guardrails.
@@ -231,6 +241,10 @@ class FinalDecisionEngine:
             threat_score = 95.0
             hard_override_triggered = True
             override_reason = "Brand Impersonation with External Form Action"
+        elif heuristic_risk >= 70.0:
+            threat_score = min(100.0, max(85.0, heuristic_risk))
+            hard_override_triggered = True
+            override_reason = "Deterministic Phishing Pattern (Brand Spoofing / Credential Path / Deceptive Structure)"
         elif domain_age_risk >= 90 and has_password == 1:
             threat_score = 90.0
             hard_override_triggered = True
@@ -239,6 +253,15 @@ class FinalDecisionEngine:
             threat_score = 95.0
             hard_override_triggered = True
             override_reason = "VirusTotal Flagged Malicious with Password Harvesting"
+        elif is_unreachable or sandbox_threat >= 60.0:
+            # Unresolved dead domain
+            if heuristic_risk >= 30.0 or brand_impersonation == 1:
+                threat_score = max(threat_score, 80.0)
+                override_reason = "Unresolved Evasive Domain with Deceptive Phishing Indicators"
+            else:
+                threat_score = max(threat_score, 65.0)
+                override_reason = "Unresolved Infrastructure (ERR_NAME_NOT_RESOLVED)"
+            hard_override_triggered = True
             
         # 2. Weighted Ensemble Fusion (If no hard override reached 100)
         if not hard_override_triggered:
@@ -266,6 +289,7 @@ class FinalDecisionEngine:
             if brand_impersonation == 1: booster += 45.0
             if suspicious_exfiltration == 1: booster += 45.0
             if external_form_action == 1: booster += 35.0
+            if heuristic_risk >= 50.0: booster += 25.0
             # Password field only adds risk if coupled with deceptive brand, exfiltration, or zero-day domain
             if has_password == 1 and (brand_impersonation == 1 or external_form_action == 1 or suspicious_exfiltration == 1 or domain_age_risk >= 80 or title_mismatch == 1):
                 booster += 30.0
@@ -278,14 +302,30 @@ class FinalDecisionEngine:
         # 3. Categorical Verdict
         if threat_score >= 80.0:
             verdict = "CRITICAL FRAUD / PHISHING"
+        elif is_unreachable or "ERR_NAME_NOT_RESOLVED" in str(heuristic_flags):
+            verdict = "SUSPICIOUS / UNRESOLVED DOMAIN"
         elif threat_score >= 50.0:
             verdict = "SUSPICIOUS"
         else:
             verdict = "LEGITIMATE / CLEAN"
             
-        # 4. Telemetry payload
+        # 4. Synthesize human-readable explainable indicators
+        indicators = list(heuristic_flags)
+        if override_reason and override_reason not in indicators:
+            indicators.insert(0, f"[GUARDRAIL_OVERRIDE] {override_reason}")
+        if has_password == 1:
+            indicators.append("CREDENTIAL_FIELD: Interactive password harvesting input field detected")
+        if external_form_action == 1:
+            indicators.append("CROSS_DOMAIN_ACTION: Form targets external exfiltration destination")
+        if suspicious_exfiltration == 1:
+            indicators.append("EXFILTRATION: Form transmits sensitive input to unauthorized host")
+        if hidden_iframes > 0:
+            indicators.append(f"EVASION: Detected {hidden_iframes} concealed zero-pixel iframe(s)")
+            
+        # 5. Telemetry payload
         telemetry = {
             "heuristic_flags": heuristic_flags,
+            "threat_indicators_detected": indicators,
             "heuristic_risk_score": heuristic_risk,
             "known_db_match": known_db_match,
             "sandbox_has_password": has_password,
@@ -302,17 +342,19 @@ class FinalDecisionEngine:
             "nlp_score": nlp_score,
             "sandbox_threat_score": sandbox_threat,
             "vt_risk_score": vt_risk_score,
+            "is_unreachable": is_unreachable,
             "hard_override_triggered": hard_override_triggered,
             "override_reason": override_reason
         }
         
-        # 5. Synthesize 3-bullet Forensic Explanation
-        summary = generate_llm_incident_summary(url, threat_score, verdict, telemetry)
+        # 6. Synthesize 3-bullet Forensic Explanation
+        summary = generate_llm_incident_summary(url, threat_score, verdict, telemetry, skip_external=skip_llm)
         
         return {
             "url": url,
             "threat_score": threat_score,
             "verdict": verdict,
             "summary": summary,
+            "indicators": indicators,
             "telemetry": telemetry
         }

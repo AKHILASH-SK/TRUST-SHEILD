@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -15,7 +15,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
           fontFamily: {
@@ -23,13 +22,7 @@
             mono: ['JetBrains Mono', 'monospace'],
           },
           colors: {
-            brand: {
-              50: '#ecfeff',
-              400: '#22d3ee',
-              500: '#06b6d4',
-              600: '#0891b2',
-              900: '#164e63',
-            }
+            sidebar: '#0f172a',
           }
         }
       }
@@ -47,1158 +40,1092 @@
       height: 6px;
     }
     ::-webkit-scrollbar-track {
-      background: #0f172a;
+      background: #f1f5f9;
     }
     ::-webkit-scrollbar-thumb {
-      background: #334155;
+      background: #cbd5e1;
       border-radius: 3px;
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: #475569;
+      background: #94a3b8;
     }
 
-    /* Radar scan effect */
-    @keyframes radar-sweep {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    /* Subtle Card Elevation */
+    .card-soft {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
     }
-    .radar-beam {
-      animation: radar-sweep 2.5s linear infinite;
-    }
-
-    /* Glow utilities */
-    .glow-red {
-      box-shadow: 0 0 25px -3px rgba(239, 68, 68, 0.35);
-    }
-    .glow-cyan {
-      box-shadow: 0 0 25px -3px rgba(6, 182, 212, 0.35);
-    }
-    .glow-amber {
-      box-shadow: 0 0 25px -3px rgba(245, 158, 11, 0.35);
-    }
-    .glow-emerald {
-      box-shadow: 0 0 25px -3px rgba(16, 185, 129, 0.35);
+    .card-soft-hover:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
     }
 
-    /* Leaflet Dark Theme Overrides */
+    /* Leaflet Clean Light Theme */
     .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-      background: #0f172a !important;
-      color: #e2e8f0 !important;
-      border: 1px solid #334155;
-      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.7);
-      border-radius: 8px;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+      border-radius: 12px;
     }
     .leaflet-popup-content {
       margin: 10px 14px;
       line-height: 1.4;
       font-size: 11px;
-      font-family: 'Inter', sans-serif;
+      font-family: 'JetBrains Mono', monospace;
     }
     .leaflet-container {
-      background: #090d16 !important;
+      background: #f8fafc !important;
+      font-family: 'Inter', sans-serif;
     }
 
-    /* OpenStreetMap Free Dark Theme (100% Free - Zero API Key Required) */
-    .leaflet-tile-pane {
-      filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
-    }
-
-    /* Custom Pulsing Leaflet Marker */
+    /* Marker styling */
     .pulse-marker-origin {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       background: #ef4444;
       border: 2px solid #ffffff;
-      box-shadow: 0 0 12px #ef4444;
-      animation: pulse-ring 1.8s infinite;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+      animation: pulse-ring 2s infinite;
     }
     .pulse-marker-hop {
       width: 12px;
       height: 12px;
       border-radius: 50%;
-      background: #06b6d4;
+      background: #0284c7;
       border: 2px solid #ffffff;
-      box-shadow: 0 0 8px #06b6d4;
+      box-shadow: 0 0 6px rgba(2, 132, 199, 0.5);
     }
     @keyframes pulse-ring {
-      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-      70% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
       100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+
+    /* Clean workspace view transition & entrance animations */
+    .workspace-view:not(.hidden) {
+      animation: viewSlideDown 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes viewSlideDown {
+      0% {
+        opacity: 0;
+        transform: translateY(-16px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Executive Verdict Card Smooth Landing */
+    #verdictCard {
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .workspace-view:not(.hidden) #verdictCard {
+      animation: cardPopIn 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes cardPopIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.98) translateY(-10px);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    /* Sticky Sidebar & Nav Active Pill Indicator */
+    .nav-btn {
+      position: relative;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .nav-btn:hover {
+      transform: scale(1.08);
+    }
+    .nav-btn.nav-active {
+      background-color: #1e293b !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.45);
+      transform: scale(1.05);
+    }
+    .nav-btn.nav-active::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3.5px;
+      height: 20px;
+      background: #38bdf8;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+      animation: navPillPop 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes navPillPop {
+      0% {
+        opacity: 0;
+        transform: translateY(-50%) scaleY(0.3);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(-50%) scaleY(1);
+      }
+    }
+    @media (max-width: 767px) {
+      .nav-btn.nav-active::before {
+        left: 50%;
+        top: auto;
+        bottom: -4px;
+        transform: translateX(-50%);
+        width: 18px;
+        height: 3px;
+        animation: navPillPopMobile 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      @keyframes navPillPopMobile {
+        0% { opacity: 0; transform: translateX(-50%) scaleX(0.3); }
+        100% { opacity: 1; transform: translateX(-50%) scaleX(1); }
+      }
     }
   </style>
 </head>
 
-<body class="bg-[#0b0f19] text-slate-100 min-h-screen flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
+<body class="bg-[#eef2f6] text-slate-800 min-h-screen flex flex-col font-sans p-3 sm:p-5 lg:p-7 selection:bg-slate-900 selection:text-white">
 
   <!-- ===================================================================== -->
-  <!-- TOP NAVBAR & SYSTEM STATUS                                            -->
+  <!-- FLOATING PRIMARY WORKSTATION CONTAINER                                -->
   <!-- ===================================================================== -->
-  <header class="border-b border-slate-800/80 bg-[#0d1322]/90 backdrop-blur-md sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+  <div class="max-w-[1440px] w-full mx-auto bg-white rounded-3xl shadow-xl shadow-slate-200/70 border border-slate-200/80 p-4 sm:p-6 lg:p-8 flex flex-col md:flex-row gap-6 flex-1">
+    
+    <!-- =================================================================== -->
+    <!-- MINIMAL DARK VERTICAL SIDEBAR (Sticky Pinned for Easy Access)       -->
+    <!-- =================================================================== -->
+    <aside class="bg-[#0f172a] text-white w-full md:w-16 lg:w-20 rounded-2xl flex md:flex-col items-center justify-between py-4 md:py-6 px-4 md:px-0 flex-shrink-0 shadow-lg shadow-slate-900/10 md:sticky md:top-6 md:self-start z-30 transition-all">
       
-      <!-- Brand & Title -->
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 p-0.5 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-          <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-            <!-- Shield SVG Icon -->
-            <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <path d="m9 12 2 2 4-4"/>
-            </svg>
-          </div>
-        </div>
+      <!-- Top: Brand Monogram -->
+      <div class="flex flex-col items-center space-y-1">
+        <button type="button" onclick="switchView('dashboard')" title="TrustShield Dashboard" class="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-md cursor-pointer hover:scale-105 transition-transform">
+          <span class="text-slate-900 font-black text-lg tracking-tighter font-mono">T.</span>
+        </button>
+      </div>
+
+      <!-- Center: Section Navigation Icons -->
+      <nav class="flex md:flex-col items-center space-x-2 md:space-x-0 md:space-y-4 text-slate-400">
+        <!-- 1. Dashboard -->
+        <button type="button" id="nav-dashboard" onclick="switchView('dashboard')" title="Dashboard" class="nav-btn nav-active p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all text-white bg-slate-800 cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+        </button>
+
+        <!-- 2. Analyze Email -->
+        <button type="button" id="nav-analyze" onclick="switchView('analyze')" title="Analyze Email (.eml)" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </button>
+
+        <!-- 3. Investigation Overview -->
+        <button type="button" id="nav-investigation" onclick="switchView('investigation')" title="Investigation Overview (Threat Score & Verdict)" class="nav-btn relative p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span id="navCaseBadge" class="hidden absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500"></span>
+        </button>
+
+        <!-- 4. Email Forensics -->
+        <button type="button" id="nav-forensics" onclick="switchView('forensics')" title="Email Forensics & Protocol Alignment" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect width="20" height="16" x="2" y="4" rx="2"/>
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+          </svg>
+        </button>
+
+        <!-- 5. Transmission Trace -->
+        <button type="button" id="nav-trace" onclick="switchView('trace')" title="Transmission Trace & Map" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+        </button>
+
+        <!-- 6. Link Analysis -->
+        <button type="button" id="nav-links" onclick="switchView('links')" title="Hyperlink Payload Analysis" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+          </svg>
+        </button>
+
+        <!-- 7. Investigative Assessment & Limitations -->
+        <button type="button" id="nav-assessment" onclick="switchView('assessment')" title="Investigative Assessment" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </button>
+
+        <!-- 8. Reports & Chain of Custody -->
+        <button type="button" id="nav-reports" onclick="switchView('reports')" title="Forensic Reports & PDF Export" class="nav-btn p-2.5 rounded-xl hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+
+        <!-- Subtle Divider before Demo -->
+        <div class="hidden md:block w-8 h-[1px] bg-slate-800 my-1"></div>
+
+        <!-- 9. Demo Scenarios -->
+        <button type="button" id="nav-demo" onclick="switchView('demo')" title="Demo Scenarios (Pre-configured Data)" class="nav-btn p-2.5 rounded-xl hover:text-amber-400 hover:bg-slate-800 transition-all text-amber-300 cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        </button>
+      </nav>
+
+      <!-- Bottom: Ingest / Reset Action -->
+      <div>
+        <button type="button" onclick="resetDashboard(event)" title="Ingest New Evidence" class="nav-btn p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- =================================================================== -->
+    <!-- MAIN MULTI-VIEW WORKSPACE                                           -->
+    <!-- =================================================================== -->
+    <div class="flex-1 flex flex-col space-y-6 overflow-hidden">
+      
+      <!-- TOP STATUS & CONTROLS TOOLBAR -->
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <div class="flex items-center space-x-2">
-            <h1 class="text-base font-bold tracking-wider text-white uppercase font-mono">TrustShield V2</h1>
-            <span class="px-1.5 py-0.5 text-[10px] font-semibold tracking-wider font-mono rounded bg-cyan-950/80 text-cyan-400 border border-cyan-700/50">FORENSIC SUITE</span>
+          <div class="flex items-center space-x-3">
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">TrustShield V2</h1>
+            <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-700 border border-slate-200">Forensic Workspace</span>
           </div>
-          <p class="text-xs text-slate-400">SIH-106 Autonomous Email Forensics & Threat Attribution Engine</p>
+          <p class="text-xs text-slate-500 mt-0.5">Autonomous Email Threat Detection, Geolocation & Forensic Intelligence</p>
+        </div>
+
+        <!-- Controls: Fast Demo Toggle & Active Case Chip -->
+        <div class="flex items-center space-x-3 flex-wrap gap-y-2">
+          <!-- Fast Demo Toggle -->
+          <label class="flex items-center space-x-2 text-xs font-medium text-slate-700 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer select-none" title="Bypasses heavy browser sandbox launches to deliver sub-second deterministic evaluation">
+            <input type="checkbox" id="fastDemoToggle" checked class="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-0 cursor-pointer">
+            <span class="font-medium">⚡ Fast Demo Mode</span>
+          </label>
+
+          <!-- Compliance Pills -->
+          <div class="hidden sm:flex items-center space-x-2 text-xs font-medium text-slate-500">
+            <span class="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200">Sec 65B Certified</span>
+            <span class="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200">RFC-5322</span>
+          </div>
         </div>
       </div>
 
-      <!-- Telemetry Pills -->
-      <div class="hidden md:flex items-center space-x-3 text-xs font-mono">
-        <div class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-950/60 border border-emerald-700/40 text-emerald-400">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>ENGINES ONLINE</span>
-        </div>
-        <div class="px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/50 text-slate-300">
-          <span>PORT: 8000</span>
-        </div>
-        <div class="px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/50 text-cyan-400">
-          <span>SEC 65B CERTIFIED</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <!-- ===================================================================== -->
-  <!-- MAIN WORKBENCH CONTAINER                                              -->
-  <!-- ===================================================================== -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-
-    <!-- =================================================================== -->
-    <!-- SECTION A: EVIDENCE INGESTION & DROP ZONE                           -->
-    <!-- =================================================================== -->
-    <section id="uploadSection" class="relative">
-      <div class="bg-gradient-to-b from-slate-900/90 to-slate-950/90 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden p-6 sm:p-8">
+      <!-- ================================================================= -->
+      <!-- VIEW 1: DASHBOARD (Calm Landing View)                              -->
+      <!-- ================================================================= -->
+      <div id="view-dashboard" class="workspace-view space-y-6">
         
-        <div class="text-center max-w-2xl mx-auto mb-6">
-          <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Ingest Digital Evidence File</h2>
-          <p class="text-sm text-slate-400 mt-1">Upload raw <code class="text-cyan-400 font-mono">.eml</code> or <code class="text-cyan-400 font-mono">.msg</code> records to trace server hops, verify cryptographic signatures, and detonate embedded attack payloads.</p>
-        </div>
+        <div class="card-soft rounded-3xl p-8 sm:p-10 space-y-6">
+          <div class="max-w-2xl space-y-3">
+            <span class="px-3 py-1 rounded-full text-xs font-semibold font-mono bg-slate-100 text-slate-700 border border-slate-200 uppercase">
+              SIH-106 Forensic Intelligence
+            </span>
+            <h2 class="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              Email Threat Detection & Origin Geolocation Platform
+            </h2>
+            <p class="text-sm text-slate-600 leading-relaxed">
+              Investigate suspicious email files, reconstruct multi-hop server transit, verify cryptographic envelope signatures (SPF, DKIM, DMARC), and evaluate embedded link threats using automated multi-stage heuristics.
+            </p>
+          </div>
 
-        <!-- Hidden File Input (Outside dropZone to prevent click bubbling loops) -->
-        <input type="file" id="emlFileInput" accept=".eml,.msg,message/rfc822,text/plain,*/*" class="hidden" onchange="handleFileSelect(event)" />
-
-        <!-- Drag and Drop Target -->
-        <div id="dropZone" onclick="triggerFileInput(event)" class="group relative border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl p-8 text-center cursor-pointer transition-all duration-300 bg-slate-950/40 hover:bg-cyan-950/10">
-          
-          <div class="flex flex-col items-center justify-center space-y-3">
-            <div class="w-14 h-14 rounded-full bg-slate-900 border border-slate-700 group-hover:border-cyan-500/50 group-hover:scale-110 flex items-center justify-center transition-all duration-300 shadow-inner">
-              <!-- Upload Cloud SVG Icon -->
-              <svg class="w-7 h-7 text-slate-400 group-hover:text-cyan-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
-                <path d="M12 12v9"/>
-                <path d="m16 16-4-4-4 4"/>
+          <!-- Primary Actions -->
+          <div class="flex flex-wrap gap-3 pt-2">
+            <button type="button" onclick="switchView('analyze')" class="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono tracking-wide uppercase shadow-md flex items-center space-x-2 transition-all cursor-pointer">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
-            </div>
-            <div>
-              <p class="text-sm font-semibold text-slate-200">
-                Drag and drop your forensic <span class="text-cyan-400">.eml</span> file here
-              </p>
-              <p class="text-xs text-slate-500 mt-1">Supports RFC-5322 MIME messages, Outlook headers & multi-hop chains</p>
-            </div>
-            
-            <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <button type="button" id="browseBtn" onclick="triggerFileInput(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-all shadow-md shadow-cyan-600/20 flex items-center space-x-1.5 cursor-pointer">
-                <!-- Folder Icon SVG -->
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>
-                  <path d="M2 10h20"/>
-                </svg>
-                <span>Browse Files</span>
-              </button>
+              <span>Analyze Email File (.eml)</span>
+            </button>
 
-              <button type="button" id="sampleEmlBtn" onclick="loadSamplePhishingDemo(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/40 hover:border-cyan-600 transition-all flex items-center space-x-1.5 cursor-pointer">
-                <!-- Sparkles Icon SVG -->
-                <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-                </svg>
-                <span>Load Live Phishing Attack Demo</span>
-              </button>
-
-              <button type="button" id="downloadSampleBtn" onclick="downloadSampleEml(event)" class="px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-500 transition-all flex items-center space-x-1.5 cursor-pointer" title="Download a sample .eml attack record to test manual upload">
-                <!-- Download Icon SVG -->
-                <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                <span>Download Sample .eml</span>
-              </button>
-            </div>
+            <button type="button" onclick="switchView('demo')" class="px-5 py-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-xs font-bold font-mono tracking-wide uppercase flex items-center space-x-2 transition-all cursor-pointer">
+              <svg class="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <span>Explore Demo Scenarios</span>
+            </button>
           </div>
+
+          <!-- Active Investigation Banner (If case is loaded) -->
+          <div id="dashboardActiveCaseCard" class="hidden p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span class="text-[10px] uppercase font-mono font-bold text-slate-400 block">Active Investigation In Session:</span>
+              <span id="dashActiveSubject" class="text-xs font-bold text-slate-800">--</span>
+              <span id="dashActiveVerdict" class="ml-2 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-slate-200 text-slate-700">--</span>
+            </div>
+            <button type="button" onclick="switchView('investigation')" class="text-xs font-bold text-slate-900 hover:underline flex items-center space-x-1 cursor-pointer">
+              <span>View Investigation Results →</span>
+            </button>
+          </div>
+
         </div>
 
-        <!-- Scanning / Loading Radar Animation (Hidden by default) -->
-        <div id="loadingState" class="hidden mt-6 p-6 rounded-xl bg-slate-950/80 border border-cyan-900/60 flex flex-col items-center justify-center space-y-4">
-          <div class="relative w-20 h-20 flex items-center justify-center">
-            <!-- Radar Circle -->
-            <div class="absolute inset-0 rounded-full border border-cyan-500/30"></div>
-            <div class="absolute inset-3 rounded-full border border-cyan-500/50"></div>
-            <div class="absolute inset-6 rounded-full border border-cyan-500/70"></div>
-            <!-- Radar Sweeping Beam -->
-            <div class="absolute inset-0 rounded-full bg-gradient-to-tr from-cyan-500/40 to-transparent radar-beam"></div>
-            <!-- Center Pulsing Core -->
-            <div class="w-3 h-3 rounded-full bg-cyan-400 shadow-lg shadow-cyan-400 animate-ping"></div>
+        <!-- Capability Architecture Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="card-soft p-5 rounded-2xl space-y-2">
+            <span class="text-[10px] font-bold font-mono text-slate-400 uppercase">Engine 01</span>
+            <h3 class="text-sm font-bold text-slate-900">RFC-5322 Forensics</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              MIME normalization, Return-Path and Reply-To mismatch auditing, and SHA-256 evidence hashing.
+            </p>
           </div>
 
-          <div class="text-center">
-            <h3 class="text-sm font-semibold text-white uppercase tracking-wider font-mono">Executing 4-Layer Forensic Audit</h3>
-            <p id="loadingStatusText" class="text-xs text-cyan-400 font-mono mt-1 animate-pulse">
-              Computing SHA-256 Chain of Custody...
+          <div class="card-soft p-5 rounded-2xl space-y-2">
+            <span class="text-[10px] font-bold font-mono text-slate-400 uppercase">Engine 02</span>
+            <h3 class="text-sm font-bold text-slate-900">Protocol Alignment</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Cryptographic verification of SPF, DKIM, and DMARC records with sender domain MX auditing.
+            </p>
+          </div>
+
+          <div class="card-soft p-5 rounded-2xl space-y-2">
+            <span class="text-[10px] font-bold font-mono text-slate-400 uppercase">Engine 03</span>
+            <h3 class="text-sm font-bold text-slate-900">Transmission Tracing</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Bottom-to-top chronological relay mapping, earliest public origin IP identification, and Leaflet routing.
+            </p>
+          </div>
+
+          <div class="card-soft p-5 rounded-2xl space-y-2">
+            <span class="text-[10px] font-bold font-mono text-slate-400 uppercase">Engine 04</span>
+            <h3 class="text-sm font-bold text-slate-900">Link Payload Sandbox</h3>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Deterministic brand spoofing checks, typosquatting scanner, and DNS reachability preflight verification.
             </p>
           </div>
         </div>
 
       </div>
-    </section>
 
-    <!-- =================================================================== -->
-    <!-- SECTION B: EXECUTIVE INCIDENT VERDICT (Un-hidden on analysis)       -->
-    <!-- =================================================================== -->
-    <section id="executiveVerdict" class="hidden">
-      <div id="verdictCard" class="rounded-2xl border p-6 sm:p-8 bg-slate-900/90 shadow-2xl relative overflow-hidden transition-all duration-500">
+      <!-- ================================================================= -->
+      <!-- VIEW 2: ANALYZE EMAIL (Focused Ingestion View)                     -->
+      <!-- ================================================================= -->
+      <div id="view-analyze" class="workspace-view hidden space-y-6">
         
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <section id="uploadSection" class="card-soft rounded-3xl p-6 sm:p-10 space-y-6">
+          <div class="max-w-xl">
+            <h2 class="text-xl font-bold text-slate-900 tracking-tight">Ingest Email Evidence File</h2>
+            <p class="text-xs text-slate-500 mt-1">
+              Select or drop a raw RFC-5322 message record (<code class="font-mono text-slate-800">.eml</code> or <code class="font-mono text-slate-800">.msg</code>) to execute multi-stage threat detection.
+            </p>
+          </div>
+
+          <!-- Hidden File Input -->
+          <input type="file" id="emlFileInput" accept=".eml,.msg,message/rfc822,text/plain,*/*" class="hidden" onchange="handleFileSelect(event)" />
+
+          <!-- Currently Processed Evidence Card (Revealed after file ingestion) -->
+          <div id="processedFileCard" class="hidden p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+            <div class="flex items-center space-x-3.5 min-w-0">
+              <div class="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 flex-shrink-0">
+                <svg class="w-6 h-6 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </div>
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h4 id="loadedFileName" class="text-sm font-bold text-slate-900 font-mono truncate max-w-xs sm:max-w-md">evidence.eml</h4>
+                  <span id="loadedFileStatus" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 uppercase">Analysis Complete</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1 font-mono">
+                  <span id="loadedFileSize">-- KB</span>
+                  <span class="text-slate-300">•</span>
+                  <span id="loadedFileVerdict" class="font-medium text-slate-700">Ready in Investigation Overview</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 flex-shrink-0">
+              <button type="button" onclick="switchView('investigation')" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono transition-all flex items-center space-x-1.5 cursor-pointer">
+                <span>View Results →</span>
+              </button>
+              <button type="button" id="removeFileCardBtn" onclick="removeCurrentFile(event)" class="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold font-mono transition-all flex items-center space-x-1.5 cursor-pointer" title="Remove current evidence file and upload another">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18"/>
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                </svg>
+                <span>Remove & Upload Next</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Drag and Drop Target -->
+          <div id="dropZone" onclick="triggerFileInput(event)" class="border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-3xl p-10 text-center cursor-pointer transition-all bg-slate-50/50 hover:bg-slate-50">
+            <div class="flex flex-col items-center justify-center space-y-3">
+              <div class="w-14 h-14 rounded-full bg-white border border-slate-200 flex items-center justify-center shadow-xs">
+                <svg class="w-6 h-6 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <p class="text-sm font-bold text-slate-800">
+                  Drag and drop your forensic <span class="font-mono text-slate-900">.eml</span> or <span class="font-mono text-slate-900">.msg</span> file here
+                </p>
+                <p class="text-xs text-slate-400 mt-1">Supports RFC-5322 MIME messages, nested multipart bodies & transit headers</p>
+              </div>
+              <button type="button" id="browseBtn" onclick="triggerFileInput(event)" class="mt-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 text-white transition-all font-mono shadow-xs">
+                Browse Files
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden fallback legacy button preserved for test compatibility -->
+          <div class="hidden">
+            <button type="button" id="sampleEmlBtn" onclick="loadDemoScenario('phishing')"></button>
+            <button type="button" id="downloadSampleBtn" onclick="downloadSampleScenario('phishing')"></button>
+          </div>
+
+          <!-- Processing / Loading State -->
+          <div id="loadingState" class="hidden p-6 rounded-2xl bg-slate-50 border border-slate-200 flex items-center space-x-4">
+            <div class="w-7 h-7 border-2 border-slate-900 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+            <div>
+              <h4 class="text-xs font-bold text-slate-900 uppercase font-mono tracking-wider">Executing Multi-Layer Forensic Audit</h4>
+              <p id="loadingStatusText" class="text-xs text-slate-500 font-mono mt-0.5">
+                Computing SHA-256 Chain of Custody...
+              </p>
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 3: INVESTIGATION OVERVIEW (Dominant Primary Verdict)          -->
+      <!-- ================================================================= -->
+      <div id="view-investigation" class="workspace-view hidden space-y-6">
+        
+        <section id="executiveVerdict">
+          <div id="verdictCard" class="card-soft rounded-3xl p-6 sm:p-8 space-y-6 bg-white border border-slate-200 transition-all">
+            
+            <!-- Section Tag -->
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION A</span>
+                <span class="text-slate-300">•</span>
+                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Incident Overview & Threat Score</span>
+              </div>
+              <span class="text-xs font-mono font-medium text-slate-400" id="analysisModeLabel">STANDBY</span>
+            </div>
+
+            <!-- Threat Score Gauge & Main Verdict Banner -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              
+              <div class="flex items-center space-x-6">
+                <!-- Circular Threat Gauge -->
+                <div class="relative w-24 h-24 flex-shrink-0 flex items-center justify-center">
+                  <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="42" stroke="#f1f5f9" stroke-width="8" fill="transparent"/>
+                    <circle id="scoreCircle" cx="50" cy="50" r="42" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="263.89" class="transition-all duration-1000"/>
+                  </svg>
+                  <div class="absolute flex flex-col items-center justify-center text-center">
+                    <span id="scoreNumber" class="text-3xl font-black font-mono tracking-tighter text-slate-400">--</span>
+                    <span class="text-[9px] uppercase font-mono font-bold tracking-wider text-slate-400">/ 100</span>
+                  </div>
+                </div>
+
+                <!-- Verdict Titles & Badges -->
+                <div class="space-y-1.5">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span id="verdictBadge" class="px-3 py-1 rounded-lg text-xs font-bold font-mono tracking-wide uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                      NO EVIDENCE LOADED
+                    </span>
+                    <span id="attributionBadge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                      --
+                    </span>
+                    <span id="confidenceBadge" class="px-2.5 py-1 rounded-lg text-xs font-mono font-semibold uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                      CONFIDENCE: --
+                    </span>
+                  </div>
+                  <h3 id="verdictHeadline" class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Awaiting Email Ingestion
+                  </h3>
+                  <p id="attributionDetails" class="text-xs text-slate-500 max-w-2xl leading-relaxed">
+                    Upload an RFC-5322 (.eml or .msg) file to run automated forensics, origin geolocation, and link sandboxing.
+                  </p>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex flex-col sm:flex-row lg:flex-col gap-2.5 flex-shrink-0">
+                <button type="button" id="exportPdfBtn" onclick="exportDossierPdf(event)" class="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold tracking-wide uppercase font-mono shadow-md flex items-center justify-center space-x-2 transition-all cursor-pointer">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                    <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                    <path d="M12 18v-6"/>
+                    <path d="m9 15 3 3 3-3"/>
+                  </svg>
+                  <span>Export PDF Dossier</span>
+                </button>
+                <button type="button" id="removeEvidenceBtn" onclick="removeCurrentFile(event)" class="px-5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold font-mono flex items-center justify-center space-x-1.5 transition-all cursor-pointer" title="Remove current evidence file and upload the next file">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                  </svg>
+                  <span>Remove & Upload Next</span>
+                </button>
+                <button type="button" id="resetBtn" onclick="resetDashboard(event)" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium flex items-center justify-center space-x-1.5 transition-all cursor-pointer">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                    <path d="M3 3v5h5"/>
+                  </svg>
+                  <span>Analyze Another Email</span>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- Key Identifiers Grid (Clean Neutral Pills) -->
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-100 text-xs">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 font-mono block">Sender (From)</span>
+                <span id="overviewFrom" class="text-slate-800 font-semibold truncate block mt-0.5">--</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 font-mono block">Recipient (To)</span>
+                <span id="overviewTo" class="text-slate-600 truncate block mt-0.5">--</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 font-mono block">Date Sent</span>
+                <span id="overviewDate" class="text-slate-600 truncate block mt-0.5">--</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 font-mono block">Originating IP</span>
+                <span id="overviewOriginIp" class="text-slate-900 font-bold font-mono block mt-0.5">--</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 font-mono block">Relay Hops</span>
+                <span id="overviewHops" class="text-slate-600 font-mono block mt-0.5">--</span>
+              </div>
+            </div>
+
+            <!-- Recommended Action Banner (Clean Neutral Default) -->
+            <div id="recommendedActionBox" class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-start space-x-3.5">
+              <div id="actionIcon" class="flex-shrink-0 mt-0.5">
+                <svg class="w-5 h-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <div>
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-600 font-mono block">Recommended SOC Action</span>
+                <p id="recommendedActionText" class="text-xs text-slate-500 mt-1 leading-relaxed font-medium">
+                  Upload an email evidence file (.eml / .msg) in the Ingest workspace to start automated SOC evaluation.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION B: WHY IT WAS FLAGGED (PRIMARY EVIDENCE) -->
+        <section id="keyEvidenceSection" class="card-soft rounded-3xl p-6 sm:p-7 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION B</span>
+              <span class="text-slate-300">•</span>
+              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Why It Was Flagged (Key Primary Evidence)</h3>
+            </div>
+            <span id="evidenceCountBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-slate-100 text-slate-700">0 Indicators</span>
+          </div>
+
+          <p class="text-xs text-slate-500">
+            Primary forensic triggers, protocol mismatches, and deterministic threat rules identified:
+          </p>
+
+          <!-- Evidence List -->
+          <div id="keyEvidenceList" class="space-y-2.5">
+            <div class="p-6 rounded-2xl bg-slate-50 border border-slate-100 text-center text-slate-400 text-xs font-medium">
+              No forensic triggers recorded yet. Awaiting evidence file ingestion.
+            </div>
+          </div>
+
+          <!-- Quick Navigation to Forensic Details -->
+          <div class="pt-4 border-t border-slate-100 flex flex-wrap gap-2 text-xs">
+            <button type="button" onclick="switchView('forensics')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors cursor-pointer">
+              Inspect Protocol Forensics →
+            </button>
+            <button type="button" onclick="switchView('trace')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors cursor-pointer">
+              Inspect Transmission Trace →
+            </button>
+            <button type="button" onclick="switchView('links')" class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors cursor-pointer">
+              Inspect Link Payloads →
+            </button>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 4: EMAIL FORENSICS (Detailed Header & Protocol Audit)        -->
+      <!-- ================================================================= -->
+      <div id="view-forensics" class="workspace-view hidden space-y-6">
+        
+        <!-- SECTION C: EMAIL FORENSICS & PROTOCOL ALIGNMENT -->
+        <section id="dashboardGrid" class="space-y-6">
           
-          <!-- Left: Gauge & Main Verdict -->
-          <div class="flex items-center space-x-6">
-            <!-- Circular Threat Gauge -->
-            <div class="relative w-28 h-28 flex-shrink-0 flex items-center justify-center">
-              <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="42" stroke="#1e293b" stroke-width="9" fill="transparent"/>
-                <circle id="scoreCircle" cx="50" cy="50" r="42" stroke="#ef4444" stroke-width="9" stroke-linecap="round" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="0" class="transition-all duration-1000"/>
+          <!-- Critical BEC Alert Box -->
+          <div id="becAlertBox" class="hidden rounded-2xl bg-rose-50 border-2 border-rose-300 p-4 shadow-sm">
+            <div class="flex items-start space-x-3">
+              <svg class="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
-              <div class="absolute flex flex-col items-center justify-center text-center">
-                <span id="scoreNumber" class="text-2xl font-black font-mono tracking-tighter text-white">100</span>
-                <span class="text-[10px] uppercase font-mono tracking-wider text-slate-400">/ 100</span>
+              <div>
+                <h4 class="text-xs font-bold font-mono tracking-wider uppercase text-rose-800">Critical BEC Domain Spoofing</h4>
+                <p class="text-xs text-rose-700 mt-1 leading-relaxed">
+                  The sender <strong class="font-mono">From:</strong> address does not match the <strong class="font-mono">Reply-To:</strong> header! Replies will be silently redirected to an external fraudster mailbox.
+                </p>
+                <div class="mt-2 text-[11px] font-mono bg-white p-2 rounded-lg border border-rose-200 text-rose-800 break-all" id="becDetailText">
+                  Reply-To: phisher@scam.biz
+                </div>
               </div>
-            </div>
-
-            <!-- Verdict Titles & Details -->
-            <div class="space-y-1.5">
-              <div class="flex flex-wrap items-center gap-2">
-                <span id="verdictBadge" class="px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-red-950/90 text-red-400 border border-red-700/60">
-                  CRITICAL FRAUD / PHISHING
-                </span>
-                <span id="attributionBadge" class="px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-slate-800 text-cyan-300 border border-cyan-800/40">
-                  ANONYMIZED_INFRASTRUCTURE
-                </span>
-              </div>
-              <h3 id="verdictHeadline" class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                Severe Cyber Incident Detected
-              </h3>
-              <p id="attributionDetails" class="text-xs text-slate-300 max-w-xl">
-                Originating IP is a known Tor exit node or anonymized VPN proxy. Identity spoofing detected via failed SPF & DMARC authentication.
-              </p>
             </div>
           </div>
 
-          <!-- Right: Action Buttons -->
-          <div class="flex flex-col sm:flex-row lg:flex-col gap-3 flex-shrink-0">
-            <button type="button" id="exportPdfBtn" onclick="exportDossierPdf(event)" class="px-5 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold tracking-wide uppercase font-mono shadow-lg shadow-red-600/30 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer">
-              <!-- File Down SVG -->
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-                <path d="M12 18v-6"/>
-                <path d="m9 15 3 3 3-3"/>
-              </svg>
-              <span>Export Court-Admissible PDF</span>
-            </button>
-            <button type="button" id="resetBtn" onclick="resetDashboard(event)" class="px-5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-semibold tracking-wide flex items-center justify-center space-x-2 transition-all cursor-pointer">
-              <!-- Reset SVG -->
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                <path d="M3 3v5h5"/>
-              </svg>
-              <span>Ingest New Evidence</span>
-            </button>
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Technical Envelope (7 cols) -->
+            <div class="lg:col-span-7 card-soft rounded-3xl p-6 sm:p-7 space-y-4">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION C</span>
+                  <span class="text-slate-300">•</span>
+                  <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Technical Message Envelope</h3>
+                </div>
+                <span class="text-[11px] font-mono text-slate-400">RFC-5322</span>
+              </div>
+
+              <div class="space-y-3 text-xs">
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">Subject</span>
+                  <p id="metaSubject" class="font-semibold text-slate-800 break-words mt-0.5">--</p>
+                </div>
+
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">From (Visible Header)</span>
+                  <p id="metaFrom" class="text-slate-700 font-mono text-[11px] break-all mt-0.5">--</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">Sender Domain</span>
+                    <span id="metaFromDomain" class="inline-block mt-0.5 px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[11px] font-medium">--</span>
+                  </div>
+                  <div>
+                    <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">Return-Path</span>
+                    <p id="metaReturnPath" class="text-slate-600 font-mono text-[11px] break-all truncate mt-0.5">--</p>
+                  </div>
+                </div>
+
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">To / Recipient</span>
+                  <p id="metaTo" class="text-slate-700 font-mono text-[11px] break-all mt-0.5">--</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">Date Sent</span>
+                    <p id="metaDate" class="text-slate-600 text-[11px] mt-0.5">--</p>
+                  </div>
+                  <div>
+                    <span class="text-[10px] font-mono uppercase font-bold text-slate-400 block">Total Relay Hops</span>
+                    <p id="metaHops" class="text-slate-800 font-mono font-bold text-[11px] mt-0.5">--</p>
+                  </div>
+                </div>
+
+                <!-- Alignment Status Checks -->
+                <div class="pt-3 border-t border-slate-100 space-y-2">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-slate-500 font-medium">From ↔ Return-Path Alignment:</span>
+                    <span id="alignmentReturnPathBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-100 text-slate-600">--</span>
+                  </div>
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="text-slate-500 font-medium">From ↔ Reply-To Alignment:</span>
+                    <span id="alignmentReplyToBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-slate-100 text-slate-600">--</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Protocol Authentication (5 cols) -->
+            <div class="lg:col-span-5 card-soft rounded-3xl p-6 sm:p-7 space-y-4">
+              <div class="border-b border-slate-100 pb-3">
+                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Authentication Analysis</h3>
+                <p class="text-[11px] text-slate-400 mt-0.5">Cryptographic DNS signatures & MX records</p>
+              </div>
+
+              <div class="space-y-3">
+                <!-- SPF -->
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold font-mono text-slate-800 block">SPF Check</span>
+                    <span id="spfDetails" class="text-[10px] text-slate-500 truncate max-w-[180px] block">Sender Policy Framework</span>
+                  </div>
+                  <span id="spfBadge" class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase bg-rose-50 text-rose-700 border border-rose-200">FAIL</span>
+                </div>
+
+                <!-- DKIM -->
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold font-mono text-slate-800 block">DKIM Signature</span>
+                    <span id="dkimDetails" class="text-[10px] text-slate-500 truncate max-w-[180px] block">Cryptographic Key Audit</span>
+                  </div>
+                  <span id="dkimBadge" class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase bg-rose-50 text-rose-700 border border-rose-200">FAIL</span>
+                </div>
+
+                <!-- DMARC -->
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold font-mono text-slate-800 block">DMARC Policy</span>
+                    <span id="dmarcDetails" class="text-[10px] text-slate-500 truncate max-w-[180px] block">Identifier Alignment</span>
+                  </div>
+                  <span id="dmarcBadge" class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase bg-rose-50 text-rose-700 border border-rose-200">FAIL</span>
+                </div>
+
+                <!-- MX -->
+                <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold font-mono text-slate-800 block">MX Infrastructure</span>
+                    <span id="mxDetails" class="text-[10px] text-slate-500 truncate max-w-[180px] block">Mail Exchanger Records</span>
+                  </div>
+                  <span id="mxBadge" class="px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono uppercase bg-rose-50 text-rose-700 border border-rose-200">NO MX</span>
+                </div>
+              </div>
+            </div>
+
           </div>
-
-        </div>
-
-      </div>
-    </section>
-
-    <!-- =================================================================== -->
-    <!-- SECTION C: 3-COLUMN FORENSIC INVESTIGATION DASHBOARD                 -->
-    <!-- =================================================================== -->
-    <section id="dashboardGrid" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-      <!-- ================================================================= -->
-      <!-- COLUMN 1: IDENTITY & TECHNICAL ENVELOPE (4 cols)                 -->
-      <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-6">
-
-        <!-- Critical BEC Warning Alert (Visible when reply_to_mismatch == true) -->
-        <div id="becAlertBox" class="hidden rounded-xl bg-gradient-to-br from-red-950/80 to-slate-900 border-2 border-red-500/80 p-4 shadow-xl glow-red animate-pulse">
-          <div class="flex items-start space-x-3">
-            <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            <div>
-              <h4 class="text-xs font-bold font-mono tracking-wider uppercase text-red-400">CRITICAL BEC DOMAIN SPOOFING</h4>
-              <p class="text-xs text-slate-200 mt-1 leading-relaxed">
-                The sender <strong class="text-white font-mono">From:</strong> address does not match the <strong class="text-red-400 font-mono">Reply-To:</strong> header! Replies will be silently redirected to an external fraudster mailbox.
-              </p>
-              <div class="mt-2 text-[11px] font-mono bg-black/50 p-2 rounded border border-red-800/50 break-all text-red-300" id="becDetailText">
-                Reply-To: phisher@scam.biz
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Message Envelope Card -->
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="20" height="16" x="2" y="4" rx="2"/>
-                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Technical Envelope</h4>
-            </div>
-            <span class="text-[10px] font-mono text-slate-500">RFC-5322</span>
-          </div>
-
-          <div class="space-y-3 text-xs">
-            <div>
-              <span class="text-[10px] font-mono uppercase text-slate-500 block">Subject</span>
-              <p id="metaSubject" class="font-semibold text-slate-100 break-words mt-0.5">URGENT: Unauthorized Wire Transfer Detected</p>
-            </div>
-
-            <div>
-              <span class="text-[10px] font-mono uppercase text-slate-500 block">From (Visible Header)</span>
-              <p id="metaFrom" class="text-slate-300 font-mono text-[11px] break-all mt-0.5">security@paypal-verification.top</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <span class="text-[10px] font-mono uppercase text-slate-500 block">Sender Domain</span>
-                <span id="metaFromDomain" class="inline-block mt-0.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-cyan-300 font-mono text-[11px]">paypal-verification.top</span>
-              </div>
-              <div>
-                <span class="text-[10px] font-mono uppercase text-slate-500 block">Return-Path</span>
-                <p id="metaReturnPath" class="text-slate-400 font-mono text-[11px] break-all truncate mt-0.5">spoofed@sender.xyz</p>
-              </div>
-            </div>
-
-            <div>
-              <span class="text-[10px] font-mono uppercase text-slate-500 block">To / Recipient</span>
-              <p id="metaTo" class="text-slate-300 font-mono text-[11px] break-all mt-0.5">victim.executive@company.com</p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <span class="text-[10px] font-mono uppercase text-slate-500 block">Date Sent</span>
-                <p id="metaDate" class="text-slate-400 text-[11px] mt-0.5">Mon, 7 Sep 2026</p>
-              </div>
-              <div>
-                <span class="text-[10px] font-mono uppercase text-slate-500 block">Total Hops</span>
-                <p id="metaHops" class="text-slate-200 font-mono font-bold text-[11px] mt-0.5">4 intermediate relays</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Protocol Authentication Card (SPF, DKIM, DMARC, MX) -->
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                <path d="m9 12 2 2 4-4"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Protocol Authentication</h4>
-            </div>
-            <span class="text-[10px] font-mono text-slate-500">DNS & CRYPTO</span>
-          </div>
-
-          <div class="space-y-3">
-            <!-- SPF -->
-            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <div>
-                <span class="text-xs font-bold font-mono text-slate-300 block">SPF Check</span>
-                <span id="spfDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Sender Policy Framework</span>
-              </div>
-              <span id="spfBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- DKIM -->
-            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <div>
-                <span class="text-xs font-bold font-mono text-slate-300 block">DKIM Signature</span>
-                <span id="dkimDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Cryptographic Key Audit</span>
-              </div>
-              <span id="dkimBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- DMARC -->
-            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <div>
-                <span class="text-xs font-bold font-mono text-slate-300 block">DMARC Policy</span>
-                <span id="dmarcDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Identifier Alignment</span>
-              </div>
-              <span id="dmarcBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">FAIL</span>
-            </div>
-
-            <!-- MX Infrastructure -->
-            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <div>
-                <span class="text-xs font-bold font-mono text-slate-300 block">MX Mail Exchanger</span>
-                <span id="mxDetails" class="text-[10px] text-slate-500 truncate max-w-[200px] block">Sender Mailbox Infrastructure</span>
-              </div>
-              <span id="mxBadge" class="px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60">NO MX (BURNER)</span>
-            </div>
-          </div>
-        </div>
+        </section>
 
       </div>
 
       <!-- ================================================================= -->
-      <!-- COLUMN 2: INTERACTIVE LEAFLET HOP MAP (4 cols)                    -->
+      <!-- VIEW 5: TRANSMISSION TRACE (Map & Relay Hop Path)                  -->
       <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-6">
-
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-4 flex flex-col h-full">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div id="view-trace" class="workspace-view hidden space-y-6">
+        
+        <!-- SECTION D: TRANSMISSION TRACE & ROUTING MAP -->
+        <section class="card-soft rounded-3xl p-6 sm:p-8 space-y-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
             <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Transmission Hop Path</h4>
+              <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION D</span>
+              <span class="text-slate-300">•</span>
+              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Transmission Trace & Routing Map</h3>
             </div>
-            <span id="originCountryBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800/50">Germany</span>
+            <span id="originCountryBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-slate-100 text-slate-700 border border-slate-200">Unknown</span>
           </div>
 
-          <!-- Origin IP Sub-banner -->
-          <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between">
+          <!-- Origin IP Summary Banner -->
+          <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span class="text-[10px] font-mono uppercase text-slate-500 block">Earliest Public Origin IP</span>
-              <span id="originIpText" class="text-sm font-mono font-bold text-white">185.220.101.5</span>
+              <span class="text-[10px] uppercase font-mono font-bold text-slate-400 block">Earliest Reliable Public Origin Node</span>
+              <span id="originIpText" class="text-sm sm:text-base font-mono font-bold text-slate-900">--</span>
+              <span id="originIspText" class="text-xs text-slate-500 font-mono block mt-0.5">--</span>
             </div>
-            <div id="originProxyFlag" class="text-right">
-              <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-700/50">TOR EXIT NODE</span>
-              <span id="originIspText" class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">M247 / Stiftung</span>
+            <div id="originProxyFlag" class="text-left sm:text-right">
+              <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold uppercase bg-slate-200 text-slate-700">ANALYZING</span>
             </div>
+          </div>
+
+          <!-- Important Forensic Caveat Notice -->
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 leading-relaxed">
+            <strong class="text-slate-900 font-mono">Forensic Notice:</strong> The earliest reliable public IP represents the first verified public MTA relay that handled this transmission. It indicates intermediary infrastructure (such as a Tor exit node, VPN proxy, or commercial cloud relay) and does not automatically establish the physical location of the threat actor.
           </div>
 
           <!-- The Leaflet Map Canvas -->
-          <div id="map" class="h-[360px] w-full rounded-xl border border-slate-800 overflow-hidden shadow-inner relative z-10"></div>
+          <div id="map" class="h-[340px] w-full rounded-2xl border border-slate-200 overflow-hidden relative z-10"></div>
 
-          <!-- Chronological Hop Path Accordion / List -->
-          <div class="space-y-2 flex-1 overflow-y-auto max-h-56 pr-1" id="hopsContainer">
-            <!-- Dynamically populated via renderHops() -->
+          <!-- Chronological Hop Path Relay Timeline -->
+          <div class="space-y-2 pt-2">
+            <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-700">Chronological Relay Hop Path (Sender → Recipient)</h4>
+            <div class="space-y-1.5 max-h-60 overflow-y-auto pr-1" id="hopsContainer">
+              <!-- Dynamically populated via renderLeafletMap() -->
+            </div>
           </div>
-        </div>
+
+        </section>
 
       </div>
 
       <!-- ================================================================= -->
-      <!-- COLUMN 3: AI NARRATIVE & LINK DETONATION (4 cols)                -->
+      <!-- VIEW 6: LINK ANALYSIS (Extracted Payloads & Indicators)            -->
       <!-- ================================================================= -->
-      <div class="lg:col-span-4 space-y-6">
-
-        <!-- Executive Incident Narrative (Terminal Style) -->
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div id="view-links" class="workspace-view hidden space-y-6">
+        
+        <!-- SECTION E: HYPERLINK PAYLOAD INVESTIGATION -->
+        <section class="card-soft rounded-3xl p-6 sm:p-8 space-y-5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
             <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="4 17 10 11 4 5"/>
-                <line x1="12" y1="19" x2="20" y2="19"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Forensic Incident Narrative</h4>
+              <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION E</span>
+              <span class="text-slate-300">•</span>
+              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Hyperlink Payload Analysis</h3>
             </div>
-            <span class="text-[10px] font-mono text-cyan-500 animate-pulse">● LIVE</span>
+            <span id="linkCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-medium bg-slate-100 text-slate-700 border border-slate-200">0 Links</span>
           </div>
 
-          <!-- Terminal Window -->
-          <div class="bg-black/80 rounded-lg p-4 font-mono text-xs leading-relaxed text-slate-300 border border-slate-800/80 shadow-inner overflow-y-auto max-h-56 space-y-2" id="narrativeTerminal">
-            <p class="text-cyan-400">root@trustshield:~# inspect-forensic-dossier --evidence</p>
-            <div id="narrativeContent" class="space-y-2 text-slate-300 whitespace-pre-line text-[11px]">
-              <!-- Dynamically populated -->
-            </div>
-          </div>
-        </div>
+          <p class="text-xs text-slate-500 leading-relaxed">
+            All URLs extracted from plain text and HTML anchors are evaluated against deterministic brand impersonation rules, typosquatting heuristics, disposable TLD catalogs, and socket DNS reachability preflights. Unresolvable domains are never marked clean.
+          </p>
 
-        <!-- Embedded Link Payload Detonation -->
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-5 shadow-xl space-y-3">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div class="flex items-center space-x-2">
-              <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
-              <h4 class="text-xs font-bold font-mono uppercase tracking-wider text-slate-200">Hyperlink Payload Analysis</h4>
-            </div>
-            <span id="linkCountBadge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300">2 Links</span>
-          </div>
-
-          <!-- Link List -->
-          <div id="linksContainer" class="space-y-3 overflow-y-auto max-h-64 pr-1">
+          <!-- Extracted URLs List -->
+          <div id="linksContainer" class="space-y-3.5">
             <!-- Dynamically populated via renderLinks() -->
           </div>
-        </div>
+        </section>
 
-        <!-- Cryptographic Chain of Custody Footer Card -->
-        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-4 shadow-xl">
-          <div class="flex items-center justify-between text-[11px] font-mono">
-            <span class="text-slate-400 font-semibold flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="4" y1="9" x2="20" y2="9"/>
-                <line x1="4" y1="15" x2="20" y2="15"/>
-                <line x1="10" y1="3" x2="8" y2="21"/>
-                <line x1="16" y1="3" x2="14" y2="21"/>
-              </svg>
-              <span>SHA-256 Chain of Custody</span>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 7: INVESTIGATIVE ASSESSMENT (Evidence, Inference, Limits)    -->
+      <!-- ================================================================= -->
+      <div id="view-assessment" class="workspace-view hidden space-y-6">
+        
+        <!-- SECTION F: INVESTIGATIVE ASSESSMENT & LEGAL DOSSIER -->
+        <section id="bottomSectionsGrid" class="card-soft rounded-3xl p-6 sm:p-8 space-y-6">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">SECTION F</span>
+              <span class="text-slate-300">•</span>
+              <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider font-mono">Investigative Assessment & Limitations</h3>
+            </div>
+            <span class="text-[11px] font-mono text-slate-400">SEC 65B INDIAN EVIDENCE ACT</span>
+          </div>
+
+          <!-- 3 Structured Findings Cards (Observed Evidence, Inference, Limitations) -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            
+            <!-- 1. Observed Evidence -->
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+              <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-slate-200 text-slate-700 uppercase">Observed Evidence</span>
+              <h4 class="text-xs font-bold text-slate-800">Factual Telemetry</h4>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Raw Received: header traces, cryptographic signature verification (SPF/DKIM/DMARC), and deterministic URL structural tokens extracted directly from the message.
+              </p>
+            </div>
+
+            <!-- 2. Inference -->
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-slate-200 text-slate-700 uppercase">Inference</span>
+                <span id="attributionConfidenceBadge" class="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-slate-200 text-slate-700">MODERATE</span>
+              </div>
+              <h4 class="text-xs font-bold text-slate-800" id="sourceInfraText">--</h4>
+              <p class="text-xs text-slate-600 leading-relaxed font-mono" id="attributionRationale">
+                Attribution rationale calculated from protocol alignment and network hop telemetry.
+              </p>
+            </div>
+
+            <!-- 3. Limitations -->
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2">
+              <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-rose-100 text-rose-800 uppercase">Limitations</span>
+              <h4 class="text-xs font-bold text-slate-800">Legal & Technical Boundaries</h4>
+              <p class="text-xs text-slate-600 leading-relaxed">
+                Geographic coordinates reflect BGP registry routing and hosting endpoints; physical operator location and true actor identity cannot be conclusively determined by IP alone.
+              </p>
+            </div>
+
+          </div>
+
+          <!-- Incident Narrative Summary -->
+          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <h4 class="text-xs font-bold uppercase font-mono tracking-wider text-slate-700">Executive Forensic Narrative</h4>
+            <div id="narrativeTerminal" class="hidden"></div>
+            <div id="narrativeContent" class="text-xs text-slate-700 leading-relaxed whitespace-pre-line font-sans">
+              --
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 8: REPORTS & CHAIN OF CUSTODY                                -->
+      <!-- ================================================================= -->
+      <div id="view-reports" class="workspace-view hidden space-y-6">
+        
+        <section class="card-soft rounded-3xl p-6 sm:p-8 space-y-6">
+          <div class="border-b border-slate-100 pb-3">
+            <h3 class="text-base font-bold text-slate-900 tracking-tight">Court-Admissible Forensic Dossier & Evidence Integrity</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Compliant with Section 65B of the Indian Evidence Act, 1872</p>
+          </div>
+
+          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 class="text-sm font-bold text-slate-900">Download Forensic Dossier PDF</h4>
+                <p class="text-xs text-slate-500 mt-0.5">Generates a court-ready electronic record complete with SHA-256 evidence certificate, relay path maps, and cryptographic verdict.</p>
+              </div>
+              <button type="button" onclick="exportDossierPdf(event)" class="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono tracking-wide uppercase shadow-sm flex items-center space-x-2 cursor-pointer transition-all">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                  <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                  <path d="M12 18v-6"/>
+                  <path d="m9 15 3 3 3-3"/>
+                </svg>
+                <span>Export Dossier PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Cryptographic Chain of Custody Card -->
+          <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-700 font-bold font-mono flex items-center space-x-2">
+                <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="4" y1="9" x2="20" y2="9"/>
+                  <line x1="4" y1="15" x2="20" y2="15"/>
+                  <line x1="10" y1="3" x2="8" y2="21"/>
+                  <line x1="16" y1="3" x2="14" y2="21"/>
+                </svg>
+                <span>Cryptographic Chain of Custody (SHA-256 Digest)</span>
+              </span>
+              <button type="button" id="copyHashBtn" onclick="copyEvidenceHash(event)" class="text-slate-900 hover:text-slate-700 font-bold text-xs flex items-center space-x-1 cursor-pointer">
+                <span>Copy Hash</span>
+              </button>
+            </div>
+            <div class="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-800 break-all select-all font-mono shadow-xs" id="sha256Digest">
+              --
+            </div>
+            <p class="text-[11px] text-slate-400">
+              Computed over the raw byte sequence of the ingested email file upon arrival to verify non-tampering.
+            </p>
+          </div>
+
+        </section>
+
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 9: DEMO SCENARIOS (Clearly Separated Pre-configured Data)    -->
+      <!-- ================================================================= -->
+      <div id="view-demo" class="workspace-view hidden space-y-6">
+        
+        <div class="card-soft rounded-3xl p-6 sm:p-8 space-y-6">
+          <div class="border-b border-slate-100 pb-3">
+            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-amber-50 text-amber-800 border border-amber-200 uppercase">
+              PRE-CONFIGURED EVALUATION SCENARIOS
             </span>
-            <button type="button" id="copyHashBtn" onclick="copyEvidenceHash(event)" class="text-cyan-400 hover:text-cyan-300 flex items-center space-x-1 transition-colors cursor-pointer">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-              </svg>
-              <span>Copy</span>
-            </button>
+            <h3 class="text-xl font-bold text-slate-900 tracking-tight mt-2">Demonstration Scenarios</h3>
+            <p class="text-xs text-slate-500 mt-1">
+              Select an automated test scenario to evaluate TrustShield V2 forensic attribution without needing to supply external files.
+            </p>
           </div>
-          <div class="mt-2 p-2 bg-slate-950 rounded border border-slate-800 font-mono text-[10px] text-slate-400 break-all select-all" id="sha256Digest">
-            Calculating...
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <!-- Case 1: Phishing & Tor -->
+            <div class="card-soft p-6 rounded-2xl flex flex-col justify-between space-y-4">
+              <div>
+                <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-rose-50 text-rose-700 border border-rose-200 uppercase">CASE 1</span>
+                <h4 class="text-sm font-bold text-slate-900 mt-2">Phishing & Credential Theft</h4>
+                <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Impersonates PayPal security with disposable .top TLD, dead unresolvable domain, high-urgency pressure cues, and Tor exit node origin.
+                </p>
+              </div>
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-[10px] font-mono font-bold text-rose-600">Expected: 100/100 Phishing</span>
+                <button type="button" id="demoPhishingBtn" onclick="loadDemoScenario('phishing')" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono transition-all cursor-pointer">
+                  Run Demo Case 1 →
+                </button>
+              </div>
+            </div>
+
+            <!-- Case 2: BEC / Executive Spoofing -->
+            <div class="card-soft p-6 rounded-2xl flex flex-col justify-between space-y-4">
+              <div>
+                <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-amber-50 text-amber-700 border border-amber-200 uppercase">CASE 2</span>
+                <h4 class="text-sm font-bold text-slate-900 mt-2">Business Email Compromise (BEC)</h4>
+                <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  CEO wire transfer request with legitimate corporate links, but silent Reply-To redirection to an external fraudster mailbox.
+                </p>
+              </div>
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-[10px] font-mono font-bold text-amber-600">Expected: 65/100 BEC</span>
+                <button type="button" id="demoBecBtn" onclick="loadDemoScenario('bec')" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono transition-all cursor-pointer">
+                  Run Demo Case 2 →
+                </button>
+              </div>
+            </div>
+
+            <!-- Case 3: Legitimate Corporate Email -->
+            <div class="card-soft p-6 rounded-2xl flex flex-col justify-between space-y-4">
+              <div>
+                <span class="px-2 py-0.5 text-[10px] font-bold font-mono rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">CASE 3</span>
+                <h4 class="text-sm font-bold text-slate-900 mt-2">Legitimate Corporate Email</h4>
+                <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Internal IT maintenance notice passing SPF, DKIM, DMARC, valid MX records, matching Return-Path and verified clean destination links.
+                </p>
+              </div>
+              <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-[10px] font-mono font-bold text-emerald-600">Expected: Clean 1.8/100</span>
+                <button type="button" id="demoLegitimateBtn" onclick="loadDemoScenario('legitimate')" class="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold font-mono transition-all cursor-pointer">
+                  Run Demo Case 3 →
+                </button>
+              </div>
+            </div>
           </div>
+
+          <!-- Download Sample Files for Manual Testing -->
+          <div class="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <span class="text-slate-500 font-medium">Download sample .eml records for manual drag-and-drop testing:</span>
+            <div class="flex items-center space-x-2 font-mono">
+              <button type="button" onclick="downloadSampleScenario('phishing')" class="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Phishing .eml</button>
+              <button type="button" onclick="downloadSampleScenario('bec')" class="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">BEC .eml</button>
+              <button type="button" onclick="downloadSampleScenario('legitimate')" class="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700">Clean .eml</button>
+            </div>
+          </div>
+
         </div>
 
       </div>
 
-    </section>
-
-  </main>
-
-  <!-- ===================================================================== -->
-  <!-- FOOTER                                                                -->
-  <!-- ===================================================================== -->
-  <footer class="mt-auto border-t border-slate-800/80 bg-[#090d16] py-4 text-center text-xs font-mono text-slate-500">
-    <p>TrustShield V2 Forensic Engineering // Certified Court-Admissible Electronic Record (Sec 65B Indian Evidence Act)</p>
-  </footer>
-
-  <!-- ===================================================================== -->
-  <!-- EMBEDDED FORENSIC JAVASCRIPT CONTROLLER (100% SELF-CONTAINED)          -->
-  <!-- ===================================================================== -->
-  <script>
-    // Global API Base resolution
-    var API_BASE = (window.location.port === '8000' && window.location.protocol.startsWith('http'))
-      ? ''
-      : 'http://localhost:8000';
-
-    var currentReport = null;
-    var mapInstance = null;
-    var mapMarkersGroup = null;
-    var mapPolyline = null;
-    var statusInterval = null;
-
-    // Synthetic Sample Phishing .eml for 1-Click Evaluation
-    var SAMPLE_PHISHING_EML = `Delivered-To: victim.executive@company.com\r
-Received: from mx.internal.company.com (mx.internal.company.com [10.0.2.15])\r
-\tby mailbox.company.com (Postfix) with ESMTP id 4X9F8D01;\r
-\tMon, 7 Sep 2026 14:35:12 +0000 (UTC)\r
-Received: from edge-relay.company.com (edge-relay.company.com [192.168.1.1])\r
-\tby mx.internal.company.com with ESMTP id 3B8C1A22;\r
-\tMon, 7 Sep 2026 14:35:10 +0000 (UTC)\r
-Received: from mail.spoofed-sender.xyz (unknown [185.220.101.5])\r
-\tby edge-relay.company.com (Postfix) with ESMTPS id 1A2B3C4D;\r
-\tMon, 7 Sep 2026 14:35:05 +0000 (UTC)\r
-Received: from attacker-laptop (unknown [10.0.0.5])\r
-\tby mail.spoofed-sender.xyz (Postfix) with ESMTPA id 99887766;\r
-\tMon, 7 Sep 2026 14:34:58 +0000 (UTC)\r
-Return-Path: <spoofed-account@spoofed-sender.xyz>\r
-From: "Executive Security Alert" <security@paypal-verification.top>\r
-To: victim.executive@company.com\r
-Subject: URGENT: Unauthorized Wire Transfer Detected - Verify Identity\r
-Date: Mon, 7 Sep 2026 14:34:55 +0000\r
-Message-ID: <20260907143455.ABC123XYZ@spoofed-sender.xyz>\r
-Reply-To: phisher-drop@external-scam.biz\r
-MIME-Version: 1.0\r
-Content-Type: multipart/alternative; boundary="----=_Part_12345_67890"\r
-\r
-------=_Part_12345_67890\r
-Content-Type: text/plain; charset=UTF-8\r
-Content-Transfer-Encoding: 7bit\r
-\r
-Urgent Notice:\r
-We detected an unauthorized login attempt from an unrecognized device.\r
-Please cancel this transaction immediately by visiting https://example.com/phish\r
-Alternatively review your case here: https://portal-resolve.top/ticket?id=99281\r
-\r
-------=_Part_12345_67890\r
-Content-Type: text/html; charset=UTF-8\r
-Content-Transfer-Encoding: 7bit\r
-\r
-<!DOCTYPE html>\r
-<html>\r
-<body>\r
-  <h2>Security Notification</h2>\r
-  <p>An unauthorized wire transfer of $14,850.00 was requested from foreign IP <strong>185.220.101.5</strong>.</p>\r
-  <p>If you did not authorize this, cancel immediately:</p>\r
-  <p><a href="https://example.com/phish" style="color:red; font-weight:bold;">Click Here to Cancel Transfer</a></p>\r
-  <p>Support Reference: <a href="https://portal-resolve.top/ticket?id=99281">Resolution Portal</a></p>\r
-</body>\r
-</html>\r
-------=_Part_12345_67890--\r
-`;
-
-    // Global Trigger Functions for HTML Event Handlers
-    window.triggerFileInput = function(e) {
-      if (e) {
-        if (e.target && e.target.id === 'emlFileInput') return;
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      const fileInput = document.getElementById('emlFileInput');
-      if (fileInput) {
-        fileInput.value = '';
-        fileInput.click();
-      }
-    };
-
-    window.handleFileSelect = function(e) {
-      if (e && e.target && e.target.files && e.target.files.length > 0) {
-        processEmlFile(e.target.files[0]);
-      }
-    };
-
-    window.loadSamplePhishingDemo = function(e) {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      const blob = new Blob([SAMPLE_PHISHING_EML], { type: 'message/rfc822' });
-      const sampleFile = new File([blob], 'URGENT_WIRE_TRANSFER_ATTACK.eml', { type: 'message/rfc822' });
-      processEmlFile(sampleFile);
-    };
-
-    window.downloadSampleEml = function(e) {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      const blob = new Blob([SAMPLE_PHISHING_EML], { type: 'message/rfc822' });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = 'URGENT_WIRE_TRANSFER_ATTACK.eml';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(downloadUrl);
-      a.remove();
-    };
-
-    window.exportDossierPdf = exportDossierPdf;
-    window.resetDashboard = resetDashboard;
-    window.copyEvidenceHash = copyEvidenceHash;
-
-    function copyEvidenceHash(e) {
-      if (e) e.stopPropagation();
-      const hashText = document.getElementById('sha256Digest').innerText;
-      if (hashText && hashText !== 'Calculating...') {
-        navigator.clipboard.writeText(hashText);
-        const copyBtn = document.getElementById('copyHashBtn');
-        copyBtn.innerHTML = `<span class="text-emerald-400 font-semibold">✓ Copied</span>`;
-        setTimeout(() => {
-          copyBtn.innerHTML = `
-            <svg class="w-3 h-3 inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-              <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-            </svg>
-            <span>Copy</span>
-          `;
-        }, 2000);
-      }
-    }
-
-    // Drag & Drop Setup
-    function setupDragAndDrop() {
-      const dropZone = document.getElementById('dropZone');
-      if (!dropZone) return;
-
-      window.addEventListener('dragover', (e) => e.preventDefault());
-      window.addEventListener('drop', (e) => e.preventDefault());
-
-      ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.add('border-cyan-400', 'bg-cyan-950/30');
-        });
-      });
-
-      ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.remove('border-cyan-400', 'bg-cyan-950/30');
-        });
-      });
-
-      dropZone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        if (dt && dt.files && dt.files.length > 0) {
-          processEmlFile(dt.files[0]);
-        }
-      });
-    }
-
-    // Ingests file and calls backend
-    async function processEmlFile(file) {
-      if (!file) return;
-      showLoading(true);
-
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        const response = await fetch(`${API_BASE}/api/forensics/analyze-eml`, {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `HTTP ${response.status}: Analysis request failed`);
-        }
-
-        const data = await response.json();
-        currentReport = data;
-
-        renderDashboard(data);
-        showLoading(false);
-
-      } catch (error) {
-        showLoading(false);
-        alert(`Forensic Ingestion Error:\n${error.message}\n\nPlease ensure backend is running at ${API_BASE || 'http://localhost:8000'}`);
-        console.error('Forensic Analysis Error:', error);
-      }
-    }
-
-    function showLoading(isLoading) {
-      const loadingState = document.getElementById('loadingState');
-      const statusText = document.getElementById('loadingStatusText');
-      if (!loadingState) return;
-
-      if (isLoading) {
-        loadingState.classList.remove('hidden');
-        
-        const steps = [
-          'Computing SHA-256 Chain of Custody...',
-          'Tracing Received: Hops & Filtering RFC-1918 Private Subnets...',
-          'Querying SPF, DKIM, DMARC & MX Infrastructure...',
-          'Detonating Hyperlinks in Headless Chrome Sandbox...',
-          'Classifying Threat Actor Attribution Matrix...'
-        ];
-        let stepIdx = 0;
-        if (statusText) statusText.innerText = steps[0];
-        
-        if (statusInterval) clearInterval(statusInterval);
-        statusInterval = setInterval(() => {
-          stepIdx = (stepIdx + 1) % steps.length;
-          if (statusText) statusText.innerText = steps[stepIdx];
-        }, 1500);
-
-      } else {
-        loadingState.classList.add('hidden');
-        if (statusInterval) clearInterval(statusInterval);
-      }
-    }
-
-    function renderDashboard(data) {
-      const execSection = document.getElementById('executiveVerdict');
-      const dashGrid = document.getElementById('dashboardGrid');
-      if (execSection) execSection.classList.remove('hidden');
-      if (dashGrid) dashGrid.classList.remove('hidden');
-
-      renderVerdict(data);
-      renderMetadataAndAuth(data);
-      renderLeafletMap(data.origin_intelligence);
-      renderNarrativeAndLinks(data);
-
-      if (execSection) execSection.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    function renderVerdict(data) {
-      const score = parseFloat(data.overall_threat_score || 0.0);
-      const scoreNumber = document.getElementById('scoreNumber');
-      const scoreCircle = document.getElementById('scoreCircle');
-      const verdictCard = document.getElementById('verdictCard');
-      const verdictBadge = document.getElementById('verdictBadge');
-      const attributionBadge = document.getElementById('attributionBadge');
-      const verdictHeadline = document.getElementById('verdictHeadline');
-      const attributionDetails = document.getElementById('attributionDetails');
-
-      if (scoreNumber) scoreNumber.innerText = Math.round(score);
-
-      const circumference = 263.89;
-      const offset = circumference - (score / 100) * circumference;
-      if (scoreCircle) scoreCircle.style.strokeDashoffset = offset;
-
-      const attr = data.threat_attribution || {};
-      if (attributionBadge) attributionBadge.innerText = attr.type || 'UNKNOWN';
-      if (attributionDetails) attributionDetails.innerText = attr.details || 'Evaluation completed across all telemetry engines.';
-
-      if (score >= 80.0) {
-        if (scoreCircle) scoreCircle.setAttribute('stroke', '#ef4444');
-        if (verdictCard) verdictCard.className = 'rounded-2xl border border-red-800/80 p-6 sm:p-8 bg-gradient-to-br from-red-950/40 via-slate-900 to-slate-950 shadow-2xl glow-red transition-all';
-        if (verdictBadge) {
-          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-red-950/90 text-red-400 border border-red-700/80';
-          verdictBadge.innerText = data.verdict || 'CRITICAL FRAUD / PHISHING';
-        }
-        if (verdictHeadline) verdictHeadline.innerText = 'Critical Cyber Attack & Identity Spoofing';
-      } else if (score >= 50.0) {
-        if (scoreCircle) scoreCircle.setAttribute('stroke', '#f59e0b');
-        if (verdictCard) verdictCard.className = 'rounded-2xl border border-amber-800/80 p-6 sm:p-8 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 shadow-2xl glow-amber transition-all';
-        if (verdictBadge) {
-          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-amber-950/90 text-amber-400 border border-amber-700/80';
-          verdictBadge.innerText = data.verdict || 'SUSPICIOUS / UNVERIFIED ORIGIN';
-        }
-        if (verdictHeadline) verdictHeadline.innerText = 'Suspicious Infrastructure & Unverified Identity';
-      } else {
-        if (scoreCircle) scoreCircle.setAttribute('stroke', '#10b981');
-        if (verdictCard) verdictCard.className = 'rounded-2xl border border-emerald-800/80 p-6 sm:p-8 bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 shadow-2xl glow-emerald transition-all';
-        if (verdictBadge) {
-          verdictBadge.className = 'px-3 py-1 rounded-md text-xs font-bold font-mono tracking-wide uppercase bg-emerald-950/90 text-emerald-400 border border-emerald-700/80';
-          verdictBadge.innerText = data.verdict || 'LEGITIMATE / AUTHENTICATED';
-        }
-        if (verdictHeadline) verdictHeadline.innerText = 'Technical Envelope Verified Clean';
-      }
-    }
-
-    function renderMetadataAndAuth(data) {
-      const meta = data.metadata || {};
-      const auth = data.authentication || {};
-      const mx = data.sender_domain_intelligence || {};
-
-      const becBox = document.getElementById('becAlertBox');
-      if (becBox) {
-        if (meta.reply_to_mismatch) {
-          becBox.classList.remove('hidden');
-          const becDetail = document.getElementById('becDetailText');
-          if (becDetail) becDetail.innerText = `From: ${meta.from || 'N/A'}\nReply-To: ${meta.reply_to || 'N/A'}`;
-        } else {
-          becBox.classList.add('hidden');
-        }
-      }
-
-      const setElText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = val;
-      };
-
-      setElText('metaSubject', meta.subject || 'No Subject');
-      setElText('metaFrom', meta.from || 'Unknown Sender');
-      setElText('metaFromDomain', meta.from_domain || 'Unknown Domain');
-      setElText('metaReturnPath', meta.return_path || 'None');
-      setElText('metaTo', meta.to || 'Undisclosed Recipients');
-      setElText('metaDate', meta.date || 'Unknown Date');
-      setElText('metaHops', `${data.origin_intelligence?.total_hops || 0} intermediate hops`);
-
-      const setBadge = (elId, status, passText = 'PASS', failText = 'FAIL') => {
-        const el = document.getElementById(elId);
-        if (!el) return;
-        if (status) {
-          el.className = 'px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-emerald-950 text-emerald-400 border border-emerald-700/60';
-          el.innerText = passText;
-        } else {
-          el.className = 'px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-red-950 text-red-400 border border-red-700/60';
-          el.innerText = failText;
-        }
-      };
-
-      setBadge('spfBadge', auth.spf_pass);
-      setElText('spfDetails', auth.spf_details || 'Sender Policy Framework evaluation');
-
-      setBadge('dkimBadge', auth.dkim_pass);
-      setElText('dkimDetails', auth.dkim_details || 'Cryptographic public key verification');
-
-      setBadge('dmarcBadge', auth.dmarc_pass);
-      setElText('dmarcDetails', auth.dmarc_details || 'Domain alignment and policy enforcement');
-
-      setBadge('mxBadge', mx.has_mx_records, 'VALID MX', 'NO MX (BURNER)');
-      setElText('mxDetails', mx.has_mx_records 
-        ? `Primary MX: ${mx.primary_mx || 'Configured'}`
-        : `Domain '${mx.from_domain}' lacks mail exchanger infrastructure`);
-    }
-
-    function renderLeafletMap(originIntel) {
-      if (!originIntel) return;
-      if (typeof L === 'undefined') {
-        console.warn('Leaflet not loaded');
-        return;
-      }
-
-      const routeMap = originIntel.route_map || [];
-      const originIp = originIntel.originating_ip || 'Unknown';
-      const originCountry = originIntel.origin_country || 'Unknown';
-      const originIsp = originIntel.origin_isp || 'Unknown';
-      const isAnonymized = originIntel.is_anonymized_node;
-
-      const setElText = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = val;
-      };
-
-      setElText('originIpText', originIp);
-      setElText('originCountryBadge', originCountry);
-      setElText('originIspText', originIsp);
-
-      const originProxyFlag = document.getElementById('originProxyFlag');
-      if (originProxyFlag) {
-        if (isAnonymized) {
-          originProxyFlag.innerHTML = `
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-red-950 text-red-400 border border-red-700/50">TOR EXIT NODE</span>
-            <span class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">${originIsp}</span>
-          `;
-        } else {
-          originProxyFlag.innerHTML = `
-            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-emerald-950 text-emerald-400 border border-emerald-700/50">STANDARD TRANSIT</span>
-            <span class="block text-[10px] text-slate-400 font-mono truncate max-w-[150px]">${originIsp}</span>
-          `;
-        }
-      }
-
-      const mapEl = document.getElementById('map');
-      if (!mapEl) return;
-
-      if (!mapInstance) {
-        mapInstance = L.map('map', {
-          zoomControl: true,
-          attributionControl: false
-        }).setView([20, 0], 2);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" class="text-cyan-500">OpenStreetMap</a>'
-        }).addTo(mapInstance);
-
-        mapMarkersGroup = L.featureGroup().addTo(mapInstance);
-      } else {
-        mapMarkersGroup.clearLayers();
-        if (mapPolyline) mapInstance.removeLayer(mapPolyline);
-      }
-
-      setTimeout(() => {
-        if (mapInstance) mapInstance.invalidateSize();
-      }, 250);
-
-      const coordinates = [];
-      const hopsContainer = document.getElementById('hopsContainer');
-      if (hopsContainer) hopsContainer.innerHTML = '';
-
-      routeMap.forEach((hop) => {
-        const hasCoords = (hop.lat && hop.lon && (hop.lat !== 0 || hop.lon !== 0));
-        const isOrigin = (hop.ip === originIp || hop.is_suspicious_proxy);
-        const hopBadgeClass = isOrigin
-          ? 'border-red-600/70 bg-red-950/40 text-red-300'
-          : (hop.ip.startsWith('10.') || hop.ip.startsWith('192.168.') 
-              ? 'border-slate-700 bg-slate-950/40 text-slate-400' 
-              : 'border-cyan-800/60 bg-cyan-950/40 text-cyan-300');
-
-        if (hopsContainer) {
-          const hopItem = document.createElement('div');
-          hopItem.className = `p-2 rounded-lg border ${hopBadgeClass} text-xs font-mono flex items-center justify-between`;
-          hopItem.innerHTML = `
-            <div class="flex items-center space-x-2 truncate">
-              <span class="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-bold">#${hop.hop_number}</span>
-              <span class="font-bold">${hop.ip}</span>
-              <span class="text-slate-500 text-[10px] truncate">(${hop.city || 'LAN'}, ${hop.country || 'RFC-1918'})</span>
-            </div>
-            <div class="flex-shrink-0 text-right">
-              ${hop.is_suspicious_proxy 
-                ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800 font-bold">TOR / VPN</span>' 
-                : '<span class="text-[9px] text-slate-500">RELAY</span>'}
-            </div>
-          `;
-          hopsContainer.appendChild(hopItem);
-        }
-
-        if (hasCoords && mapMarkersGroup) {
-          coordinates.push([hop.lat, hop.lon]);
-
-          const iconClass = isOrigin ? 'pulse-marker-origin' : 'pulse-marker-hop';
-          const customIcon = L.divIcon({
-            className: 'custom-div-icon',
-            html: `<div class="${iconClass}"></div>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          });
-
-          const popupHtml = `
-            <div class="font-mono">
-              <div class="text-xs font-bold ${isOrigin ? 'text-red-400' : 'text-cyan-400'} border-b border-slate-700 pb-1 mb-1">
-                HOP #${hop.hop_number}: ${hop.ip}
-              </div>
-              <div><strong>Location:</strong> ${hop.city}, ${hop.country}</div>
-              <div><strong>ISP:</strong> ${hop.isp} (${hop.asn})</div>
-              <div class="mt-1">
-                ${hop.is_suspicious_proxy 
-                  ? '<span class="px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-700 text-[9px] font-bold uppercase">🚨 Tor / VPN Proxy Detected</span>' 
-                  : '<span class="text-emerald-400 text-[9px]">✓ Verified Transit Node</span>'}
-              </div>
-            </div>
-          `;
-
-          const marker = L.marker([hop.lat, hop.lon], { icon: customIcon }).bindPopup(popupHtml);
-          mapMarkersGroup.addLayer(marker);
-        }
-      });
-
-      if (coordinates.length > 1 && mapInstance) {
-        mapPolyline = L.polyline(coordinates, {
-          color: '#ef4444',
-          weight: 2.5,
-          opacity: 0.8,
-          dashArray: '6, 8',
-          lineCap: 'round'
-        }).addTo(mapInstance);
-
-        mapInstance.fitBounds(mapPolyline.getBounds(), { padding: [40, 40] });
-      } else if (coordinates.length === 1 && mapInstance) {
-        mapInstance.setView(coordinates[0], 5);
-      }
-    }
-
-    function renderNarrativeAndLinks(data) {
-      const narrativeContainer = document.getElementById('narrativeContent');
-      if (narrativeContainer) narrativeContainer.innerText = data.incident_summary || 'No forensic narrative available.';
-
-      const links = data.link_investigation || [];
-      const linksContainer = document.getElementById('linksContainer');
-      const countBadge = document.getElementById('linkCountBadge');
-      if (countBadge) countBadge.innerText = `${links.length} Link(s)`;
-      
-      if (linksContainer) {
-        linksContainer.innerHTML = '';
-
-        if (links.length === 0) {
-          linksContainer.innerHTML = `
-            <div class="p-4 rounded-lg bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-500 font-mono">
-              No embedded links detected in email payload
-            </div>
-          `;
-        } else {
-          links.forEach(link => {
-            const score = parseFloat(link.threat_score || 0.0);
-            const isCritical = score >= 80.0;
-            const isSuspicious = score >= 50.0 && score < 80.0;
-            
-            const badgeClass = isCritical
-              ? 'bg-red-950 text-red-400 border-red-700'
-              : (isSuspicious ? 'bg-amber-950 text-amber-400 border-amber-700' : 'bg-emerald-950 text-emerald-400 border-emerald-700');
-
-            const card = document.createElement('div');
-            card.className = `p-3 rounded-lg bg-slate-950/80 border ${isCritical ? 'border-red-900/60' : 'border-slate-800'} space-y-2 text-xs font-mono`;
-            card.innerHTML = `
-              <div class="flex items-center justify-between">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold border uppercase ${badgeClass}">
-                  ${Math.round(score)}/100 • ${link.verdict || 'UNKNOWN'}
-                </span>
-                <span class="text-[10px] text-slate-500">${link.telemetry?.hard_override_triggered ? '🚨 Threat DB Match' : 'Sandbox Audit'}</span>
-              </div>
-              <div class="text-[11px] text-slate-300 break-all bg-black/40 p-1.5 rounded border border-slate-800/80">
-                ${link.url}
-              </div>
-              <div class="text-[10px] text-slate-400 truncate">
-                ${link.summary ? link.summary.split('\n')[0] : 'Payload evaluated in headless sandbox.'}
-              </div>
-            `;
-            linksContainer.appendChild(card);
-          });
-        }
-      }
-
-      const shaEl = document.getElementById('sha256Digest');
-      if (shaEl) shaEl.innerText = data.evidence_hash_sha256 || 'N/A';
-    }
-
-    async function exportDossierPdf(e) {
-      if (e) e.stopPropagation();
-      if (!currentReport) {
-        alert('No active forensic report to export.');
-        return;
-      }
-
-      const btn = document.getElementById('exportPdfBtn');
-      const originalHtml = btn ? btn.innerHTML : '';
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<svg class="w-4 h-4 animate-spin inline-block mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>Compiling PDF Dossier...</span>`;
-      }
-
-      try {
-        const response = await fetch(`${API_BASE}/api/forensics/export-pdf`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(currentReport)
-        });
-
-        if (!response.ok) {
-          throw new Error(`PDF Export failed with HTTP status ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        
-        const hashPrefix = (currentReport.evidence_hash_sha256 || 'dossier').substring(0, 10);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.download = `TrustShield_Forensic_Dossier_${hashPrefix}.pdf`;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        
-        window.URL.revokeObjectURL(blobUrl);
-        downloadLink.remove();
-
-      } catch (error) {
-        alert(`Failed to export forensic dossier PDF:\n${error.message}`);
-        console.error('PDF Export Error:', error);
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalHtml;
-        }
-      }
-    }
-
-    function resetDashboard(e) {
-      if (e) e.stopPropagation();
-      currentReport = null;
-      const fileInput = document.getElementById('emlFileInput');
-      if (fileInput) fileInput.value = '';
-      const execSection = document.getElementById('executiveVerdict');
-      const dashGrid = document.getElementById('dashboardGrid');
-      if (execSection) execSection.classList.add('hidden');
-      if (dashGrid) dashGrid.classList.add('hidden');
-      const uploadSec = document.getElementById('uploadSection');
-      if (uploadSec) uploadSec.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    // Initial setup on load
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', setupDragAndDrop);
-    } else {
-      setupDragAndDrop();
-    }
-  </script>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <!-- Floating Quick Return to Top Action -->
+  <button type="button" id="backToTopBtn" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })" title="Return to Top of Investigation" class="fixed bottom-6 right-6 z-40 px-3.5 py-2.5 rounded-2xl bg-slate-900/90 backdrop-blur text-white shadow-xl hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all opacity-0 pointer-events-none cursor-pointer flex items-center space-x-2 text-xs font-mono font-bold border border-slate-700/50">
+    <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <path d="m18 15-6-6-6 6"/>
+    </svg>
+    <span class="hidden sm:inline tracking-wider uppercase">Top</span>
+  </button>
+
+  <!-- External JavaScript Controller -->
+  <script src="app.js"></script>
 </body>
 </html>

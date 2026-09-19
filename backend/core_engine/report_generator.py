@@ -100,6 +100,15 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
         textColor=colors.HexColor("#1e293b")
     )
 
+    cell_header = ParagraphStyle(
+        'CellHeader',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8.5,
+        leading=11,
+        textColor=colors.white
+    )
+
     cell_normal = ParagraphStyle(
         'CellNormal',
         parent=styles['Normal'],
@@ -249,9 +258,9 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
 
     auth_table_data = [
         [
-            Paragraph("<b>Protocol</b>", cell_bold),
-            Paragraph("<b>Status</b>", cell_bold),
-            Paragraph("<b>Forensic Evaluation & Reason</b>", cell_bold)
+            Paragraph("<font color='white'><b>Protocol</b></font>", cell_header),
+            Paragraph("<font color='white'><b>Status</b></font>", cell_header),
+            Paragraph("<font color='white'><b>Forensic Evaluation & Reason</b></font>", cell_header)
         ],
         [
             Paragraph("<b>SPF</b> (Sender Policy)", cell_normal),
@@ -296,11 +305,11 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
     story.append(Paragraph("3. Mail Transmission Hop Tracing & Infrastructure Geolocation", section_heading))
 
     hop_headers = [
-        Paragraph("<b>Hop #</b>", cell_bold),
-        Paragraph("<b>Node IP Address</b>", cell_bold),
-        Paragraph("<b>Location</b>", cell_bold),
-        Paragraph("<b>ISP / Autonomous System</b>", cell_bold),
-        Paragraph("<b>Proxy / VPN Flag</b>", cell_bold)
+        Paragraph("<font color='white'><b>Hop #</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Node IP Address</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Location</b></font>", cell_header),
+        Paragraph("<font color='white'><b>ISP / Autonomous System</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Proxy / VPN Flag</b></font>", cell_header)
     ]
     hop_rows = [hop_headers]
 
@@ -331,7 +340,7 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
 
     hop_table = Table(hop_rows, colWidths=[40, 110, 150, 150, 90])
     hop_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0f172a")),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
         ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
@@ -348,10 +357,10 @@ def generate_pdf_dossier(report_json: Dict[str, Any], output_path: str = "forens
     story.append(Paragraph("4. Payload Hyperlink Investigation & Sandbox Detonation", section_heading))
 
     link_headers = [
-        Paragraph("<b>Target URL</b>", cell_bold),
-        Paragraph("<b>Threat Score</b>", cell_bold),
-        Paragraph("<b>Sandbox Verdict</b>", cell_bold),
-        Paragraph("<b>Exfiltration / Evasion Signatures</b>", cell_bold)
+        Paragraph("<font color='white'><b>Target URL</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Threat Score</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Sandbox Verdict</b></font>", cell_header),
+        Paragraph("<font color='white'><b>Exfiltration / Evasion Signatures</b></font>", cell_header)
     ]
     link_rows = [link_headers]
 
