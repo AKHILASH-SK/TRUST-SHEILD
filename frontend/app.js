@@ -1004,8 +1004,10 @@ function renderLeafletMap(originIntel) {
       scrollWheelZoom: false
     }).setView([20, 0], 2);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd'
     }).addTo(mapInstance);
 
     mapMarkersGroup = L.featureGroup().addTo(mapInstance);
@@ -1045,10 +1047,18 @@ function renderLeafletMap(originIntel) {
 
   if (validCoords.length > 1) {
     mapPolyline = L.polyline(validCoords, {
-      color: '#10b981',
-      weight: 2,
-      opacity: 0.85,
-      dashArray: '4, 6'
+      color: '#22d3ee',
+      weight: 2.5,
+      opacity: 0.9,
+      dashArray: '6, 8',
+      className: 'animated-route-line'
+    }).addTo(mapInstance);
+
+    // Add a subtle glow underlay polyline
+    L.polyline(validCoords, {
+      color: '#22d3ee',
+      weight: 8,
+      opacity: 0.15
     }).addTo(mapInstance);
   }
 
