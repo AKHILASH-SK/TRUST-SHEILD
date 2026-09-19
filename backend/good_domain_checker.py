@@ -15,7 +15,8 @@ class GoodDomainChecker:
         self.vt_api_key = virustotal_api_key
         self.vt_base_url = "https://www.virustotal.com/api/v3"
         self.headers = {"x-apikey": self.vt_api_key}
-        self.timeout = 5
+        self.timeout = 2.0
+        self._cache = {}
 
     def get_vt_reputation(self, url: str) -> dict:
         """
@@ -26,6 +27,14 @@ class GoodDomainChecker:
         - vt_risk_score (float 0.0 - 100.0)
         - provider (str)
         """
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc.lower()
+        if domain.startswith('www.'):
+            domain = domain[4:]
+
+        if domain in self._cache:
+            return self._cache[domain]
+
         result = {
             "is_whitelisted": False,
             "malicious_count": 0,
@@ -34,15 +43,11 @@ class GoodDomainChecker:
             "provider": ""
         }
         try:
-            parsed_url = urlparse(url)
-            domain = parsed_url.netloc.lower()
-            if domain.startswith('www.'):
-                domain = domain[4:]
-                
             endpoint = f"{self.vt_base_url}/domains/{domain}"
             response = requests.get(endpoint, headers=self.headers, timeout=self.timeout)
             if response.status_code != 200:
                 result["vt_risk_score"] = 40.0
+                self._cache[domain] = result
                 return result
                 
             data = response.json().get('data', {}).get('attributes', {})
@@ -79,8 +84,7 @@ class GoodDomainChecker:
             else:
                 result["is_whitelisted"] = False
                 result["vt_risk_score"] = 35.0
-                logger.info(f"[Tier 2.5] '{domain}' is unranked or low rank ({best_rank}). Proceeding to Sandbox.")
-                
+                self._cache[domain] = result
             return result
         except Exception as e:
             logger.error(f"[Tier 2.5 API Error] {str(e)}.")

@@ -164,12 +164,18 @@ class VirtualSandboxAnalyzer:
     and inspects DOM, Network, Form destinations, and WHOIS lifecycle.
     """
     def __init__(self):
-        # Configure Headless Chrome with anti-bot stealth options
+        # Configure Headless Chrome with anti-bot stealth and silent/fast execution options
         self.chrome_options = Options()
         self.chrome_options.add_argument("--headless=new")
         self.chrome_options.add_argument("--disable-gpu")
+        self.chrome_options.add_argument("--disable-software-rasterizer")
         self.chrome_options.add_argument("--no-sandbox")
         self.chrome_options.add_argument("--disable-dev-shm-usage")
+        self.chrome_options.add_argument("--disable-extensions")
+        self.chrome_options.add_argument("--disable-logging")
+        self.chrome_options.add_argument("--log-level=3")
+        self.chrome_options.add_argument("--silent")
+        self.chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
         # Strip automation blink features
         self.chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         
@@ -177,27 +183,40 @@ class VirtualSandboxAnalyzer:
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         self.chrome_options.add_argument(f"user-agent={self.user_agent}")
 
+    DYNAMIC_HOSTING_PROVIDERS = {
+        'vercel.app', 'github.io', 'pages.dev', 'netlify.app', 'herokuapp.com',
+        'web.app', 'firebaseapp.com', 'glitch.me', 'onrender.com', 'azurewebsites.net',
+        'workers.dev', 'cloudfront.net', 's3.amazonaws.com', 'gitlab.io', 'bitballoon.com',
+        'surge.sh', 'replit.app', 'replit.dev', 'ngrok.io', 'localtunnel.me'
+    }
+
     def _query_domain_age(self, url: str) -> Tuple[int, int, int]:
         """
-        Queries WHOIS data with a strict 3-second timeout.
+        Queries WHOIS data with a fast non-blocking timeout.
+        Skips dynamic multi-tenant cloud hosting platforms.
         Returns: (domain_age_days, newly_registered_domain_flag, domain_risk_score)
         """
         try:
             ext = tldextract.extract(url)
-            reg_domain = ext.registered_domain
-            if not reg_domain:
+            reg_domain = ext.registered_domain.lower() if ext.registered_domain else ""
+            if not reg_domain or reg_domain in self.DYNAMIC_HOSTING_PROVIDERS:
                 return -1, 0, 0
                 
             def _fetch_whois():
+                import socket
+                socket.setdefaulttimeout(1.2)
                 w = whois.whois(reg_domain)
-                creation_date = w.creation_date
+                creation_date = getattr(w, 'creation_date', None)
                 if isinstance(creation_date, list):
                     creation_date = creation_date[0]
                 return creation_date
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
                 future = executor.submit(_fetch_whois)
-                creation_date = future.result(timeout=3.0)
+                creation_date = future.result(timeout=1.2)
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
 
             if creation_date and isinstance(creation_date, datetime):
                 now = datetime.now(creation_date.tzinfo) if creation_date.tzinfo else datetime.now()
@@ -214,9 +233,9 @@ class VirtualSandboxAnalyzer:
                 else:
                     return age_days, 0, 0
         except concurrent.futures.TimeoutError:
-            print("   [*] WHOIS query timed out (3s). Proceeding with behavioral analysis.")
-        except Exception as e:
-            print(f"   [*] WHOIS query failed ({str(e)}). Proceeding with behavioral analysis.")
+            pass
+        except Exception:
+            pass
             
         return -1, 0, 0
 
@@ -418,8 +437,8 @@ class VirtualSandboxAnalyzer:
         try:
             # 2. Initialize the Stealth Sandbox Browser
             driver = webdriver.Chrome(options=self.chrome_options)
-            driver.set_page_load_timeout(6)
-            driver.set_script_timeout(5)
+            driver.set_page_load_timeout(4)
+            driver.set_script_timeout(3)
             
             # Feature 1: Strip navigator.webdriver via CDP script before any page script executes
             driver.execute_cdp_cmd(
@@ -459,7 +478,7 @@ class VirtualSandboxAnalyzer:
             # 3. Record initial state and navigate
             initial_url = url
             driver.get(url)
-            time.sleep(2) # Wait for JS dynamic SPAs / payloads to execute
+            time.sleep(0.5) # Fast wait for JS dynamic SPAs / payloads to execute
             
             final_url = driver.current_url
             current_ext = tldextract.extract(final_url)

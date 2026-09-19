@@ -118,11 +118,14 @@ Synthesize a professional, concise 3-bullet incident summary for a mobile user a
 
         try:
             import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            try:
                 future = executor.submit(_call_gemini)
-                gemini_text = future.result(timeout=2.5)
+                gemini_text = future.result(timeout=2.0)
                 if gemini_text:
                     return gemini_text
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
         except Exception as e:
             logger.debug(f"Gemini summary skipped: {e}")
 

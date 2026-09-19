@@ -373,8 +373,8 @@ function copyRawHeaders(e) {
 // TAB NAVIGATION
 // =========================================================================
 
-var TAB_NAMES = ['dashboard', 'email', 'threat', 'xai', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
-var CONTENT_TABS = ['email', 'threat', 'xai', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
+var TAB_NAMES = ['dashboard', 'email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
+var CONTENT_TABS = ['email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
 
 function switchTab(name) {
   TAB_NAMES.forEach(n => {
@@ -454,7 +454,7 @@ function resetDashboard(e) {
 
   const statusPill = document.getElementById('caseStatusPill');
   if (statusPill) {
-    statusPill.className = 'px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500 border border-slate-200';
+    statusPill.className = 'text-[9.5px] font-medium text-slate-400 truncate';
     statusPill.innerText = 'Awaiting Evidence';
   }
 
@@ -1500,7 +1500,7 @@ function renderEvidenceVault(data) {
   if (navBadge) {
     navBadge.classList.remove('hidden');
     navBadge.innerText = 'SEALED';
-    navBadge.className = 'px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-100 text-emerald-700';
+    navBadge.className = 'hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
   }
 }
 
@@ -1584,10 +1584,164 @@ function renderTimeline(data) {
 
 function renderReportTab(data) {
   const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
-  setText('reportCaseId', caseIdValue);
-  setText('reportVerdictSummary', data.verdict || 'N/A');
-  setText('reportScore', `${Math.round(parseFloat(data.overall_threat_score || 0))} / 100`);
-  setText('reportGeneratedAt', fmtTime(new Date()));
+  const setHtml = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+
+  const hash = data.evidence_hash_sha256 || 'UNKNOWN';
+  const score = parseFloat(data.overall_threat_score || 0.0);
+  const verdict = data.verdict || 'UNKNOWN';
+  const meta = data.metadata || {};
+  const auth = data.authentication || {};
+  const mx = data.sender_domain_intelligence || {};
+  const origin = data.origin_intelligence || {};
+  const attr = data.threat_attribution || {};
+  const links = data.link_investigation || [];
+  const hops = origin.route_map || [];
+  const now = new Date();
+
+  // Header and Identifiers
+  setText('reportCaseId', caseIdValue || `TSF-${hash.substring(0, 8).toUpperCase()}`);
+  setText('reportGeneratedAt', fmtTime(now));
+  setText('reportSha256Digest', hash);
+
+  // Verdict Box Styling & Scores
+  const verdictBox = document.getElementById('reportVerdictBox');
+  const verdictPill = document.getElementById('reportVerdictPill');
+  const threatScoreText = document.getElementById('reportThreatScoreText');
+
+  if (threatScoreText) threatScoreText.innerText = `${score.toFixed(1)} / 100`;
+  if (verdictPill) verdictPill.innerText = verdict;
+
+  if (score >= 80.0) {
+    if (verdictBox) verdictBox.className = 'rounded-xl border border-red-200 bg-red-50/60 p-5';
+    if (verdictPill) verdictPill.className = 'px-3 py-1 rounded-md text-xs font-extrabold uppercase tracking-wide bg-red-600 text-white shadow-sm';
+    if (threatScoreText) threatScoreText.className = 'text-lg font-black font-mono text-red-700';
+  } else if (score >= 50.0) {
+    if (verdictBox) verdictBox.className = 'rounded-xl border border-amber-200 bg-amber-50/60 p-5';
+    if (verdictPill) verdictPill.className = 'px-3 py-1 rounded-md text-xs font-extrabold uppercase tracking-wide bg-amber-600 text-white shadow-sm';
+    if (threatScoreText) threatScoreText.className = 'text-lg font-black font-mono text-amber-700';
+  } else {
+    if (verdictBox) verdictBox.className = 'rounded-xl border border-emerald-200 bg-emerald-50/60 p-5';
+    if (verdictPill) verdictPill.className = 'px-3 py-1 rounded-md text-xs font-extrabold uppercase tracking-wide bg-emerald-600 text-white shadow-sm';
+    if (threatScoreText) threatScoreText.className = 'text-lg font-black font-mono text-emerald-700';
+  }
+
+  // Attribution Details
+  setText('reportAttrTypeText', attr.type || 'UNKNOWN');
+  setText('reportAttrConfBadge', `CONFIDENCE: ${attr.confidence || 'UNKNOWN'}`);
+  setText('reportAttrDetailsText', attr.details || 'Deterministic forensic correlation complete.');
+
+  // Origin Details
+  setText('reportOriginIpText', origin.originating_ip || 'N/A');
+  const isAnon = origin.is_anonymized_node || origin.is_proxy;
+  const infraType = isAnon ? 'Anonymized Proxy / Exit Node' : 'Direct Autonomous System Transit';
+  const geoSummary = origin.country ? `${origin.city || ''}, ${origin.country} (${origin.isp || 'Autonomous System'})` : 'Transit Autonomous System';
+  setText('reportInfraTypeText', `${infraType} · ${geoSummary}`);
+
+  // Exhibit 1: RFC-5322 Envelope
+  setText('reportSubject', meta.subject || 'N/A');
+  setText('reportFrom', meta.from || 'N/A');
+  setText('reportReturnPath', meta.return_path || 'N/A');
+  setText('reportTo', meta.to || 'N/A');
+  setText('reportDate', meta.date || 'N/A');
+  setText('reportMsgId', meta.message_id || 'N/A');
+
+  const replyToWrap = document.getElementById('reportReplyToWrap');
+  if (replyToWrap) {
+    const replyVal = meta.reply_to || 'None';
+    if (meta.reply_to_mismatch) {
+      replyToWrap.innerHTML = `
+        <span class="text-slate-900 font-mono">${replyVal}</span>
+        <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-red-100 text-red-700 border border-red-300">BEC MISMATCH DETECTED</span>
+      `;
+    } else {
+      replyToWrap.innerHTML = `<span class="text-slate-900 font-mono">${replyVal}</span>`;
+    }
+  }
+
+  // Exhibit 2: Authentication Audit
+  const fmtAuthBadge = (pass) => pass
+    ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">PASS</span>`
+    : `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-100 text-red-800 border border-red-300">FAIL</span>`;
+
+  setHtml('reportSpfBadge', fmtAuthBadge(auth.spf_pass));
+  setText('reportSpfDetails', auth.spf_details || (auth.spf_pass ? 'Authorized by sending SPF policy' : 'Failed SPF authorization check'));
+
+  setHtml('reportDkimBadge', fmtAuthBadge(auth.dkim_pass));
+  setText('reportDkimDetails', auth.dkim_details || (auth.dkim_pass ? 'Cryptographic DKIM signature valid' : 'No valid cryptographic DKIM signature found'));
+
+  setHtml('reportDmarcBadge', fmtAuthBadge(auth.dmarc_pass));
+  setText('reportDmarcDetails', auth.dmarc_details || (auth.dmarc_pass ? 'Aligned with sending identity' : 'Identifier alignment failed'));
+
+  setHtml('reportMxBadge', fmtAuthBadge(mx.has_mx_records));
+  setText('reportMxDetails', `Domain: ${mx.from_domain || 'N/A'} | Primary MX: ${mx.primary_mx || 'None (Burner/Unroutable)'}`);
+
+  // Exhibit 3: Mail Routing Hop Table
+  const hopTbody = document.getElementById('reportHopTableBody');
+  if (hopTbody) {
+    if (hops.length === 0) {
+      hopTbody.innerHTML = `<tr><td colspan="5" class="py-3 px-3 text-center text-slate-400">No external relay hops detected in message headers.</td></tr>`;
+    } else {
+      hopTbody.innerHTML = hops.map(hop => {
+        const isSusp = hop.is_suspicious_proxy || false;
+        const badge = isSusp
+          ? `<span class="text-red-600 font-bold">ANONYMIZED PROXY</span>`
+          : `<span class="text-emerald-600 font-bold">CLEAN TRANSIT</span>`;
+        let loc = `${hop.city || 'Unknown'}, ${hop.country || 'Unknown'}`;
+        if (hop.lat && hop.lon) loc += ` (${hop.lat.toFixed(2)}, ${hop.lon.toFixed(2)})`;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-2 px-3 text-slate-800 font-bold">${hop.hop_number || '-'}</td>
+            <td class="py-2 px-3 text-slate-900 font-bold font-mono">${hop.ip || 'Unknown'}</td>
+            <td class="py-2 px-3 text-slate-600">${loc}</td>
+            <td class="py-2 px-3 text-slate-700">${hop.isp || 'Unknown'} <span class="text-slate-400">(${hop.asn || 'N/A'})</span></td>
+            <td class="py-2 px-3 text-[10px]">${badge}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // Exhibit 4: Payload Hyperlink Detonation Table
+  const linkTbody = document.getElementById('reportLinkTableBody');
+  if (linkTbody) {
+    if (links.length === 0) {
+      linkTbody.innerHTML = `<tr><td colspan="4" class="py-3 px-3 text-center text-slate-400">No embedded hyperlinks detected in evidence.</td></tr>`;
+    } else {
+      linkTbody.innerHTML = links.map(link => {
+        const linkScore = parseFloat(link.threat_score || 0.0);
+        const linkScoreColor = linkScore >= 80 ? 'text-red-600 font-bold' : (linkScore >= 50 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold');
+        const tel = link.telemetry || {};
+        const sigs = [];
+        if (tel.known_db_match) sigs.push('Known Threat DB Match');
+        if (tel.sandbox_has_password) sigs.push('Credential Interceptor Form');
+        if (tel.brand_impersonation) sigs.push(`Brand Impersonation (${tel.detected_brand || 'Unknown'})`);
+        if (tel.suspicious_exfiltration) sigs.push('Malicious Form Action');
+        if (sigs.length === 0) sigs.push('Standard HTML Structure');
+
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-2 px-3 font-mono text-[10.5px] text-slate-900 break-all max-w-[240px]">${link.url || ''}</td>
+            <td class="py-2 px-3 font-mono ${linkScoreColor}">${linkScore.toFixed(1)} / 100</td>
+            <td class="py-2 px-3 font-semibold text-slate-800">${link.verdict || 'UNKNOWN'}</td>
+            <td class="py-2 px-3 text-slate-600">${sigs.join(' · ')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  }
+
+  // Narrative Container
+  const narrativeContainer = document.getElementById('reportNarrativeContainer');
+  if (narrativeContainer) {
+    const rawNarrative = data.incident_summary || 'Evaluation complete across all forensic telemetry engines.';
+    const lines = rawNarrative.split('\n').map(l => l.trim()).filter(Boolean);
+    narrativeContainer.innerHTML = lines.map(line => `
+      <div class="flex items-start gap-2">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-500 mt-1.5 flex-shrink-0"></span>
+        <p class="text-slate-800">${line}</p>
+      </div>
+    `).join('');
+  }
 }
 
 // =========================================================================
@@ -1628,27 +1782,25 @@ function renderDashboardSummary(data) {
 // =========================================================================
 
 function updateHeaderStatus(data) {
-  // Sidebar chrome sits on a dark background now, so status colors use
-  // translucent-on-dark tints rather than the light-mode bg-*-100 pairing.
   const score = Math.round(parseFloat(data.overall_threat_score || 0));
   const pill = document.getElementById('caseStatusPill');
   if (pill) {
     if (score >= 80) {
-      pill.className = 'px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-rose-500/20 border border-rose-500/30 text-rose-300 flex-shrink-0';
-      pill.innerText = 'Critical';
+      pill.className = 'text-[9.5px] font-bold text-rose-600 truncate';
+      pill.innerText = 'Critical Threat';
     } else if (score >= 50) {
-      pill.className = 'px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-amber-500/20 border border-amber-500/30 text-amber-300 flex-shrink-0';
-      pill.innerText = 'Suspicious';
+      pill.className = 'text-[9.5px] font-bold text-amber-600 truncate';
+      pill.innerText = 'Suspicious Origin';
     } else {
-      pill.className = 'px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 flex-shrink-0';
-      pill.innerText = 'Clear';
+      pill.className = 'text-[9.5px] font-bold text-emerald-600 truncate';
+      pill.innerText = 'Verified Clean';
     }
   }
 
   const navScore = document.getElementById('navScoreBadge');
   if (navScore) {
     navScore.innerText = `${score}/100`;
-    const tint = score >= 80 ? 'bg-rose-500/20 text-rose-300' : score >= 50 ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300';
+    const tint = score >= 80 ? 'bg-rose-50 text-rose-700 border border-rose-200' : score >= 50 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
     navScore.className = `hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${tint}`;
   }
 
@@ -1656,6 +1808,7 @@ function updateHeaderStatus(data) {
   if (navIoc) {
     navIoc.classList.remove('hidden');
     navIoc.innerText = currentIocs.length;
+    navIoc.className = 'hidden lg:inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200';
   }
 }
 
