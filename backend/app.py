@@ -264,8 +264,48 @@ def login_user():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ==================== LINK SCAN ENDPOINTS ====================
+# ==================== EXTENSION ENDPOINTS ====================
 
+@app.route('/api/extension/analyze', methods=['POST', 'OPTIONS'])
+def analyze_extension_email():
+    """
+    Endpoint for the TrustShield Chrome Extension.
+    Accepts { subject, sender, body } and runs the MultiModalFusionEngine.
+    """
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        data = request.get_json() or {}
+        subject = data.get('subject', '')
+        sender = data.get('sender', '')
+        body = data.get('body', '')
+
+        if not subject and not body:
+            return jsonify({"error": "No content to analyze"}), 400
+
+        # Extract URLs
+        import re
+        extracted_links = re.findall(r'(https?://[^\s<>"\'()]+)', body)
+        
+        engine = MultiModalFusionEngine()
+        result = engine.analyze_email_comprehensive(subject, body, extracted_links)
+        
+        return jsonify({
+            "status": "success",
+            "verdict": result['verdict'],
+            "final_threat_score": result['final_threat_score'],
+            "text_verdict": result['text_analysis'].get('threat_type', 'Analyzed'),
+            "links_found": len(extracted_links),
+            "details": result
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+# ==================== LINK SCAN ENDPOINTS ====================
 @app.route('/api/sandbox-check', methods=['POST'])
 def sandbox_check():
     """

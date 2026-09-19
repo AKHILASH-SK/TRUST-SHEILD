@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "TrustShield Email Analyzer",
+  "version": "1.0",
+  "description": "Analyze emails for phishing, BEC, and impersonation in real-time.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*/*"
+  ]
+}
