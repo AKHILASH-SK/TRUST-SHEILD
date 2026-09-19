@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TrustShield Email Analyzer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="https://img.icons8.com/color/48/000000/shield.png" alt="TrustShield Logo" class="logo">
+      <h2>TrustShield</h2>
+    </div>
+    
+    <div class="info-section">
+      <p>Analyze the current email for phishing, brand impersonation, and BEC attempts.</p>
+    </div>
+
+    <button id="analyze-btn" class="primary-btn">Analyze Current Email</button>
+
+    <div id="loading" class="hidden">
+      <div class="spinner"></div>
+      <p>Analyzing with Multi-Modal AI...</p>
+    </div>
+
+    <div id="results" class="hidden">
+      <div id="verdict-banner" class="verdict-banner">
+        <h3 id="verdict-text">SAFE</h3>
+      </div>
+      
+      <div class="score-container">
+        <div class="score-label">Threat Score:</div>
+        <div id="threat-score" class="score-value">0/100</div>
+      </div>
+
+      <div class="details">
+        <div class="detail-item">
+          <strong>Sender:</strong> <span id="res-sender"></span>
+        </div>
+        <div class="detail-item">
+          <strong>NLP Analysis:</strong> <span id="res-nlp"></span>
+        </div>
+        <div class="detail-item">
+          <strong>Links Found:</strong> <span id="res-links"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div id="error-msg" class="hidden error"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
