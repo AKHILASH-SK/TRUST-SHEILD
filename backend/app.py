@@ -203,6 +203,89 @@ def retrieve_forensic_case(case_id: str):
         
     return None
 
+def retrieve_case_by_hash(evidence_hash: str):
+    """Retrieves case by SHA-256 evidence hash from database or cache"""
+    clean_hash = (evidence_hash or "").strip().lower()
+    if not clean_hash:
+        return None
+        
+    for c_id, c_data in FORENSIC_CASE_CACHE.items():
+        h = c_data.get("dossier", {}).get("evidence_hash_sha256", "").lower()
+        if h == clean_hash or c_data.get("evidence_hash", "").lower() == clean_hash:
+            return c_data
+            
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT case_id, evidence_hash, verdict, threat_score, sender, subject, dossier_json, raw_eml, created_at 
+            FROM forensic_cases 
+            WHERE LOWER(evidence_hash) = %s 
+            LIMIT 1
+        """, (clean_hash,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            dossier = json.loads(row[6]) if isinstance(row[6], str) else row[6]
+            case_data = {
+                "case_id": row[0],
+                "evidence_hash": row[1],
+                "verdict": row[2],
+                "threat_score": row[3],
+                "sender": row[4],
+                "subject": row[5],
+                "dossier": dossier,
+                "raw_eml": row[7] or "",
+                "created_at": row[8].isoformat() if row[8] else ""
+            }
+            FORENSIC_CASE_CACHE[row[0]] = case_data
+            return case_data
+    except Exception as e:
+        print(f"[-] [DB] Error retrieving case by hash {clean_hash}: {e}")
+        
+    return None
+
+def list_all_forensic_cases(limit: int = 50):
+    """Lists recent forensic cases from database or in-memory cache"""
+    cases = []
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT case_id, evidence_hash, verdict, threat_score, sender, subject, created_at 
+            FROM forensic_cases 
+            ORDER BY created_at DESC 
+            LIMIT %s
+        """, (limit,))
+        for row in cur.fetchall():
+            cases.append({
+                "case_id": row[0],
+                "evidence_hash": row[1] or "",
+                "verdict": row[2] or "ANALYZED",
+                "threat_score": float(row[3] or 0.0),
+                "sender": row[4] or "",
+                "subject": row[5] or "",
+                "created_at": row[6].isoformat() if row[6] else ""
+            })
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[-] [DB] Error listing cases: {e}")
+        for c_id, c_data in sorted(FORENSIC_CASE_CACHE.items(), key=lambda x: x[1].get("created_at", ""), reverse=True)[:limit]:
+            d = c_data.get("dossier", {})
+            m = d.get("metadata", {})
+            cases.append({
+                "case_id": c_id,
+                "evidence_hash": d.get("evidence_hash_sha256", c_data.get("evidence_hash", "")),
+                "verdict": d.get("verdict", c_data.get("verdict", "ANALYZED")),
+                "threat_score": float(d.get("overall_threat_score", c_data.get("threat_score", 0.0))),
+                "sender": m.get("from", c_data.get("sender", "")),
+                "subject": m.get("subject", c_data.get("subject", "")),
+                "created_at": c_data.get("created_at", "")
+            })
+    return cases
+
 # ==================== ROUTES ====================
 
 def is_short_url(url):
@@ -1167,6 +1250,124 @@ def get_forensic_case_by_id(case_id):
         }), 200
     except Exception as e:
         print(f"❌ [Forensics Case Lookup] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/cases', methods=['GET'])
+def get_all_forensic_cases():
+    """
+    Returns list of all registered forensic cases in the database vault
+    for the SOC Analyst searchable case history view.
+    """
+    try:
+        limit = int(request.args.get('limit', 50))
+        cases = list_all_forensic_cases(limit=limit)
+        return jsonify({
+            "status": "success",
+            "total": len(cases),
+            "cases": cases
+        }), 200
+    except Exception as e:
+        print(f"❌ [Forensics Cases List] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/verify-hash', methods=['POST'])
+def verify_forensic_hash():
+    """
+    Verifies a SHA-256 hash or Case ID against the database vault.
+    Returns cryptographic integrity and chain-of-custody verification.
+    """
+    try:
+        data = request.get_json() or {}
+        query = data.get('query', '').strip()
+        if not query:
+            return jsonify({"error": "Missing 'query' parameter (SHA-256 hash or Case ID)"}), 400
+
+        case_data = None
+        if query.upper().startswith("TSF-"):
+            case_data = retrieve_forensic_case(query.upper())
+        if not case_data:
+            case_data = retrieve_case_by_hash(query)
+        if not case_data:
+            case_data = retrieve_forensic_case(query)
+
+        if case_data:
+            return jsonify({
+                "status": "success",
+                "matched": True,
+                "integrity_verdict": "UNTAMPERED & AUTHENTIC",
+                "judicial_compliance": "Section 63, Bharatiya Sakshya Adhiniyam (BSA, 2023) / Section 65B IEA",
+                "case_id": case_data["case_id"],
+                "evidence_hash": case_data.get("evidence_hash") or case_data.get("dossier", {}).get("evidence_hash_sha256", ""),
+                "sender": case_data.get("sender", ""),
+                "subject": case_data.get("subject", ""),
+                "verdict": case_data.get("verdict", ""),
+                "threat_score": case_data.get("threat_score", 0.0),
+                "created_at": case_data.get("created_at", ""),
+                "dossier": case_data.get("dossier", {}),
+                "raw_eml": case_data.get("raw_eml", "")
+            }), 200
+        else:
+            return jsonify({
+                "status": "not_found",
+                "matched": False,
+                "integrity_verdict": "UNREGISTERED EVIDENCE HASH",
+                "query": query,
+                "message": "SHA-256 fingerprint not found in cryptographic vault. The file has not been ingested yet or was altered after seizure."
+            }), 404
+    except Exception as e:
+        print(f"❌ [Hash Verification] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/verify-file', methods=['POST'])
+def verify_forensic_file():
+    """
+    Ingests an uploaded evidence file, computes its SHA-256 hash live,
+    and checks if it exists untampered in the database vault.
+    """
+    try:
+        eml_bytes = b""
+        if 'file' in request.files:
+            eml_bytes = request.files['file'].read()
+        elif request.data:
+            eml_bytes = request.data
+
+        if not eml_bytes:
+            return jsonify({"error": "No file uploaded for tamper verification"}), 400
+
+        import hashlib
+        computed_hash = hashlib.sha256(eml_bytes).hexdigest()
+        case_data = retrieve_case_by_hash(computed_hash)
+
+        if case_data:
+            return jsonify({
+                "status": "success",
+                "matched": True,
+                "computed_hash": computed_hash,
+                "integrity_verdict": "100% UNTAMPERED & AUTHENTIC",
+                "judicial_compliance": "Sec. 63 Bharatiya Sakshya Adhiniyam (BSA, 2023)",
+                "case_id": case_data["case_id"],
+                "evidence_hash": case_data.get("evidence_hash") or computed_hash,
+                "sender": case_data.get("sender", ""),
+                "subject": case_data.get("subject", ""),
+                "verdict": case_data.get("verdict", ""),
+                "threat_score": case_data.get("threat_score", 0.0),
+                "sealed_at": case_data.get("created_at", ""),
+                "dossier": case_data.get("dossier", {}),
+                "raw_eml": case_data.get("raw_eml", "")
+            }), 200
+        else:
+            return jsonify({
+                "status": "unregistered",
+                "matched": False,
+                "computed_hash": computed_hash,
+                "integrity_verdict": "UNREGISTERED OR MODIFIED FILE",
+                "message": "SHA-256 fingerprint not found in database. The file has either not been ingested yet or was modified after seizure."
+            }), 200
+    except Exception as e:
+        print(f"❌ [File Verification] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

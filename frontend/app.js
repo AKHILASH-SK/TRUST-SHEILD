@@ -131,6 +131,17 @@ window.openAttackStudioModal = openAttackStudioModal;
 window.closeAttackStudioModal = closeAttackStudioModal;
 window.downloadStudioLiveEml = downloadStudioLiveEml;
 window.executeLiveStudioInjection = executeLiveStudioInjection;
+window.triggerVaultFileInput = triggerVaultFileInput;
+window.handleVaultFileSelect = handleVaultFileSelect;
+window.executeVaultQuery = executeVaultQuery;
+window.loadVerifiedDossier = loadVerifiedDossier;
+window.loadVaultCasesHistory = loadVaultCasesHistory;
+window.filterVaultCasesTable = filterVaultCasesTable;
+window.loadVaultCaseById = loadVaultCaseById;
+
+var cachedVaultCases = [];
+var verifiedCaseDossier = null;
+var verifiedCaseRawEml = null;
 
 var cachedLiveTelemetry = {
   ip: '157.51.60.12',
@@ -385,6 +396,35 @@ function setupDragAndDrop() {
       processEmlFile(dt.files[0]);
     }
   });
+
+  const vaultDropZone = document.getElementById('vaultDropZone');
+  if (vaultDropZone) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      vaultDropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        vaultDropZone.classList.add('border-teal-400', 'bg-teal-900/40');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      vaultDropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        vaultDropZone.classList.remove('border-teal-400', 'bg-teal-900/40');
+      });
+    });
+
+    vaultDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      vaultDropZone.classList.remove('border-teal-400', 'bg-teal-900/40');
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        verifyUploadedEvidenceFile(dt.files[0]);
+      }
+    });
+  }
 }
 
 function copyEvidenceHash(e) {
@@ -443,7 +483,7 @@ function copyRawHeaders(e) {
 // =========================================================================
 
 var TAB_NAMES = ['dashboard', 'email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
-var CONTENT_TABS = ['email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
+var CONTENT_TABS = ['email', 'threat', 'network', 'geo', 'ioc', 'graph', 'timeline', 'report'];
 
 function switchTab(name) {
   TAB_NAMES.forEach(n => {
@@ -454,9 +494,11 @@ function switchTab(name) {
   });
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  // Leaflet sizes itself against its container at init time; if that container
-  // was display:none (an inactive tab), the map renders broken until told to
-  // re-measure now that the tab is actually visible.
+  if (name === 'vault') {
+    loadVaultCasesHistory();
+  }
+
+  // Leaflet sizes itself against its container at init time
   if (name === 'geo' && mapInstance) {
     setTimeout(() => {
       mapInstance.invalidateSize();
@@ -474,7 +516,11 @@ function enableAllTabs() {
 
 function disableTabsExceptDashboard() {
   document.querySelectorAll('.nav-item').forEach(btn => {
-    if (btn.dataset.tab !== 'dashboard') btn.classList.add('tab-disabled');
+    if (btn.dataset.tab !== 'dashboard' && btn.dataset.tab !== 'vault') {
+      btn.classList.add('tab-disabled');
+    } else {
+      btn.classList.remove('tab-disabled');
+    }
   });
 }
 
@@ -1603,6 +1649,325 @@ function reSealEvidence(e) {
   }, 700);
 }
 window.reSealEvidence = reSealEvidence;
+
+// =========================================================================
+// INTERACTIVE CRYPTOGRAPHIC EVIDENCE VAULT & LIVE TAMPER VERIFICATION ENGINE
+// =========================================================================
+
+function triggerVaultFileInput(e) {
+  if (e) {
+    if (e.target && e.target.id === 'vaultFileInput') return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const fileInput = document.getElementById('vaultFileInput');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function handleVaultFileSelect(e) {
+  if (e && e.target && e.target.files && e.target.files.length > 0) {
+    verifyUploadedEvidenceFile(e.target.files[0]);
+  }
+}
+
+async function verifyUploadedEvidenceFile(file) {
+  if (!file) return;
+
+  const defaultState = document.getElementById('tamperDefaultState');
+  const successState = document.getElementById('tamperSuccessState');
+  const errorState = document.getElementById('tamperErrorState');
+
+  if (defaultState) {
+    defaultState.classList.remove('hidden');
+    defaultState.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-4">
+        <svg class="w-8 h-8 text-teal-400 animate-spin mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2.5"/>
+        </svg>
+        <p class="text-xs font-bold text-teal-300">Computing Live SHA-256 Digest...</p>
+        <p class="text-[10px] text-slate-400 mt-0.5">Cross-referencing cryptographic signature against PostgreSQL vault</p>
+      </div>
+    `;
+  }
+  if (successState) successState.classList.add('hidden');
+  if (errorState) errorState.classList.add('hidden');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/api/forensics/verify-file`, {
+      method: 'POST',
+      body: formData
+    });
+
+    const res = await response.json();
+
+    if (defaultState) defaultState.classList.add('hidden');
+
+    if (response.ok && res.matched) {
+      // 100% Untampered Match
+      verifiedCaseDossier = res.dossier;
+      verifiedCaseRawEml = res.raw_eml || '';
+      caseIdValue = res.case_id;
+
+      if (successState) {
+        successState.classList.remove('hidden');
+        const caseIdEl = document.getElementById('vResCaseId');
+        if (caseIdEl) caseIdEl.innerText = res.case_id || 'TSF-VERIFIED';
+
+        const timeEl = document.getElementById('vResTime');
+        if (timeEl) {
+          const t = res.sealed_at || res.created_at;
+          timeEl.innerText = t ? fmtTime(new Date(t)) : fmtTime(new Date());
+        }
+
+        const subEl = document.getElementById('vResSubject');
+        if (subEl) subEl.innerText = res.subject || 'Evidence Artifact';
+
+        const hashEl = document.getElementById('vResHash');
+        if (hashEl) hashEl.innerText = res.evidence_hash || res.computed_hash || '—';
+      }
+    } else {
+      // Tampering Detected / Unregistered
+      if (errorState) {
+        errorState.classList.remove('hidden');
+        const msgEl = document.getElementById('tamperErrorMsg');
+        if (msgEl) {
+          msgEl.innerText = res.message || 'The computed cryptographic hash does not match any sealed evidence record in the database. The file contents have been modified or tampered with.';
+        }
+        const hashEl = document.getElementById('tamperComputedHashText');
+        if (hashEl) {
+          hashEl.innerText = `Computed SHA-256: ${res.computed_hash || 'Calculation Failed'}`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Vault verification error:', err);
+    if (defaultState) defaultState.classList.add('hidden');
+    if (errorState) {
+      errorState.classList.remove('hidden');
+      const msgEl = document.getElementById('tamperErrorMsg');
+      if (msgEl) msgEl.innerText = `Verification service error: ${err.message}`;
+    }
+  }
+}
+
+async function executeVaultQuery() {
+  const input = document.getElementById('vaultSearchInput');
+  if (!input) return;
+  const query = (input.value || '').trim();
+  if (!query) {
+    alert('Please enter a Case ID (e.g., TSF-123456) or a 64-character SHA-256 hash to verify.');
+    return;
+  }
+
+  const defaultState = document.getElementById('tamperDefaultState');
+  const successState = document.getElementById('tamperSuccessState');
+  const errorState = document.getElementById('tamperErrorState');
+
+  if (defaultState) {
+    defaultState.classList.remove('hidden');
+    defaultState.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-4">
+        <svg class="w-8 h-8 text-teal-400 animate-spin mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2.5"/>
+        </svg>
+        <p class="text-xs font-bold text-teal-300">Searching Cryptographic Vault...</p>
+        <p class="text-[10px] text-slate-400 mt-0.5">Querying index for '${query}'</p>
+      </div>
+    `;
+  }
+  if (successState) successState.classList.add('hidden');
+  if (errorState) errorState.classList.add('hidden');
+
+  try {
+    const response = await fetch(`${API_BASE}/api/forensics/verify-hash`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query })
+    });
+
+    const res = await response.json();
+
+    if (defaultState) defaultState.classList.add('hidden');
+
+    if (response.ok && res.matched) {
+      verifiedCaseDossier = res.dossier;
+      verifiedCaseRawEml = res.raw_eml || '';
+      caseIdValue = res.case_id;
+
+      if (successState) {
+        successState.classList.remove('hidden');
+        const caseIdEl = document.getElementById('vResCaseId');
+        if (caseIdEl) caseIdEl.innerText = res.case_id || 'TSF-VERIFIED';
+
+        const timeEl = document.getElementById('vResTime');
+        if (timeEl) {
+          const t = res.created_at;
+          timeEl.innerText = t ? fmtTime(new Date(t)) : fmtTime(new Date());
+        }
+
+        const subEl = document.getElementById('vResSubject');
+        if (subEl) subEl.innerText = res.subject || 'Evidence Artifact';
+
+        const hashEl = document.getElementById('vResHash');
+        if (hashEl) hashEl.innerText = res.evidence_hash || '—';
+      }
+    } else {
+      if (errorState) {
+        errorState.classList.remove('hidden');
+        const msgEl = document.getElementById('tamperErrorMsg');
+        if (msgEl) {
+          msgEl.innerText = res.message || `No cryptographic seal found for '${query}'. Either this record has not been ingested or the hash has been modified.`;
+        }
+        const hashEl = document.getElementById('tamperComputedHashText');
+        if (hashEl) hashEl.innerText = `Searched Query: ${query}`;
+      }
+    }
+  } catch (err) {
+    console.error('Vault query error:', err);
+    if (defaultState) defaultState.classList.add('hidden');
+    if (errorState) {
+      errorState.classList.remove('hidden');
+      const msgEl = document.getElementById('tamperErrorMsg');
+      if (msgEl) msgEl.innerText = `Lookup error: ${err.message}`;
+    }
+  }
+}
+
+function loadVerifiedDossier() {
+  if (verifiedCaseDossier) {
+    currentReport = verifiedCaseDossier;
+    rawEmlContent = verifiedCaseRawEml || '';
+    if (caseIdValue) {
+      const el = document.getElementById('caseId');
+      if (el) el.innerText = caseIdValue;
+      const rEl = document.getElementById('reportCaseId');
+      if (rEl) rEl.innerText = caseIdValue;
+    }
+    tCaptured = new Date();
+    tHashed = new Date();
+    tVerdict = new Date();
+    renderDashboard(verifiedCaseDossier, 0.3);
+    switchTab('threat');
+  }
+}
+
+async function loadVaultCasesHistory() {
+  const tbody = document.getElementById('vaultCasesTableBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/forensics/cases?limit=50`);
+    if (res.ok) {
+      const data = await res.json();
+      cachedVaultCases = data.cases || [];
+      renderVaultCasesTable(cachedVaultCases);
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">Unable to load case records from PostgreSQL vault.</td></tr>`;
+    }
+  } catch (err) {
+    console.warn('Error loading vault cases:', err);
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400">Offline or database connection unavailable.</td></tr>`;
+    }
+  }
+}
+
+function renderVaultCasesTable(cases) {
+  const tbody = document.getElementById('vaultCasesTableBody');
+  if (!tbody) return;
+
+  if (!cases || cases.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400 font-mono text-xs">No sealed forensic cases found in the database repository.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = cases.map(c => {
+    const hash = c.evidence_hash || '—';
+    const hashShort = hash.length > 16 ? `${hash.substring(0, 8)}...${hash.substring(hash.length - 6)}` : hash;
+    const score = parseFloat(c.threat_score || 0.0);
+    const scoreColor = score >= 80 ? 'text-rose-600 bg-rose-50 border-rose-200' : (score >= 50 ? 'text-amber-600 bg-amber-50 border-amber-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200');
+    const createdStr = c.created_at ? c.created_at.replace('T', ' ').substring(0, 19) : '—';
+    const sender = (c.sender || 'Unknown').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const subject = (c.subject || '(No Subject)').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    return `
+      <tr class="hover:bg-slate-50 transition-colors">
+        <td class="py-2.5 px-3 font-bold text-teal-700">${c.case_id}</td>
+        <td class="py-2.5 px-3 text-slate-700 font-mono" title="${hash}">${hashShort}</td>
+        <td class="py-2.5 px-3 text-slate-800 max-w-[200px] truncate" title="${sender}">${sender}</td>
+        <td class="py-2.5 px-3 text-slate-700 max-w-[220px] truncate" title="${subject}">${subject}</td>
+        <td class="py-2.5 px-3">
+          <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-bold border ${scoreColor}">
+            ${score.toFixed(0)}/100 · ${c.verdict || 'ANALYZED'}
+          </span>
+        </td>
+        <td class="py-2.5 px-3 text-slate-500 font-mono text-[10px]">${createdStr}</td>
+        <td class="py-2.5 px-3 text-right">
+          <button type="button" onclick="loadVaultCaseById('${c.case_id}')" class="px-2.5 py-1 rounded bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold border border-teal-200 text-[10px] transition-colors cursor-pointer">
+            Inspect &rarr;
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterVaultCasesTable() {
+  const input = document.getElementById('caseTableFilter');
+  if (!input) return;
+  const q = input.value.toLowerCase().trim();
+  if (!q) {
+    renderVaultCasesTable(cachedVaultCases);
+    return;
+  }
+  const filtered = cachedVaultCases.filter(c => {
+    return (c.case_id || '').toLowerCase().includes(q) ||
+           (c.sender || '').toLowerCase().includes(q) ||
+           (c.subject || '').toLowerCase().includes(q) ||
+           (c.evidence_hash || '').toLowerCase().includes(q) ||
+           (c.verdict || '').toLowerCase().includes(q);
+  });
+  renderVaultCasesTable(filtered);
+}
+
+async function loadVaultCaseById(caseId) {
+  if (!caseId) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/forensics/case/${encodeURIComponent(caseId)}`);
+    if (res.ok) {
+      const caseData = await res.json();
+      if (caseData && caseData.dossier) {
+        caseIdValue = caseData.case_id;
+        const el = document.getElementById('caseId');
+        if (el) el.innerText = caseIdValue;
+        const rEl = document.getElementById('reportCaseId');
+        if (rEl) rEl.innerText = caseIdValue;
+
+        currentReport = caseData.dossier;
+        rawEmlContent = caseData.raw_eml || '';
+        tCaptured = new Date(caseData.created_at || Date.now());
+        tHashed = new Date(caseData.created_at || Date.now());
+        tVerdict = new Date(caseData.created_at || Date.now());
+
+        renderDashboard(caseData.dossier, 0.25);
+        switchTab('threat');
+      }
+    } else {
+      alert(`Could not retrieve case ${caseId} from repository.`);
+    }
+  } catch (err) {
+    console.error('Error retrieving case:', err);
+    alert(`Error loading case: ${err.message}`);
+  }
+}
 
 // =========================================================================
 // TIMELINE
