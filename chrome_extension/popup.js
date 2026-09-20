@@ -9,11 +9,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const LOCAL_API_URL = "http://127.0.0.1:8000/api/extension/analyze";
   const CLOUD_API_URL = "https://trust-sheild.onrender.com/api/extension/analyze";
-  const PORTAL_URL = "http://127.0.0.1:8000/portal/";
+  const PORTAL_LOCAL_URL = "http://127.0.0.1:8000/portal/";
+  const PORTAL_CLOUD_URL = "https://trust-sheild.onrender.com/portal/";
 
   let lastDossier = null;
   let lastRawEml = null;
   let lastCaseId = null;
+  let activePortalUrl = PORTAL_LOCAL_URL;
 
   // 1. Initial active tab inspection
   try {
@@ -68,6 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(emailData)
             });
+            activePortalUrl = PORTAL_LOCAL_URL;
           } catch (localErr) {
             console.warn("Local backend unreachable, trying cloud endpoint...", localErr);
             response = await fetch(CLOUD_API_URL, {
@@ -75,6 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(emailData)
             });
+            activePortalUrl = PORTAL_CLOUD_URL;
           }
 
           if (!response || !response.ok) {
@@ -151,8 +155,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (openPortalBtn) {
     openPortalBtn.addEventListener('click', () => {
       const targetUrl = lastCaseId 
-        ? `${PORTAL_URL}?case_id=${encodeURIComponent(lastCaseId)}`
-        : PORTAL_URL;
+        ? `${activePortalUrl}?case_id=${encodeURIComponent(lastCaseId)}`
+        : activePortalUrl;
       chrome.tabs.create({ url: targetUrl });
     });
   }

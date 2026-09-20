@@ -292,9 +292,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function checkIncomingExtensionIncident() {
   try {
-    // 1. Check for ?case_id= in the URL query string (Primary Cross-Origin Bridge)
+    // 1. Check for ?case_id= in URL search query or hash fragment (Primary Cross-Origin Bridge)
     const urlParams = new URLSearchParams(window.location.search);
-    const caseId = urlParams.get('case_id');
+    let caseId = urlParams.get('case_id');
+
+    if (!caseId && window.location.hash) {
+      const qIdx = window.location.hash.indexOf('?');
+      if (qIdx !== -1) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(qIdx));
+        caseId = hashParams.get('case_id');
+      } else if (window.location.hash.includes('case_id=')) {
+        const match = window.location.hash.match(/case_id=([A-Za-z0-9\-]+)/);
+        if (match) caseId = match[1];
+      }
+    }
 
     if (caseId) {
       caseIdValue = caseId;
@@ -303,27 +314,34 @@ async function checkIncomingExtensionIncident() {
       const rEl = document.getElementById('reportCaseId');
       if (rEl) rEl.innerText = caseIdValue;
 
-      // Fetch pre-analyzed case dossier from backend
-      try {
-        const res = await fetch(`${API_BASE}/api/forensics/case/${encodeURIComponent(caseId)}`);
-        if (res.ok) {
-          const caseData = await res.json();
-          if (caseData && caseData.dossier) {
-            currentReport = caseData.dossier;
-            rawEmlContent = caseData.raw_eml || '';
-            tCaptured = new Date(caseData.created_at || Date.now());
-            tHashed = new Date(caseData.created_at || Date.now());
-            tVerdict = new Date(caseData.created_at || Date.now());
+      // Fetch pre-analyzed case dossier from backend with multi-origin fallback
+      const candidateUrls = [
+        `${API_BASE}/api/forensics/case/${encodeURIComponent(caseId)}`,
+        `http://127.0.0.1:8000/api/forensics/case/${encodeURIComponent(caseId)}`,
+        `https://trust-sheild.onrender.com/api/forensics/case/${encodeURIComponent(caseId)}`
+      ];
 
-            setTimeout(() => {
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const caseData = await res.json();
+            if (caseData && caseData.dossier) {
+              currentReport = caseData.dossier;
+              rawEmlContent = caseData.raw_eml || '';
+              tCaptured = new Date(caseData.created_at || Date.now());
+              tHashed = new Date(caseData.created_at || Date.now());
+              tVerdict = new Date(caseData.created_at || Date.now());
+
               renderDashboard(caseData.dossier, 0.25);
               switchTab('threat');
-            }, 100);
-            return;
+              console.log(`[+] Successfully loaded extension incident ${caseId} into SOC Portal`);
+              return;
+            }
           }
+        } catch (fetchErr) {
+          console.debug(`Probe to ${url} failed:`, fetchErr);
         }
-      } catch (err) {
-        console.warn('Error fetching case by ID:', err);
       }
     }
 
@@ -347,10 +365,8 @@ async function checkIncomingExtensionIncident() {
         tCaptured = new Date();
         tHashed = new Date();
         tVerdict = new Date();
-        setTimeout(() => {
-          renderDashboard(dossier, 0.45);
-          switchTab('threat');
-        }, 150);
+        renderDashboard(dossier, 0.45);
+        switchTab('threat');
       }
     }
   } catch (e) {

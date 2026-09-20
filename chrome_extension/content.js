@@ -484,6 +484,7 @@ function initFloatingGuardWidget() {
     analyzeBtn.disabled = true;
     btnText.innerHTML = `<span class="ts-spinner"></span> Scanning & Detonating...`;
 
+    let activePortalBase = PORTAL_LOCAL_URL;
     try {
       let response;
       try {
@@ -492,12 +493,14 @@ function initFloatingGuardWidget() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(emailData)
         });
+        activePortalBase = PORTAL_LOCAL_URL;
       } catch (_) {
         response = await fetch(BACKEND_CLOUD_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(emailData)
         });
+        activePortalBase = PORTAL_CLOUD_URL;
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -539,6 +542,8 @@ function initFloatingGuardWidget() {
     }
   });
 
+  let activePortalBase = PORTAL_LOCAL_URL;
+
   openPortalBtn.addEventListener('click', () => {
     if (currentDossier) {
       try {
@@ -552,8 +557,8 @@ function initFloatingGuardWidget() {
       }
     }
     const redirectUrl = currentCaseId 
-      ? `${PORTAL_LOCAL_URL}?case_id=${encodeURIComponent(currentCaseId)}`
-      : PORTAL_LOCAL_URL;
+      ? `${activePortalBase}?case_id=${encodeURIComponent(currentCaseId)}`
+      : activePortalBase;
     window.open(redirectUrl, '_blank');
   });
 }
