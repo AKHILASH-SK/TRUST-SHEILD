@@ -279,14 +279,57 @@ document.addEventListener('DOMContentLoaded', () => {
   checkIncomingExtensionIncident();
 });
 
-function checkIncomingExtensionIncident() {
+async function checkIncomingExtensionIncident() {
   try {
+    // 1. Check for ?case_id= in the URL query string (Primary Cross-Origin Bridge)
+    const urlParams = new URLSearchParams(window.location.search);
+    const caseId = urlParams.get('case_id');
+
+    if (caseId) {
+      caseIdValue = caseId;
+      const el = document.getElementById('caseId');
+      if (el) el.innerText = caseIdValue;
+      const rEl = document.getElementById('reportCaseId');
+      if (rEl) rEl.innerText = caseIdValue;
+
+      // Fetch pre-analyzed case dossier from backend
+      try {
+        const res = await fetch(`${API_BASE}/api/forensics/case/${encodeURIComponent(caseId)}`);
+        if (res.ok) {
+          const caseData = await res.json();
+          if (caseData && caseData.dossier) {
+            currentReport = caseData.dossier;
+            rawEmlContent = caseData.raw_eml || '';
+            tCaptured = new Date(caseData.created_at || Date.now());
+            tHashed = new Date(caseData.created_at || Date.now());
+            tVerdict = new Date(caseData.created_at || Date.now());
+
+            setTimeout(() => {
+              renderDashboard(caseData.dossier, 0.25);
+              switchTab('threat');
+            }, 100);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching case by ID:', err);
+      }
+    }
+
+    // 2. Fallback: Check LocalStorage if passed on same origin
     const raw = localStorage.getItem('trustshield_incoming_incident');
     if (raw) {
       localStorage.removeItem('trustshield_incoming_incident');
       const parsed = JSON.parse(raw);
       const dossier = parsed.dossier || parsed;
       const rawEml = parsed.raw_eml || '';
+      if (parsed.case_id) {
+        caseIdValue = parsed.case_id;
+        const el = document.getElementById('caseId');
+        if (el) el.innerText = caseIdValue;
+        const rEl = document.getElementById('reportCaseId');
+        if (rEl) rEl.innerText = caseIdValue;
+      }
       if (rawEml) rawEmlContent = rawEml;
       if (dossier && dossier.overall_threat_score !== undefined) {
         currentReport = dossier;

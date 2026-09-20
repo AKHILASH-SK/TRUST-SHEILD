@@ -40,8 +40,12 @@ GLOBAL_CLEAN_DOMAINS = {
     # Amazon & AWS
     "amazon.com", "amazon.in", "amazon.co.uk", "amzn.to", "aws.amazon.com",
     
+    # Education & Learning Platforms
+    "coursera.org", "edx.org", "udemy.com", "khanacademy.org", "codecademy.com", "datacamp.com",
+    "mit.edu", "stanford.edu", "harvard.edu",
+    
     # Financial & Payments
-    "paypal.com", "paypal.me",
+    "paypal.com", "paypal.me", "stripe.com", "razorpay.com", "intuit.com",
     
     # Social & Professional Networks
     "linkedin.com", "lnkd.in",
@@ -51,11 +55,14 @@ GLOBAL_CLEAN_DOMAINS = {
     
     # Form, Survey & Collaboration Platforms
     "typeform.com", "jotform.com", "surveymonkey.com", "airtable.com", "zoho.com", "forms.zoho.com",
+    "slack.com", "atlassian.com", "jira.com", "trello.com", "asana.com", "figma.com", "dropbox.com", "box.com",
+    "salesforce.com", "hubspot.com", "mailchimp.com", "zendesk.com",
     
     # Developer & Infrastructure
-    "github.com", "git.io", "gitlab.com",
+    "github.com", "git.io", "gitlab.com", "stackoverflow.com", "bitbucket.org",
     "openai.com", "chatgpt.com",
-    "wikipedia.org", "cloudflare.com", "zoom.us", "canva.com", "notion.so", "spotify.com", "spoti.fi"
+    "wikipedia.org", "cloudflare.com", "zoom.us", "canva.com", "notion.so", "spotify.com", "spoti.fi",
+    "medium.com", "quora.com", "reddit.com", "netflix.com", "uber.com", "adobe.com"
 }
 
 

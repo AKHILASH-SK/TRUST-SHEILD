@@ -12,6 +12,7 @@ function extractEmailData() {
   let subject = "";
   let sender = "";
   let body = "";
+  let links = [];
 
   try {
     // 1. Gmail Extraction
@@ -26,6 +27,13 @@ function extractEmailData() {
     const gmailBody = document.querySelector('.a3s.aiL') || document.querySelector('.nH.hx');
     if (gmailBody) {
       body = gmailBody.innerText.trim();
+      const anchorTags = gmailBody.querySelectorAll('a[href]');
+      anchorTags.forEach(a => {
+        const h = a.href || a.getAttribute('href');
+        if (h && (h.startsWith('http://') || h.startsWith('https://'))) {
+          links.push(h.trim());
+        }
+      });
     }
 
     // 2. Outlook / Microsoft 365 Web Extraction
@@ -41,6 +49,13 @@ function extractEmailData() {
       const outlookBody = document.querySelector('[aria-label="Message body"]') || document.querySelector('.allowTextSelection');
       if (outlookBody) {
         body = outlookBody.innerText.trim();
+        const anchorTags = outlookBody.querySelectorAll('a[href]');
+        anchorTags.forEach(a => {
+          const h = a.href || a.getAttribute('href');
+          if (h && (h.startsWith('http://') || h.startsWith('https://'))) {
+            links.push(h.trim());
+          }
+        });
       }
     }
 
@@ -53,7 +68,16 @@ function extractEmailData() {
       if (yahooSender) sender = yahooSender.innerText.trim();
 
       const yahooBody = document.querySelector('.msg-body');
-      if (yahooBody) body = yahooBody.innerText.trim();
+      if (yahooBody) {
+        body = yahooBody.innerText.trim();
+        const anchorTags = yahooBody.querySelectorAll('a[href]');
+        anchorTags.forEach(a => {
+          const h = a.href || a.getAttribute('href');
+          if (h && (h.startsWith('http://') || h.startsWith('https://'))) {
+            links.push(h.trim());
+          }
+        });
+      }
     }
 
     // 4. Fallback: User Selected Text or Active Page Container
@@ -65,16 +89,36 @@ function extractEmailData() {
       } else {
         const mainContainer = document.querySelector('article') || document.querySelector('main') || document.body;
         body = mainContainer.innerText.substring(0, 5000).trim();
+        const anchorTags = (mainContainer || document).querySelectorAll('a[href]');
+        anchorTags.forEach(a => {
+          const h = a.href || a.getAttribute('href');
+          if (h && (h.startsWith('http://') || h.startsWith('https://'))) {
+            links.push(h.trim());
+          }
+        });
       }
     }
+
+    // Regex extraction from body text as well
+    const urlRegex = /https?:\/\/[^\s<>"'\)]+/g;
+    const matched = body.match(urlRegex) || [];
+    matched.forEach(u => {
+      const clean = u.replace(/[\s,;:?!\.\>\)\]]+$/, '');
+      if (clean) links.push(clean);
+    });
+
   } catch (e) {
     console.error("Error extracting email data", e);
   }
 
+  // Deduplicate links
+  const uniqueLinks = Array.from(new Set(links)).filter(u => u && !u.startsWith('mailto:') && !u.startsWith('javascript:'));
+
   return {
     subject: subject || document.title || "Webmail Incident",
     sender: sender || "sender@unknown-origin.net",
-    body: body || "No content extracted"
+    body: body || "No content extracted",
+    links: uniqueLinks
   };
 }
 
@@ -418,6 +462,7 @@ function initFloatingGuardWidget() {
 
   let currentDossier = null;
   let currentRawEml = null;
+  let currentCaseId = null;
 
   function refreshEmailPreview() {
     const data = extractEmailData();
@@ -460,6 +505,7 @@ function initFloatingGuardWidget() {
 
       currentDossier = res.full_dossier || res.details || res;
       currentRawEml = res.raw_eml || "";
+      currentCaseId = res.case_id || "";
 
       const score = parseFloat(res.final_threat_score || 0);
       const verdict = res.verdict || "ANALYZED";
@@ -498,13 +544,17 @@ function initFloatingGuardWidget() {
       try {
         localStorage.setItem('trustshield_incoming_incident', JSON.stringify({
           dossier: currentDossier,
-          raw_eml: currentRawEml
+          raw_eml: currentRawEml,
+          case_id: currentCaseId
         }));
       } catch (e) {
         console.warn('LocalStorage quota:', e);
       }
     }
-    window.open(PORTAL_LOCAL_URL, '_blank');
+    const redirectUrl = currentCaseId 
+      ? `${PORTAL_LOCAL_URL}?case_id=${encodeURIComponent(currentCaseId)}`
+      : PORTAL_LOCAL_URL;
+    window.open(redirectUrl, '_blank');
   });
 }
 

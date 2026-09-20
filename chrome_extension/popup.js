@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let lastDossier = null;
   let lastRawEml = null;
+  let lastCaseId = null;
 
   // 1. Initial active tab inspection
   try {
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const result = await response.json();
           lastDossier = result.full_dossier || result.details || result;
           lastRawEml = result.raw_eml || "";
+          lastCaseId = result.case_id || "";
           displayResults(result, emailData);
         } catch (apiError) {
           showError("Backend analysis error. Please ensure TrustShield backend is running on port 8000.");
@@ -148,33 +150,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 4. Open SOC Portal Button Click
   if (openPortalBtn) {
     openPortalBtn.addEventListener('click', () => {
-      chrome.tabs.create({ url: PORTAL_URL }, (newTab) => {
-        if (newTab && newTab.id && lastDossier) {
-          // Listen for tab completion to inject incident payload
-          chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-            if (tabId === newTab.id && info.status === 'complete') {
-              chrome.tabs.onUpdated.removeListener(listener);
-              chrome.scripting.executeScript({
-                target: { tabId: newTab.id },
-                func: (dossier, rawEml) => {
-                  try {
-                    localStorage.setItem('trustshield_incoming_incident', JSON.stringify({
-                      dossier: dossier,
-                      raw_eml: rawEml
-                    }));
-                    if (typeof window.checkIncomingExtensionIncident === 'function') {
-                      window.checkIncomingExtensionIncident();
-                    }
-                  } catch (err) {
-                    console.warn(err);
-                  }
-                },
-                args: [lastDossier, lastRawEml]
-              });
-            }
-          });
-        }
-      });
+      const targetUrl = lastCaseId 
+        ? `${PORTAL_URL}?case_id=${encodeURIComponent(lastCaseId)}`
+        : PORTAL_URL;
+      chrome.tabs.create({ url: targetUrl });
     });
   }
 });

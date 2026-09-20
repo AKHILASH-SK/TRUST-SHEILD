@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -44,3 +44,17 @@ class ScanFeature(Base):
     
     # Relationship
     scan = relationship("LinkScan", back_populates="features")
+
+class ForensicCase(Base):
+    __tablename__ = "forensic_cases"
+    
+    case_id = Column(String(50), primary_key=True, index=True)
+    evidence_hash = Column(String(64), index=True)
+    verdict = Column(String(100))
+    threat_score = Column(Float)
+    sender = Column(String(255))
+    subject = Column(String(500))
+    dossier_json = Column(Text, nullable=False)
+    raw_eml = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

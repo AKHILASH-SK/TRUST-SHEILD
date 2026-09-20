@@ -95,6 +95,114 @@ def verify_pin(plain_pin, hashed_pin):
     """Verify PIN against hash"""
     return bcrypt.checkpw(plain_pin.encode(), hashed_pin.encode())
 
+# In-memory case cache for ultra-fast access and resilience
+FORENSIC_CASE_CACHE = {}
+
+def ensure_forensic_case_table():
+    """Ensures forensic_cases table exists in PostgreSQL"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS forensic_cases (
+                case_id VARCHAR(50) PRIMARY KEY,
+                evidence_hash VARCHAR(64),
+                verdict VARCHAR(100),
+                threat_score FLOAT,
+                sender VARCHAR(255),
+                subject VARCHAR(500),
+                dossier_json TEXT NOT NULL,
+                raw_eml TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_forensic_cases_hash ON forensic_cases(evidence_hash);
+            CREATE INDEX IF NOT EXISTS idx_forensic_cases_created ON forensic_cases(created_at DESC);
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("[+] [DB] Verified/created 'forensic_cases' table.")
+    except Exception as e:
+        print(f"[-] [DB] Note initializing forensic_cases table: {e}")
+
+try:
+    ensure_forensic_case_table()
+except Exception as e:
+    print(f"[-] [DB] Initialization warning: {e}")
+
+def persist_forensic_case(case_id: str, dossier: dict, raw_eml: str = "") -> str:
+    """Stores case in in-memory cache and PostgreSQL database"""
+    FORENSIC_CASE_CACHE[case_id] = {
+        "case_id": case_id,
+        "dossier": dossier,
+        "raw_eml": raw_eml,
+        "created_at": datetime.utcnow().isoformat()
+    }
+    
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        evidence_hash = dossier.get("evidence_hash_sha256", "")
+        verdict = dossier.get("verdict", "UNKNOWN")
+        threat_score = float(dossier.get("overall_threat_score", 0.0))
+        meta = dossier.get("metadata", {})
+        sender = (meta.get("from", "") or "")[:250]
+        subject = (meta.get("subject", "") or "")[:490]
+        dossier_str = json.dumps(dossier)
+        
+        cur.execute("""
+            INSERT INTO forensic_cases (case_id, evidence_hash, verdict, threat_score, sender, subject, dossier_json, raw_eml, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (case_id) DO UPDATE SET
+                evidence_hash = EXCLUDED.evidence_hash,
+                verdict = EXCLUDED.verdict,
+                threat_score = EXCLUDED.threat_score,
+                sender = EXCLUDED.sender,
+                subject = EXCLUDED.subject,
+                dossier_json = EXCLUDED.dossier_json,
+                raw_eml = EXCLUDED.raw_eml,
+                created_at = EXCLUDED.created_at;
+        """, (case_id, evidence_hash, verdict, threat_score, sender, subject, dossier_str, raw_eml, datetime.utcnow()))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[-] [DB] Error storing case {case_id}: {e}")
+        
+    return case_id
+
+def retrieve_forensic_case(case_id: str):
+    """Retrieves case by case_id from in-memory cache or PostgreSQL"""
+    if case_id in FORENSIC_CASE_CACHE:
+        return FORENSIC_CASE_CACHE[case_id]
+        
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT case_id, evidence_hash, verdict, threat_score, sender, subject, dossier_json, raw_eml, created_at FROM forensic_cases WHERE case_id = %s", (case_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row:
+            dossier = json.loads(row[6]) if isinstance(row[6], str) else row[6]
+            case_data = {
+                "case_id": row[0],
+                "evidence_hash": row[1],
+                "verdict": row[2],
+                "threat_score": row[3],
+                "sender": row[4],
+                "subject": row[5],
+                "dossier": dossier,
+                "raw_eml": row[7] or "",
+                "created_at": row[8].isoformat() if row[8] else ""
+            }
+            FORENSIC_CASE_CACHE[case_id] = case_data
+            return case_data
+    except Exception as e:
+        print(f"[-] [DB] Error retrieving case {case_id}: {e}")
+        
+    return None
+
 # ==================== ROUTES ====================
 
 def is_short_url(url):
@@ -270,7 +378,7 @@ def login_user():
 def analyze_extension_email():
     """
     Endpoint for the TrustShield Chrome Extension.
-    Accepts { subject, sender, body } and runs the Unified Forensic Pipeline.
+    Accepts { subject, sender, body, links } and runs the Unified Forensic Pipeline.
     """
     if request.method == 'OPTIONS':
         return '', 200
@@ -280,15 +388,25 @@ def analyze_extension_email():
         subject = data.get('subject', '').strip()
         sender = data.get('sender', '').strip()
         body = data.get('body', '').strip()
+        links = data.get('links', [])
+        if isinstance(links, str):
+            links = [links]
 
-        if not subject and not body:
+        if not subject and not body and not links:
             return jsonify({"error": "No content to analyze"}), 400
 
-        # Synthesize standard RFC-5322 MIME envelope from webmail scrape
+        # Synthesize standard RFC-5322 MIME envelope from webmail scrape with HTML parts containing links
+        import random
         from datetime import datetime
         now_utc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
         sender_domain = sender.split("@")[-1] if "@" in sender else "external-mail.net"
+        boundary = f"----=_Part_Ext_{int(datetime.utcnow().timestamp())}_{random.randint(1000, 9999)}"
         
+        # Build HTML links block so email_forensics.py parser extracts all hyperlinks
+        html_links_tags = ""
+        for url in links:
+            html_links_tags += f'<p><a href="{url}">{url}</a></p>\n'
+
         eml_str = (
             f"Delivered-To: recipient.user@corporate.com\r\n"
             f"Received: from mail-relay.{sender_domain} (unknown [209.85.220.41])\r\n"
@@ -301,17 +419,31 @@ def analyze_extension_email():
             f"Date: {now_utc}\r\n"
             f"Message-ID: <{int(datetime.utcnow().timestamp())}@{sender_domain}>\r\n"
             f"MIME-Version: 1.0\r\n"
+            f"Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n\r\n"
+            f"--{boundary}\r\n"
             f"Content-Type: text/plain; charset=UTF-8\r\n"
             f"Content-Transfer-Encoding: 7bit\r\n\r\n"
             f"{body}\r\n"
+            + ("\n\nEmbedded URLs:\n" + "\n".join(links) if links else "") +
+            f"\r\n\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: text/html; charset=UTF-8\r\n"
+            f"Content-Transfer-Encoding: 7bit\r\n\r\n"
+            f"<html><body><div>{body}</div>\n{html_links_tags}</body></html>\r\n"
+            f"--{boundary}--\r\n"
         )
         eml_bytes = eml_str.encode('utf-8')
 
         from core_engine.unified_email_pipeline import analyze_email_pipeline
         dossier = analyze_email_pipeline(eml_bytes, skip_link_sandbox=False)
 
+        # Generate unique case ID and persist to database & memory cache
+        case_id = f"TSF-{random.randint(100000, 999999)}"
+        persist_forensic_case(case_id, dossier, eml_str)
+
         return jsonify({
             "status": "success",
+            "case_id": case_id,
             "verdict": dossier.get("verdict"),
             "final_threat_score": dossier.get("overall_threat_score"),
             "text_verdict": dossier.get("threat_attribution", {}).get("type", "Analyzed"),
@@ -980,7 +1112,6 @@ def trigger_live_simulation():
 
 
 @app.route('/api/forensics/analyze-eml', methods=['POST'])
-
 def analyze_eml_endpoint():
     """
     Ingests an uploaded .eml file (multipart/form-data with 'file' or raw bytes),
@@ -1000,11 +1131,42 @@ def analyze_eml_endpoint():
         skip_sandbox = request.args.get('skip_sandbox', 'false').lower() in ('true', '1')
         from core_engine.unified_email_pipeline import analyze_email_pipeline
         result = analyze_email_pipeline(eml_bytes, skip_link_sandbox=skip_sandbox)
+        
+        # Persist case to database and in-memory cache
+        import random
+        case_id = f"TSF-{random.randint(100000, 999999)}"
+        eml_text = eml_bytes.decode('utf-8', errors='replace')
+        persist_forensic_case(case_id, result, eml_text)
+        result["case_id"] = case_id
+
         return jsonify(result), 200
 
     except Exception as e:
-
         print(f"❌ [Forensics API] Error processing .eml: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/forensics/case/<case_id>', methods=['GET'])
+def get_forensic_case_by_id(case_id):
+    """
+    Retrieves a previously analyzed forensic incident dossier by Case ID.
+    Enables seamless cross-origin loading from Chrome Extension into the SOC Portal.
+    """
+    try:
+        clean_id = (case_id or "").strip()
+        case_data = retrieve_forensic_case(clean_id)
+        if not case_data:
+            return jsonify({"error": f"Case ID '{case_id}' not found."}), 404
+            
+        return jsonify({
+            "status": "success",
+            "case_id": case_data["case_id"],
+            "dossier": case_data["dossier"],
+            "raw_eml": case_data.get("raw_eml", ""),
+            "created_at": case_data.get("created_at", "")
+        }), 200
+    except Exception as e:
+        print(f"❌ [Forensics Case Lookup] Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

@@ -242,7 +242,7 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     max_link_score = 0.0
     critical_link_detected = False
 
-    unique_links = list(dict.fromkeys(extracted_links))[:3]
+    unique_links = list(dict.fromkeys(extracted_links))[:8]
 
     for idx, link in enumerate(unique_links):
         try:
@@ -258,7 +258,7 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
 
             if score > max_link_score:
                 max_link_score = score
-            if score >= 80.0:
+            if score >= 75.0:
                 critical_link_detected = True
 
             link_investigation.append({
@@ -283,7 +283,7 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     # =========================================================================
     # Multi-track indicator fusion:
     # 1. Base score from link investigation
-    if max_link_score >= 80.0:
+    if max_link_score >= 70.0:
         base_threat = max_link_score
     elif max_link_score > 0.0:
         base_threat = max_link_score * 0.5
