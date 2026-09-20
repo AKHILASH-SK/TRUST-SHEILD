@@ -2,51 +2,100 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TrustShield Email Analyzer</title>
+  <title>TrustShield Endpoint Guard</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <img src="https://img.icons8.com/color/48/000000/shield.png" alt="TrustShield Logo" class="logo">
-      <h2>TrustShield</h2>
-    </div>
+  <div class="app-container">
     
-    <div class="info-section">
-      <p>Analyze the current email for phishing, brand impersonation, and BEC attempts.</p>
+    <!-- Top Header Bar -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="brand-badge">TS</div>
+        <div class="brand-text">
+          <h1>TrustShield</h1>
+          <span class="subtext">Endpoint Phishing Guard · Sec. 63 BSA</span>
+        </div>
+      </div>
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span class="status-label">ACTIVE</span>
+      </div>
+    </header>
+
+    <!-- Target Inspection Card -->
+    <div class="target-card" id="target-card">
+      <div class="target-meta">
+        <span class="target-label">ACTIVE WEBMAIL CONTEXT:</span>
+        <div class="target-val" id="target-sender">Detecting email...</div>
+        <div class="target-sub" id="target-subject">Open an email in Gmail or Outlook</div>
+      </div>
     </div>
 
-    <button id="analyze-btn" class="primary-btn">Analyze Current Email</button>
-
-    <div id="loading" class="hidden">
-      <div class="spinner"></div>
-      <p>Analyzing with Multi-Modal AI...</p>
+    <!-- Action Section -->
+    <div class="action-section">
+      <button id="analyze-btn" class="primary-btn">
+        <svg class="btn-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>Analyze Active Email</span>
+      </button>
     </div>
 
-    <div id="results" class="hidden">
-      <div id="verdict-banner" class="verdict-banner">
-        <h3 id="verdict-text">SAFE</h3>
+    <!-- Loading Animation Skeleton -->
+    <div id="loading" class="hidden loading-card">
+      <div class="scanner-wrap">
+        <div class="radar-scan"></div>
+      </div>
+      <div class="loading-text">
+        <p class="loading-title">Detonating &amp; Auditing Payload...</p>
+        <p class="loading-subtitle">Stealth Sandbox &middot; Multi-Modal AI Fusion</p>
+      </div>
+    </div>
+
+    <!-- Results Display -->
+    <div id="results" class="hidden results-card">
+      
+      <!-- Verdict Banner -->
+      <div id="verdict-banner" class="verdict-banner verdict-safe">
+        <span id="verdict-icon">🛡️</span>
+        <span id="verdict-text">VERIFIED AUTHENTIC</span>
       </div>
       
-      <div class="score-container">
-        <div class="score-label">Threat Score:</div>
-        <div id="threat-score" class="score-value">0/100</div>
+      <!-- Risk Score Gauge Box -->
+      <div class="score-card">
+        <div class="score-info">
+          <span class="score-title">Threat Risk Score</span>
+          <span class="score-attribution" id="res-attribution">BENIGN_AUTHENTICATED</span>
+        </div>
+        <div id="threat-score" class="score-number">0 / 100</div>
       </div>
 
-      <div class="details">
-        <div class="detail-item">
-          <strong>Sender:</strong> <span id="res-sender"></span>
+      <!-- Telemetry Breakdown -->
+      <div class="telemetry-grid">
+        <div class="telemetry-row">
+          <span class="tel-label">Sender Origin</span>
+          <span class="tel-val font-mono" id="res-sender">&mdash;</span>
         </div>
-        <div class="detail-item">
-          <strong>NLP Analysis:</strong> <span id="res-nlp"></span>
+        <div class="telemetry-row">
+          <span class="tel-label">NLP Intent</span>
+          <span class="tel-val" id="res-nlp">&mdash;</span>
         </div>
-        <div class="detail-item">
-          <strong>Links Found:</strong> <span id="res-links"></span>
+        <div class="telemetry-row">
+          <span class="tel-label">Payload Links</span>
+          <span class="tel-val" id="res-links">&mdash;</span>
         </div>
       </div>
+
+      <!-- Deep Redirection to Full SOC Dossier -->
+      <button id="open-portal-btn" class="portal-btn">
+        <svg class="portal-icon" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/></svg>
+        <span>Open Full SOC Forensic Dossier &rarr;</span>
+      </button>
+
     </div>
     
-    <div id="error-msg" class="hidden error"></div>
+    <!-- Error Box -->
+    <div id="error-msg" class="hidden error-card"></div>
+
   </div>
   <script src="popup.js"></script>
 </body>

@@ -276,7 +276,33 @@ function executeLiveStudioInjection(e) {
 document.addEventListener('DOMContentLoaded', () => {
   setupDragAndDrop();
   generateCaseId();
+  checkIncomingExtensionIncident();
 });
+
+function checkIncomingExtensionIncident() {
+  try {
+    const raw = localStorage.getItem('trustshield_incoming_incident');
+    if (raw) {
+      localStorage.removeItem('trustshield_incoming_incident');
+      const parsed = JSON.parse(raw);
+      const dossier = parsed.dossier || parsed;
+      const rawEml = parsed.raw_eml || '';
+      if (rawEml) rawEmlContent = rawEml;
+      if (dossier && dossier.overall_threat_score !== undefined) {
+        currentReport = dossier;
+        tCaptured = new Date();
+        tHashed = new Date();
+        tVerdict = new Date();
+        setTimeout(() => {
+          renderDashboard(dossier, 0.45);
+          switchTab('threat');
+        }, 150);
+      }
+    }
+  } catch (e) {
+    console.warn('Error loading incoming extension incident:', e);
+  }
+}
 
 function generateCaseId() {
   const n = Math.floor(100000 + Math.random() * 900000);

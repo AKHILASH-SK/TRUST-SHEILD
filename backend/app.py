@@ -270,34 +270,55 @@ def login_user():
 def analyze_extension_email():
     """
     Endpoint for the TrustShield Chrome Extension.
-    Accepts { subject, sender, body } and runs the MultiModalFusionEngine.
+    Accepts { subject, sender, body } and runs the Unified Forensic Pipeline.
     """
     if request.method == 'OPTIONS':
         return '', 200
 
     try:
         data = request.get_json() or {}
-        subject = data.get('subject', '')
-        sender = data.get('sender', '')
-        body = data.get('body', '')
+        subject = data.get('subject', '').strip()
+        sender = data.get('sender', '').strip()
+        body = data.get('body', '').strip()
 
         if not subject and not body:
             return jsonify({"error": "No content to analyze"}), 400
 
-        # Extract URLs
-        import re
-        extracted_links = re.findall(r'(https?://[^\s<>"\'()]+)', body)
+        # Synthesize standard RFC-5322 MIME envelope from webmail scrape
+        from datetime import datetime
+        now_utc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
+        sender_domain = sender.split("@")[-1] if "@" in sender else "external-mail.net"
         
-        engine = MultiModalFusionEngine()
-        result = engine.analyze_email_comprehensive(subject, body, extracted_links)
-        
+        eml_str = (
+            f"Delivered-To: recipient.user@corporate.com\r\n"
+            f"Received: from mail-relay.{sender_domain} (unknown [209.85.220.41])\r\n"
+            f"\tby mx.google.com with ESMTP id a21si891024plm.12;\r\n"
+            f"\t{now_utc}\r\n"
+            f"Return-Path: <{sender or 'security-alert@external-mail.net'}>\r\n"
+            f"From: {sender or 'Security Alert <security@external-mail.net>'}\r\n"
+            f"To: recipient.user@corporate.com\r\n"
+            f"Subject: {subject or 'Security Notification'}\r\n"
+            f"Date: {now_utc}\r\n"
+            f"Message-ID: <{int(datetime.utcnow().timestamp())}@{sender_domain}>\r\n"
+            f"MIME-Version: 1.0\r\n"
+            f"Content-Type: text/plain; charset=UTF-8\r\n"
+            f"Content-Transfer-Encoding: 7bit\r\n\r\n"
+            f"{body}\r\n"
+        )
+        eml_bytes = eml_str.encode('utf-8')
+
+        from core_engine.unified_email_pipeline import analyze_email_pipeline
+        dossier = analyze_email_pipeline(eml_bytes, skip_link_sandbox=False)
+
         return jsonify({
             "status": "success",
-            "verdict": result['verdict'],
-            "final_threat_score": result['final_threat_score'],
-            "text_verdict": result['text_analysis'].get('threat_type', 'Analyzed'),
-            "links_found": len(extracted_links),
-            "details": result
+            "verdict": dossier.get("verdict"),
+            "final_threat_score": dossier.get("overall_threat_score"),
+            "text_verdict": dossier.get("threat_attribution", {}).get("type", "Analyzed"),
+            "links_found": len(dossier.get("link_investigation", [])),
+            "threat_attribution": dossier.get("threat_attribution", {}),
+            "full_dossier": dossier,
+            "raw_eml": eml_str
         }), 200
 
     except Exception as e:
