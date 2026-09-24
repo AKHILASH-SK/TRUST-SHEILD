@@ -1299,11 +1299,24 @@ function renderLeafletMap(originIntel) {
       scrollWheelZoom: false
     }).setView([20, 0], 2);
 
-    // Stadia Alidade Smooth Dark — crisp premium dark tile layer
-    L.tileLayer(
+    // Stadia Alidade Smooth Dark — crisp premium dark tile layer with automatic CartoDB Dark fallback
+    const primaryTiles = L.tileLayer(
       `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
       { maxZoom: 20, minZoom: 1 }
-    ).addTo(mapInstance);
+    );
+    let fallbackFired = false;
+    primaryTiles.on('tileerror', function() {
+      if (!fallbackFired) {
+        fallbackFired = true;
+        mapInstance.removeLayer(primaryTiles);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 20,
+          minZoom: 1,
+          subdomains: 'abcd'
+        }).addTo(mapInstance);
+      }
+    });
+    primaryTiles.addTo(mapInstance);
 
     mapMarkersGroup = L.featureGroup().addTo(mapInstance);
   } else {
