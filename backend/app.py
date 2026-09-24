@@ -1588,21 +1588,25 @@ def nlp_analyze_text():
 # STANDALONE WHOIS LOOKUP ENDPOINT
 # ===========================================================================
 
-@app.route('/api/forensics/whois', methods=['POST'])
+@app.route('/api/forensics/whois', methods=['GET', 'POST'])
 def whois_lookup_endpoint():
     """
     Performs WHOIS & domain intelligence lookup on any domain.
     Returns domain age, registrar, privacy shield status, DNS anomalies,
     and a WHOIS risk score (0-100).
 
-    Body (JSON): { "domain": "phish.example.com" }
+    Body (JSON) or Query: { "domain": "phish.example.com" } or ?domain=phish.example.com
     """
     try:
         from core_engine.whois_intel import lookup_whois
-        data = request.get_json() or {}
-        domain = data.get('domain', '').strip().lower()
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+            domain = data.get('domain', '') or request.args.get('domain', '')
+        else:
+            domain = request.args.get('domain', '')
+        domain = domain.strip().lower()
         if not domain:
-            return jsonify({"error": "Provide 'domain' in request body"}), 400
+            return jsonify({"error": "Provide 'domain' via query param or JSON body"}), 400
 
         # Strip protocol if accidentally included
         domain = domain.replace('https://', '').replace('http://', '').split('/')[0]
