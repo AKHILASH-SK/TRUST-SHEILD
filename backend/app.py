@@ -319,7 +319,9 @@ def serve_portal_index():
     """Serves the SOC Analyst Web Portal"""
     from flask import send_from_directory
     frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
-    return send_from_directory(frontend_dir, "index.html")
+    resp = send_from_directory(frontend_dir, "index.html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 @app.route('/portal/<path:filename>')
 @app.route('/app.js')
@@ -329,7 +331,9 @@ def serve_portal_assets(filename='app.js'):
     from flask import send_from_directory
     frontend_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
     target = 'app.js' if request.path == '/app.js' else ('index.html' if request.path == '/index.html' else filename)
-    return send_from_directory(frontend_dir, target)
+    resp = send_from_directory(frontend_dir, target)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
 
 
 
