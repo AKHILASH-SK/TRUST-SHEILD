@@ -4,6 +4,11 @@ Orchestrates end-to-end email analysis by integrating:
   1. Email Forensics Engine (SHA-256, RFC-5322 parsing, SPF/DKIM/DMARC, hop extraction)
   2. GeoLocation Tracer (GPS coordinates, Leaflet route map, Tor/proxy detection)
   3. Dynamic Phishing Link Sandbox & Meta-Classifier (Heuristics, Threat DB, Chrome Sandbox, RF Classifier)
+  4. BEC & NLP Body Analyser (5-class taxonomy: LEGITIMATE/SUSPICIOUS/IMPERSONATED/PHISHING/BEC_FRAUD)
+  5. WHOIS & Domain Intelligence (domain age, registrar risk, privacy shield, DNS anomalies)
+  6. Attachment Risk Analyser (executable detection, macro docs, archive wrappers, double-extension)
+  7. Graph Correlation Engine (D3.js-ready threat infra graph across sender/IP/ASN/URL nodes)
+  8. Campaign Case Manager (groups related incidents into searchable campaign clusters)
 Computes a holistic incident threat score (0-100) and returns a unified dossier for SOC analysts.
 """
 
@@ -14,6 +19,37 @@ from typing import Dict, Any, List, Optional
 from .email_forensics import parse_email_file
 from .geo_tracer import generate_route_map, resolve_ip_location
 from .link_threat_pipeline import analyze_url
+
+# New SIH-required modules
+try:
+    from .bec_nlp_analyser import analyse_eml_for_bec
+    _BEC_NLP_AVAILABLE = True
+except ImportError:
+    _BEC_NLP_AVAILABLE = False
+
+try:
+    from .whois_intel import lookup_whois
+    _WHOIS_AVAILABLE = True
+except ImportError:
+    _WHOIS_AVAILABLE = False
+
+try:
+    from .attachment_analyser import analyse_attachments
+    _ATTACHMENT_ANALYSER_AVAILABLE = True
+except ImportError:
+    _ATTACHMENT_ANALYSER_AVAILABLE = False
+
+try:
+    from .graph_correlation import ingest_analysis_to_graph, get_graph_d3_data
+    _GRAPH_AVAILABLE = True
+except ImportError:
+    _GRAPH_AVAILABLE = False
+
+try:
+    from .campaign_manager import get_case_manager
+    _CAMPAIGN_MANAGER_AVAILABLE = True
+except ImportError:
+    _CAMPAIGN_MANAGER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -357,9 +393,87 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     )
 
     # =========================================================================
-    # Step G: Return Standard Unified Forensics Schema
+    # Step G: BEC & NLP Body Analysis (5-class taxonomy)
     # =========================================================================
-    return {
+    nlp_analysis = {}
+    if _BEC_NLP_AVAILABLE:
+        try:
+            nlp_analysis = analyse_eml_for_bec(
+                forensics_payload=payload,
+                metadata=metadata
+            )
+            # Boost threat score if BEC_FRAUD or PHISHING class detected
+            nlp_class = nlp_analysis.get("nlp_class", "LEGITIMATE")
+            nlp_risk = float(nlp_analysis.get("nlp_risk_score", 0.0))
+            if nlp_class in ("BEC_FRAUD", "PHISHING") and nlp_risk >= 50.0:
+                boost = min(20.0, nlp_risk * 0.25)
+                overall_threat_score = round(min(100.0, overall_threat_score + boost), 1)
+                risk_factors.append(f"NLP Body Analysis: {nlp_class} detected (score {nlp_risk}/100)")
+        except Exception as e:
+            logger.warning(f"BEC/NLP analyser error: {e}")
+
+    # =========================================================================
+    # Step H: WHOIS & Domain Intelligence
+    # =========================================================================
+    whois_intelligence = {}
+    if _WHOIS_AVAILABLE:
+        try:
+            from_domain_for_whois = metadata.get("from_domain", "")
+            if from_domain_for_whois:
+                whois_intelligence = lookup_whois(from_domain_for_whois)
+                whois_risk = float(whois_intelligence.get("whois_risk_score", 0.0))
+                # Contribute max +20 pts to overall score
+                whois_contribution = min(20.0, whois_risk * 0.3)
+                if whois_contribution > 0:
+                    overall_threat_score = round(min(100.0, overall_threat_score + whois_contribution), 1)
+                if whois_intelligence.get("is_newly_registered"):
+                    risk_factors.append(f"WHOIS: Domain registered {whois_intelligence.get('domain_age_days')} day(s) ago (newly registered burner domain)")
+                if whois_intelligence.get("is_privacy_shielded"):
+                    risk_factors.append("WHOIS: Registrant identity hidden behind privacy protection service")
+                if whois_intelligence.get("is_suspicious_registrar"):
+                    risk_factors.append(f"WHOIS: Suspicious registrar detected: {whois_intelligence.get('registrar')}")
+        except Exception as e:
+            logger.warning(f"WHOIS intel error: {e}")
+
+    # =========================================================================
+    # Step I: Attachment Risk Analysis
+    # =========================================================================
+    attachment_analysis = {}
+    if _ATTACHMENT_ANALYSER_AVAILABLE:
+        try:
+            attachment_analysis = analyse_attachments(eml_bytes)
+            attach_risk = float(attachment_analysis.get("attachment_risk_score", 0.0))
+            if attach_risk >= 60.0:
+                boost = min(25.0, attach_risk * 0.3)
+                overall_threat_score = round(min(100.0, overall_threat_score + boost), 1)
+                risk_factors.append(f"Attachment Risk: {attachment_analysis.get('attachment_risk_level')} — {attachment_analysis.get('total_attachments')} suspicious attachment(s) detected")
+        except Exception as e:
+            logger.warning(f"Attachment analyser error: {e}")
+
+    # Recalculate final verdict after all boosts
+    if overall_threat_score >= 80.0:
+        final_verdict = "CRITICAL FRAUD / PHISHING"
+    elif overall_threat_score >= 50.0:
+        final_verdict = "SUSPICIOUS / UNVERIFIED ORIGIN"
+    else:
+        final_verdict = "LEGITIMATE / AUTHENTICATED"
+
+    # Rebuild incident summary with updated score
+    incident_summary = generate_incident_summary(
+        verdict=final_verdict,
+        overall_threat_score=overall_threat_score,
+        metadata=metadata,
+        auth=auth,
+        origin=origin_intelligence,
+        link_results=link_investigation,
+        risk_factors=risk_factors,
+        attribution=threat_attribution
+    )
+
+    # =========================================================================
+    # Step J: Build complete result schema
+    # =========================================================================
+    result = {
         "evidence_hash_sha256": evidence_hash,
         "overall_threat_score": overall_threat_score,
         "verdict": final_verdict,
@@ -386,8 +500,30 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         "sender_domain_intelligence": mx_data,
         "origin_intelligence": origin_intelligence,
         "link_investigation": link_investigation,
+        "nlp_analysis": nlp_analysis,
+        "whois_intelligence": whois_intelligence,
+        "attachment_analysis": attachment_analysis,
         "incident_summary": incident_summary
     }
+
+    # =========================================================================
+    # Step K: Graph Correlation & Campaign Grouping (non-blocking)
+    # =========================================================================
+    if _GRAPH_AVAILABLE:
+        try:
+            graph_delta = ingest_analysis_to_graph(result)
+            result["graph_delta"] = graph_delta
+        except Exception as e:
+            logger.warning(f"Graph correlation error: {e}")
+
+    if _CAMPAIGN_MANAGER_AVAILABLE:
+        try:
+            campaign_info = get_case_manager().ingest_incident(result)
+            result["campaign_info"] = campaign_info
+        except Exception as e:
+            logger.warning(f"Campaign manager error: {e}")
+
+    return result
 
 
 
