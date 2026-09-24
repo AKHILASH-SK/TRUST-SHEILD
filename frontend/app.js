@@ -866,6 +866,7 @@ function renderDashboard(data, elapsedSeconds) {
   renderVerdict(data, elapsedSeconds);
   renderMetadataAndAuth(data);
   renderLeafletMap(data.origin_intelligence);
+  if (data.whois_intelligence) _renderWhoisPanel(data.whois_intelligence);
   renderNarrativeAndLinks(data);
   renderExplainableAI(data);
   renderNetworkIntel(data);
@@ -1067,64 +1068,227 @@ function renderNarrativeAndLinks(data) {
   });
 }
 
+// =========================================================================
+// STADIA API KEY — Alidade Smooth Dark tiles
+// =========================================================================
+const STADIA_API_KEY = '0042d489-e3af-4e52-9a8c-1e704f4725f0';
+
+// -------------------------------------------------------------------------
+// Helper: curved SVG arc between two lat/lon points on the Leaflet map
+// -------------------------------------------------------------------------
+function _addArcLine(map, fromLatLon, toLatLon, color = '#10b981', opacity = 0.8) {
+  const p1 = map.latLngToLayerPoint(L.latLng(fromLatLon));
+  const p2 = map.latLngToLayerPoint(L.latLng(toLatLon));
+  const mx = (p1.x + p2.x) / 2;
+  const my = (p1.y + p2.y) / 2 - Math.abs(p2.x - p1.x) * 0.35;
+  // Use SVG overlay — falls back gracefully if DOM not ready
+  try {
+    const svgEl = map.getPanes().overlayPane.querySelector('svg');
+    if (!svgEl) return null;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${p1.x},${p1.y} Q${mx},${my} ${p2.x},${p2.y}`);
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '2');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke-opacity', opacity);
+    path.setAttribute('stroke-dasharray', '6 4');
+    path.style.animation = 'dash-anim 3s linear infinite';
+    path.classList.add('ts-arc-line');
+    svgEl.appendChild(path);
+    return path;
+  } catch(e) { return null; }
+}
+
+// -------------------------------------------------------------------------
+// Helper: populate geo stat bar tiles
+// -------------------------------------------------------------------------
+function _renderGeoStatBar(originIntel, hops) {
+  const bar = document.getElementById('geoStatBar');
+  if (!bar) return;
+  const totalHops = originIntel.total_hops || hops.length || 0;
+  const country   = originIntel.origin_country || 'Unknown';
+  const isAnon    = originIntel.is_anonymized_node || originIntel.is_proxy;
+  const isHosting = originIntel.is_hosting;
+
+  const infraLabel = isAnon ? '⚠ TOR / PROXY' : isHosting ? 'HOSTING / CDN' : '✓ Clean MTA';
+  const infraColor = isAnon ? 'text-red-400 bg-red-500/10 border-red-500/25'
+                   : isHosting ? 'text-amber-400 bg-amber-500/10 border-amber-500/25'
+                   : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25';
+
+  const stats = [
+    { label: 'Relay Hops',     value: totalHops,                      color: 'text-sky-300',     bg: 'bg-sky-500/10 border-sky-500/20' },
+    { label: 'Origin Country', value: country,                         color: 'text-violet-300',  bg: 'bg-violet-500/10 border-violet-500/20' },
+    { label: 'Origin IP',      value: originIntel.originating_ip || '—', color: 'text-white',    bg: 'bg-slate-700/50 border-slate-600/40' },
+    { label: 'Infrastructure', value: infraLabel,                      color: infraColor.split(' ')[0], bg: infraColor.split(' ').slice(1).join(' ') },
+  ];
+
+  bar.innerHTML = stats.map(s => `
+    <div class="rounded-xl border ${s.bg} px-4 py-3 flex flex-col gap-0.5">
+      <span class="text-[9px] text-slate-400 uppercase tracking-widest font-mono">${s.label}</span>
+      <span class="text-sm font-bold font-mono ${s.color} truncate">${s.value}</span>
+    </div>
+  `).join('');
+}
+
+// -------------------------------------------------------------------------
+// Helper: render rich hop cards list
+// -------------------------------------------------------------------------
+function _renderHopCards(hops) {
+  const container = document.getElementById('hopsContainer');
+  const badge     = document.getElementById('hopCountBadge');
+  if (!container) return;
+  if (badge) badge.textContent = `${hops.length} hop${hops.length !== 1 ? 's' : ''}`;
+
+  if (hops.length === 0) {
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-8 text-slate-500">
+        <svg class="w-8 h-8 mb-2 opacity-40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+        <p class="text-[11px] font-mono">No public relay hops extracted</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  hops.forEach((hop, idx) => {
+    const isOrigin = (idx === 0);
+    const isSuspicious = hop.is_suspicious_proxy;
+    const card = document.createElement('div');
+    card.className = `hop-card${isOrigin ? ' origin' : ''}`;
+
+    const dotColor = isOrigin ? 'bg-red-400 shadow-red-500/60'
+                   : isSuspicious ? 'bg-amber-400 shadow-amber-500/60'
+                   : 'bg-emerald-400 shadow-emerald-500/60';
+    const dotShadow = 'box-shadow: 0 0 8px currentColor';
+
+    card.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="flex flex-col items-center gap-1 mt-0.5 shrink-0">
+          <span class="w-6 h-6 rounded-full ${dotColor} shadow-lg flex items-center justify-center text-white text-[10px] font-black">${idx + 1}</span>
+          ${idx < hops.length - 1 ? `<div class="w-px flex-1 min-h-[12px] bg-slate-600/50"></div>` : ''}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="text-[12px] font-mono font-bold text-white truncate">${hop.ip || 'Unknown IP'}</span>
+            ${isOrigin ? `<span class="px-1.5 py-0.5 rounded text-[8px] font-mono font-black bg-red-500/20 text-red-300 border border-red-500/30 uppercase shrink-0">ORIGIN</span>` : ''}
+            ${isSuspicious ? `<span class="px-1.5 py-0.5 rounded text-[8px] font-mono font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase shrink-0">PROXY</span>` : ''}
+          </div>
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5">
+            <span class="text-[10px] text-slate-400 font-mono">📍 ${[hop.city, hop.country].filter(Boolean).join(', ') || 'Unknown'}</span>
+            ${hop.isp ? `<span class="text-[10px] text-slate-500 font-mono truncate max-w-[140px]">🌐 ${hop.isp}</span>` : ''}
+          </div>
+          ${hop.asn ? `<span class="text-[9px] text-slate-600 font-mono">${hop.asn}</span>` : ''}
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// -------------------------------------------------------------------------
+// Helper: render WHOIS intelligence panel
+// -------------------------------------------------------------------------
+function _renderWhoisPanel(whoisData) {
+  const panel   = document.getElementById('whoisPanel');
+  const content = document.getElementById('whoisContent');
+  const badge   = document.getElementById('whoisRiskBadge');
+  if (!panel || !content || !whoisData) return;
+
+  const risk = whoisData.whois_risk_score || 0;
+  const riskColor = risk >= 60 ? 'bg-red-500/20 text-red-300 border-red-500/30'
+                  : risk >= 30 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+
+  if (badge) {
+    badge.textContent = `Risk: ${risk}/100`;
+    badge.className = `ml-auto px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border ${riskColor}`;
+  }
+
+  const fields = [
+    { label: 'Registrar',    value: whoisData.registrar || 'Unknown' },
+    { label: 'Domain Age',   value: whoisData.domain_age_days != null ? `${whoisData.domain_age_days} days` : 'Unknown' },
+    { label: 'Country',      value: whoisData.registrant_country || 'Unknown' },
+    { label: 'Privacy Shield', value: whoisData.is_privacy_shielded ? '⚠ Hidden' : '✓ Visible' },
+  ];
+
+  const flagBadges = (whoisData.whois_risk_flags || []).slice(0, 3).map(f =>
+    `<span class="px-2 py-0.5 rounded text-[9px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 truncate">${f.split(':')[0]}</span>`
+  ).join('');
+
+  content.innerHTML = fields.map(f => `
+    <div class="bg-slate-800/60 rounded-lg p-2.5 border border-slate-700/40">
+      <span class="text-[9px] text-slate-400 uppercase tracking-widest block mb-0.5 font-mono">${f.label}</span>
+      <span class="text-[12px] font-mono font-semibold text-slate-200 truncate block">${f.value}</span>
+    </div>
+  `).join('') + (flagBadges ? `<div class="col-span-full flex flex-wrap gap-1.5 pt-1">${flagBadges}</div>` : '');
+
+  panel.classList.remove('hidden');
+}
+
+// -------------------------------------------------------------------------
+// Helper: floating map overlay stats
+// -------------------------------------------------------------------------
+function _renderMapOverlay(originIntel) {
+  const overlay = document.getElementById('mapOverlayStats');
+  const content = document.getElementById('mapOverlayContent');
+  if (!overlay || !content) return;
+
+  const ip      = originIntel.originating_ip || 'Unknown';
+  const country = originIntel.origin_country || 'Unknown';
+  const isAnon  = originIntel.is_anonymized_node || originIntel.is_proxy;
+  const hops    = (originIntel.route_map || []).length;
+
+  content.innerHTML = [
+    { icon: '🌐', label: 'Origin IP',   val: ip },
+    { icon: '📍', label: 'Country',     val: country },
+    { icon: '↔',  label: 'Total Hops',  val: hops },
+    { icon: isAnon ? '⚠' : '✓', label: 'Infra', val: isAnon ? 'TOR/PROXY' : 'Clean MTA' },
+  ].map(r => `
+    <div class="flex items-center gap-2">
+      <span class="text-[11px]">${r.icon}</span>
+      <span class="text-[9px] text-slate-400 font-mono w-16 shrink-0">${r.label}</span>
+      <span class="text-[10px] font-mono font-bold text-white truncate max-w-[100px]">${r.val}</span>
+    </div>
+  `).join('');
+
+  overlay.style.display = 'block';
+}
+
+// =========================================================================
+// MAIN RENDER FUNCTION — upgraded with Stadia tiles + all enhancements
+// =========================================================================
 function renderLeafletMap(originIntel) {
   if (!originIntel) return;
 
-  const originIp = originIntel.originating_ip || 'Unknown';
-  const originCountry = originIntel.origin_country || 'Unknown';
-  const originIsp = originIntel.origin_isp || 'Unknown ISP';
-  const isAnon = originIntel.is_anonymized_node || originIntel.is_proxy;
+  const originIp      = originIntel.originating_ip || 'Unknown';
+  const originCountry = originIntel.origin_country  || 'Unknown';
+  const originIsp     = originIntel.origin_isp      || 'Unknown ISP';
+  const isAnon        = originIntel.is_anonymized_node || originIntel.is_proxy;
 
-  const ipEl = document.getElementById('originIpText');
+  // ---- Update text elements ----
+  const ipEl      = document.getElementById('originIpText');
   const countryEl = document.getElementById('originCountryBadge');
-  const ispEl = document.getElementById('originIspText');
-  const flagEl = document.getElementById('originProxyFlag');
+  const ispEl     = document.getElementById('originIspText');
+  const flagEl    = document.getElementById('originProxyFlag');
 
-  if (ipEl) ipEl.innerText = originIp;
+  if (ipEl)      ipEl.innerText = originIp;
   if (countryEl) countryEl.innerText = originCountry;
-  if (ispEl) ispEl.innerText = originIsp;
+  if (ispEl)     ispEl.innerText = originIsp;
 
   if (flagEl) {
     if (isAnon) {
-      flagEl.innerHTML = `
-        <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-red-500/20 text-red-300 border border-red-500/40">TOR / PROXY</span>
-        <span class="block text-[9px] text-slate-400 font-mono truncate max-w-[160px]">${originIsp}</span>
-      `;
+      flagEl.innerHTML = `<span class="px-2.5 py-1 rounded-full text-[9px] font-mono font-bold uppercase bg-red-500/20 text-red-300 border border-red-500/30">⚠ TOR / PROXY</span>`;
     } else {
-      flagEl.innerHTML = `
-        <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">CLEAN ORIGIN</span>
-        <span class="block text-[9px] text-slate-400 font-mono truncate max-w-[160px]">${originIsp}</span>
-      `;
+      flagEl.innerHTML = `<span class="px-2.5 py-1 rounded-full text-[9px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">✓ CLEAN ORIGIN</span>`;
     }
   }
 
-  // Hops container list
   const hops = originIntel.route_map || [];
-  const hopsContainer = document.getElementById('hopsContainer');
-  if (hopsContainer) {
-    hopsContainer.innerHTML = '';
-    if (hops.length === 0) {
-      hopsContainer.innerHTML = `<div class="p-2 text-center text-slate-400 font-mono text-[10px]">No public relay hops extracted.</div>`;
-    } else {
-      hops.forEach((hop, idx) => {
-        const isOrigin = (idx === 0);
-        const item = document.createElement('div');
-        item.className = 'p-1.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-[10px] font-mono';
-        item.innerHTML = `
-          <div class="flex items-center space-x-2">
-            <span class="w-4 h-4 rounded-full ${isOrigin ? 'bg-red-100 text-red-600 border border-red-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'} flex items-center justify-center font-bold text-[9px]">
-              ${hop.hop || (idx + 1)}
-            </span>
-            <span class="text-slate-800 font-bold">${hop.ip || 'Unknown IP'}</span>
-          </div>
-          <span class="text-slate-400">${hop.country || 'Unknown'} (${hop.city || 'Relay'})</span>
-        `;
-        hopsContainer.appendChild(item);
-      });
-    }
-  }
 
-  // Initialize or update Leaflet Map
+  // ---- Stat bar + hop cards ----
+  _renderGeoStatBar(originIntel, hops);
+  _renderHopCards(hops);
+
+  // ---- Map init ----
   const mapDiv = document.getElementById('map');
   if (!mapDiv || typeof L === 'undefined') return;
 
@@ -1135,64 +1299,92 @@ function renderLeafletMap(originIntel) {
       scrollWheelZoom: false
     }).setView([20, 0], 2);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18
-    }).addTo(mapInstance);
+    // Stadia Alidade Smooth Dark — crisp premium dark tile layer
+    L.tileLayer(
+      `https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
+      { maxZoom: 20, minZoom: 1 }
+    ).addTo(mapInstance);
 
     mapMarkersGroup = L.featureGroup().addTo(mapInstance);
   } else {
     mapMarkersGroup.clearLayers();
-    if (mapPolyline) {
-      mapInstance.removeLayer(mapPolyline);
-      mapPolyline = null;
-    }
+    if (mapPolyline) { mapInstance.removeLayer(mapPolyline); mapPolyline = null; }
+    // Clear old SVG arc lines
+    const svgEl = mapInstance.getPanes().overlayPane.querySelector('svg');
+    if (svgEl) svgEl.querySelectorAll('.ts-arc-line').forEach(el => el.remove());
   }
 
-  // Plot valid coordinates
+  // ---- Plot markers ----
   const validCoords = [];
   hops.forEach((hop, idx) => {
     const lat = parseFloat(hop.lat);
     const lon = parseFloat(hop.lon);
-    if (!isNaN(lat) && !isNaN(lon) && (lat !== 0 || lon !== 0)) {
-      validCoords.push([lat, lon]);
-      const isOrigin = (idx === 0);
+    if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) return;
+    validCoords.push([lat, lon]);
 
-      const icon = L.divIcon({
-        className: 'custom-leaflet-marker',
-        html: `<div class="${isOrigin ? 'pulse-marker-origin' : 'pulse-marker-hop'}"></div>`,
-        iconSize: isOrigin ? [16, 16] : [10, 10],
-        iconAnchor: isOrigin ? [8, 8] : [5, 5]
-      });
+    const isOrigin     = (idx === 0);
+    const isSuspicious = hop.is_suspicious_proxy;
 
-      const marker = L.marker([lat, lon], { icon }).addTo(mapMarkersGroup);
-      marker.bindPopup(`
-        <strong style="color:${isOrigin ? '#f87171' : '#6ee7b7'}">Hop #${hop.hop || (idx + 1)} ${isOrigin ? '(ORIGIN)' : ''}</strong><br/>
-        IP: ${hop.ip || 'Unknown'}<br/>
-        Location: ${hop.city || 'Unknown'}, ${hop.country || 'Unknown'}<br/>
-        ISP: ${hop.isp || 'Unknown'}
-      `);
-    }
+    const icon = L.divIcon({
+      className: 'custom-leaflet-marker',
+      html: `<div class="${isOrigin ? 'pulse-marker-origin' : 'pulse-marker-hop'}"></div>`,
+      iconSize:   isOrigin ? [18, 18] : [11, 11],
+      iconAnchor: isOrigin ? [9, 9]   : [5.5, 5.5]
+    });
+
+    const threatColor = isOrigin     ? '#f87171'
+                      : isSuspicious ? '#fbbf24'
+                      : '#6ee7b7';
+    const hopLabel    = isOrigin ? 'ORIGIN MTA' : isSuspicious ? 'SUSPICIOUS RELAY' : `HOP #${idx + 1}`;
+
+    const marker = L.marker([lat, lon], { icon }).addTo(mapMarkersGroup);
+    marker.bindPopup(`
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6">
+        <div style="color:${threatColor};font-weight:900;font-size:12px;margin-bottom:4px">${hopLabel}</div>
+        <div style="color:#94a3b8">IP&nbsp;&nbsp;&nbsp;&nbsp;</div><span style="color:#f1f5f9;font-weight:700">${hop.ip || 'Unknown'}</span><br/>
+        <div style="color:#94a3b8">City&nbsp;&nbsp;</div><span style="color:#f1f5f9">${hop.city || '—'}, ${hop.country || '—'}</span><br/>
+        <div style="color:#94a3b8">ISP&nbsp;&nbsp;&nbsp;</div><span style="color:#f1f5f9">${hop.isp || '—'}</span>
+        ${isSuspicious ? `<div style="margin-top:6px;padding:4px 6px;background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.3);border-radius:4px;color:#fbbf24;font-size:9px;font-weight:700">⚠ ANOMIZED / PROXY NODE</div>` : ''}
+      </div>
+    `, { maxWidth: 220 });
   });
 
+  // ---- Draw curved arc lines between hops ----
   if (validCoords.length > 1) {
+    // Fallback plain polyline (always works)
     mapPolyline = L.polyline(validCoords, {
       color: '#10b981',
-      weight: 2,
-      opacity: 0.85,
-      dashArray: '4, 6'
+      weight: 1.5,
+      opacity: 0.5,
+      dashArray: '5, 7'
     }).addTo(mapInstance);
+
+    // Try SVG arcs after map settles
+    setTimeout(() => {
+      const svgEl = mapInstance.getPanes().overlayPane.querySelector('svg');
+      if (svgEl) {
+        for (let i = 0; i < validCoords.length - 1; i++) {
+          _addArcLine(mapInstance, validCoords[i], validCoords[i + 1],
+            i === 0 ? '#ef4444' : '#10b981', 0.85);
+        }
+      }
+    }, 350);
   }
 
+  // ---- Fit bounds ----
   if (validCoords.length > 0) {
-    mapInstance.fitBounds(validCoords, { padding: [30, 30], maxZoom: 6 });
+    mapInstance.fitBounds(validCoords, { padding: [40, 40], maxZoom: 7 });
   } else {
     mapInstance.setView([20, 0], 2);
   }
 
+  // ---- Overlay stats + invalidate ----
   setTimeout(() => {
     mapInstance.invalidateSize();
-  }, 200);
+    _renderMapOverlay(originIntel);
+  }, 250);
 }
+
 
 // =========================================================================
 // EXPLAINABLE AI
