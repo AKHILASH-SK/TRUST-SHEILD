@@ -1412,8 +1412,244 @@ def export_forensic_pdf_endpoint():
         return jsonify({"error": str(e)}), 500
 
 
+
+# ===========================================================================
+# GRAPH CORRELATION ENDPOINTS
+# ===========================================================================
+
+@app.route('/api/graph', methods=['GET'])
+def get_threat_graph():
+    """
+    Returns the current global threat infrastructure graph in D3.js format.
+    Frontend can render this as a force-directed graph showing relationships
+    between sender domains, IPs, ASNs, URLs, and email addresses.
+
+    Query params:
+        format: 'full' (default) | 'stats' — return only summary stats
+    """
+    try:
+        from core_engine.graph_correlation import get_graph_d3_data, get_global_graph
+        fmt = request.args.get('format', 'full')
+        if fmt == 'stats':
+            return jsonify({
+                "status": "success",
+                "stats": get_global_graph().get_stats()
+            }), 200
+        graph_data = get_graph_d3_data()
+        return jsonify({
+            "status": "success",
+            "graph": graph_data
+        }), 200
+    except Exception as e:
+        print(f"❌ [Graph API] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/graph/shared-infra', methods=['POST'])
+def find_shared_infrastructure():
+    """
+    Given an IP or domain, returns all nodes sharing that infrastructure
+    (campaign-level correlation — 'who else uses this server?').
+
+    Body: { "ip": "1.2.3.4" } OR { "domain": "phish.com" }
+    """
+    try:
+        from core_engine.graph_correlation import get_global_graph
+        data = request.get_json() or {}
+        ip = data.get('ip', '')
+        domain = data.get('domain', '')
+        if not ip and not domain:
+            return jsonify({"error": "Provide 'ip' or 'domain' in request body"}), 400
+        graph = get_global_graph()
+        connected = graph.find_shared_infrastructure(target_ip=ip, target_domain=domain)
+        return jsonify({
+            "status": "success",
+            "query": {"ip": ip, "domain": domain},
+            "connected_nodes": connected,
+            "total_connected": len(connected)
+        }), 200
+    except Exception as e:
+        print(f"❌ [Graph Shared Infra] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ===========================================================================
+# CAMPAIGN CASE MANAGEMENT ENDPOINTS
+# ===========================================================================
+
+@app.route('/api/campaigns', methods=['GET'])
+def get_all_campaigns():
+    """
+    Returns all incident campaigns grouped by shared infrastructure fingerprint.
+    Used by the SOC portal Case Management Console.
+
+    Query params:
+        min_incidents: int (default 1) — filter campaigns with at least N incidents
+        limit: int (default 50)
+    """
+    try:
+        from core_engine.campaign_manager import get_case_manager
+        min_inc = int(request.args.get('min_incidents', 1))
+        limit = int(request.args.get('limit', 50))
+        cm = get_case_manager()
+        campaigns = cm.get_all_campaigns(min_incidents=min_inc)[:limit]
+        stats = cm.get_stats()
+        return jsonify({
+            "status": "success",
+            "stats": stats,
+            "total": len(campaigns),
+            "campaigns": campaigns
+        }), 200
+    except Exception as e:
+        print(f"❌ [Campaigns API] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/campaigns/search', methods=['GET'])
+def search_campaigns():
+    """
+    Searches campaigns by IP, domain, registrar, campaign name, or campaign ID.
+
+    Query params:
+        q: str — search query
+    """
+    try:
+        from core_engine.campaign_manager import get_case_manager
+        query = request.args.get('q', '').strip()
+        cm = get_case_manager()
+        results = cm.search_campaigns(query)
+        return jsonify({
+            "status": "success",
+            "query": query,
+            "total": len(results),
+            "campaigns": results
+        }), 200
+    except Exception as e:
+        print(f"❌ [Campaigns Search] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/campaigns/<campaign_id>', methods=['GET'])
+def get_campaign_detail(campaign_id):
+    """Returns full detail of a specific campaign including all incidents."""
+    try:
+        from core_engine.campaign_manager import get_case_manager
+        camp = get_case_manager().get_campaign(campaign_id)
+        if not camp:
+            return jsonify({"error": f"Campaign '{campaign_id}' not found"}), 404
+        return jsonify({"status": "success", "campaign": camp}), 200
+    except Exception as e:
+        print(f"❌ [Campaign Detail] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ===========================================================================
+# STANDALONE NLP / BEC ANALYSIS ENDPOINT
+# ===========================================================================
+
+@app.route('/api/forensics/nlp-analyze', methods=['POST'])
+def nlp_analyze_text():
+    """
+    Standalone NLP & BEC analysis on raw email text.
+    Classifies into 5-class taxonomy: LEGITIMATE / SUSPICIOUS / IMPERSONATED / PHISHING / BEC_FRAUD
+    Useful for quick body-text checks without uploading a full .eml file.
+
+    Body (JSON): { "subject": "...", "body": "...", "sender": "..." }
+    """
+    try:
+        from core_engine.bec_nlp_analyser import analyse_email_body
+        data = request.get_json() or {}
+        subject = data.get('subject', '')
+        body = data.get('body', '')
+        sender = data.get('sender', '')
+
+        if not subject and not body:
+            return jsonify({"error": "Provide at least 'subject' or 'body' in request body"}), 400
+
+        result = analyse_email_body(
+            subject=subject,
+            body=body,
+            sender_display_name=sender
+        )
+        return jsonify({
+            "status": "success",
+            "nlp_analysis": result
+        }), 200
+    except Exception as e:
+        print(f"❌ [NLP Analyze] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ===========================================================================
+# STANDALONE WHOIS LOOKUP ENDPOINT
+# ===========================================================================
+
+@app.route('/api/forensics/whois', methods=['POST'])
+def whois_lookup_endpoint():
+    """
+    Performs WHOIS & domain intelligence lookup on any domain.
+    Returns domain age, registrar, privacy shield status, DNS anomalies,
+    and a WHOIS risk score (0-100).
+
+    Body (JSON): { "domain": "phish.example.com" }
+    """
+    try:
+        from core_engine.whois_intel import lookup_whois
+        data = request.get_json() or {}
+        domain = data.get('domain', '').strip().lower()
+        if not domain:
+            return jsonify({"error": "Provide 'domain' in request body"}), 400
+
+        # Strip protocol if accidentally included
+        domain = domain.replace('https://', '').replace('http://', '').split('/')[0]
+
+        result = lookup_whois(domain)
+        return jsonify({
+            "status": "success",
+            "whois_intelligence": result
+        }), 200
+    except Exception as e:
+        print(f"❌ [WHOIS Lookup] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ===========================================================================
+# STANDALONE ATTACHMENT ANALYSIS ENDPOINT
+# ===========================================================================
+
+@app.route('/api/forensics/attachment-check', methods=['POST'])
+def attachment_check_endpoint():
+    """
+    Analyses attachments in an uploaded .eml file for dangerous file types:
+    executables, macro-enabled Office documents, archive wrappers,
+    double-extension camouflage, and MIME/extension mismatches.
+
+    Upload: multipart/form-data with 'file' field containing the .eml
+    """
+    try:
+        from core_engine.attachment_analyser import analyse_attachments
+        if 'file' not in request.files:
+            return jsonify({"error": "Upload .eml as multipart/form-data with key 'file'"}), 400
+
+        eml_bytes = request.files['file'].read()
+        if not eml_bytes:
+            return jsonify({"error": "Uploaded file is empty"}), 400
+
+        result = analyse_attachments(eml_bytes)
+        return jsonify({
+            "status": "success",
+            "attachment_analysis": result
+        }), 200
+    except Exception as e:
+        print(f"❌ [Attachment Check] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000, debug=False)
+
+
+
 
 
 
