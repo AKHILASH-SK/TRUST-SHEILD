@@ -407,6 +407,10 @@ class VirtualSandboxAnalyzer:
                 print(f"[-] [CLOUD SANDBOX] Redirect blocked by SSRF guard: {e}")
                 return self._blocked_features(features)
 
+            # Raw page evidence for the ML page-feature extractor (removed before results leave the pipeline)
+            features['_html'] = html_text[:400000]
+            features['_final_url'] = final_url
+
             current_ext = tldextract.extract(final_url)
             current_reg_domain = current_ext.registered_domain.lower()
             is_trusted_auth_domain = _is_trusted_url(final_url)
@@ -609,6 +613,11 @@ class VirtualSandboxAnalyzer:
             time.sleep(0.5) # Fast wait for JS dynamic SPAs / payloads to execute
             
             final_url = driver.current_url
+            try:
+                features['_html'] = (driver.page_source or "")[:400000]
+            except Exception:
+                features['_html'] = ""
+            features['_final_url'] = final_url
             current_ext = tldextract.extract(final_url)
             current_reg_domain = current_ext.registered_domain.lower()
             initial_ext = tldextract.extract(initial_url)

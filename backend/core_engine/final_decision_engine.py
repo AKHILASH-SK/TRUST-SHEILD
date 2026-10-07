@@ -38,6 +38,13 @@ def generate_deterministic_summary(
     Generates exact evidence items from multi-modal sandbox and heuristic telemetry.
     """
     evidence_items = []
+
+    if telemetry.get("ml_used") and telemetry.get("ml_probability") is not None:
+        ml_line = (f"ML classifier ({telemetry.get('ml_model')} model) rates this link "
+                   f"{telemetry['ml_probability'] * 100:.0f}% likely malicious")
+        if telemetry.get("ml_signals"):
+            ml_line += " - key signals: " + ", ".join(telemetry["ml_signals"][:3])
+        evidence_items.append(ml_line)
     
     if telemetry.get("known_db_match"):
         evidence_items.append("Confirmed malicious signature in threat intelligence database (URLhaus/OpenPhish)")
@@ -188,7 +195,8 @@ class FinalDecisionEngine:
         vt_risk_score: float = 0.0,
         sandbox_unreachable: int = 0,
         sandbox_blocked: int = 0,
-        known_good: bool = False
+        known_good: bool = False,
+        ml: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Fuses all 12+ telemetry features with deterministic guardrails.
@@ -263,6 +271,12 @@ class FinalDecisionEngine:
             if hidden_iframes > 0: booster += 20.0
             
             threat_score = round(min(100.0, ensemble_base + booster), 2)
+
+        # 2a. Trained ML classifier (final stage). It sets the score unless a hard rule already fired;
+        #     the floors below can still only raise it.
+        rule_score = threat_score
+        if ml and not hard_override_triggered:
+            threat_score = float(ml["score"])
             
         # 2b. Heuristic hard floors: each of these is dangerous by itself
         floor_reasons: List[str] = []
@@ -340,7 +354,15 @@ class FinalDecisionEngine:
             "heuristic_floors": floor_reasons,
             "sandbox_unreachable": sandbox_unreachable,
             "sandbox_blocked_unsafe_url": sandbox_blocked,
-            "analysis_complete": analysis_complete
+            "analysis_complete": analysis_complete,
+            "rule_score": rule_score,
+            "ml_used": bool(ml),
+            "ml_probability": ml["probability"] if ml else None,
+            "ml_band": ml["band"] if ml else None,
+            "ml_model": ml["model"] if ml else None,
+            "ml_model_version": ml.get("model_version") if ml else None,
+            "ml_lexical_probability": ml.get("lexical_probability") if ml else None,
+            "ml_signals": ml.get("signals", []) if ml else []
         }
         
         # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)

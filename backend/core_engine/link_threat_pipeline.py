@@ -261,7 +261,20 @@ class LinkThreatPipeline:
             }
 
         # ----------------------------------------------------
-        # Stage 4: Meta-Classifier & Final Fusion Engine
+        # Stage 4: Trained ML classifier (page model, or lexical model when the page could not be opened)
+        # ----------------------------------------------------
+        ml_result = None
+        try:
+            from ml.model_runtime import get_runtime
+            ml_result = get_runtime().score(clean_url, sandbox_res, use_page=not skip_sandbox)
+        except Exception as e:
+            logger.debug(f"ML stage skipped: {e}")
+        # raw page evidence was only needed for ML; never let it leave the pipeline
+        sandbox_res.pop("_html", None)
+        sandbox_res.pop("_final_url", None)
+
+        # ----------------------------------------------------
+        # Stage 5: Final fusion (ML verdict + hard security rules)
         # ----------------------------------------------------
         final_result = self.decision_engine.evaluate(
             url=clean_url,
@@ -283,7 +296,8 @@ class LinkThreatPipeline:
             sandbox_threat=sandbox_res.get("sandbox_threat_score", 0),
             vt_risk_score=vt_risk_score,
             sandbox_unreachable=int(sandbox_res.get("sandbox_unreachable", 0) or 0),
-            sandbox_blocked=int(sandbox_res.get("sandbox_blocked_unsafe_url", 0) or 0)
+            sandbox_blocked=int(sandbox_res.get("sandbox_blocked_unsafe_url", 0) or 0),
+            ml=ml_result
         )
 
         return final_result

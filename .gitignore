@@ -56,3 +56,6 @@ backend/ngrok.exe
 backend/ngrok.zip
 backend/data/*.db
 backend/data/*.sqlite
+
+# ML datasets and trained artifacts built locally
+backend/ml/data/

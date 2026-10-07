@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8080
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium chromium-driver fonts-liberation ca-certificates \
+    && apt-get install -y --no-install-recommends chromium chromium-driver fonts-liberation ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

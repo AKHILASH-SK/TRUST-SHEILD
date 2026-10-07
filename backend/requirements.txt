@@ -25,3 +25,7 @@ dnspython>=2.6.0
 dkimpy>=1.1.5
 reportlab>=4.0.0
 
+# Trained phishing classifier (runtime scoring)
+lightgbm>=4.3.0
+numpy>=1.26
+joblib>=1.3.0
