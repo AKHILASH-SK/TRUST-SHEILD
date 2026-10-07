@@ -32,6 +32,13 @@ IPV4_PATTERN = re.compile(r'^(?:https?://)?(?:\S+@)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.
 IPV6_PATTERN = re.compile(r'^(?:https?://)?(?:\S+@)?(\[[0-9a-fA-F:]+\])(?::\d+)?(?:/.*)?$', re.IGNORECASE)
 
 
+def _brand_in_label(brand: str, label: str) -> bool:
+    """Short/ambiguous brands (aws, sbi, dhl) need token boundaries; long ones may be embedded."""
+    if len(brand) <= 4:
+        return re.search(rf"(?<![a-z]){re.escape(brand)}(?![a-z])", label) is not None
+    return brand in label
+
+
 def calculate_shannon_entropy(text: str) -> float:
     """
     Calculates the Shannon Entropy of a string: H = -sum(p * log2(p)).
@@ -87,7 +94,8 @@ def parse_url_heuristics(url: str) -> Dict[str, Any]:
         
     # 3. Userinfo '@' Symbol Spoofing Check
     has_at = 0
-    if '@' in parsed.netloc or ('@' in clean_url.split('?')[0] and '://' in clean_url):
+    # Only userinfo in the authority counts; '@' in a path (e.g. medium.com/@user) is benign.
+    if '@' in parsed.netloc:
         has_at = 1
         flags.append("USERINFO_AT_SPOOFING: '@' symbol used to deceive user regarding destination host")
         
@@ -110,8 +118,14 @@ def parse_url_heuristics(url: str) -> Dict[str, Any]:
     matched_brand = None
     
     # Check if a major brand keyword is nestled inside subdomains while root domain is different
-    for brand in TARGETED_BRAND_KEYWORDS:
-        if any(brand in part for part in subdomain_parts):
+    try:
+        from .link_threat_pipeline import BRAND_FAST_PATH_DOMAINS, is_user_content_host
+        root_is_brand = root_domain in BRAND_FAST_PATH_DOMAINS and not is_user_content_host(netloc)
+    except Exception:
+        root_is_brand = False
+
+    for brand in ([] if root_is_brand else TARGETED_BRAND_KEYWORDS):
+        if any(_brand_in_label(brand, part) for part in subdomain_parts):
             # Verify if this brand is in the legitimate root domain
             if brand not in root_domain:
                 suspicious_subdomain_brand = 1

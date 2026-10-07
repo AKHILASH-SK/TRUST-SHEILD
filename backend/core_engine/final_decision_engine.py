@@ -5,11 +5,26 @@ and AI-synthesized forensic incident reporting (Groq / OpenAI or deterministic f
 """
 
 import os
+import re
 import logging
+from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Verdict thresholds (exported; shared with callers/tests)
+SUSPICIOUS_THRESHOLD = 50.0
+CRITICAL_THRESHOLD = 80.0
+
+# Hard floors applied by heuristics that are dangerous on their own
+RAW_IP_FLOOR = 60.0
+BRAND_SUBDOMAIN_FLOOR = 70.0
+AT_SPOOF_FLOOR = 65.0
+VT_MALICIOUS_FLOOR = 90.0
+UNINSPECTED_RISK_FLOOR = 50.0
+
+_SENSITIVE_PATH_RE = re.compile(r"(login|log-in|signin|sign-in|verify|verification|account|secure|update|password|auth|banking)", re.I)
 
 
 def generate_deterministic_summary(
@@ -50,16 +65,25 @@ def generate_deterministic_summary(
     if telemetry.get("title_mismatch"):
         evidence_items.append("Page title claims corporate brand while domain does not match")
 
+    if telemetry.get("analysis_complete") is False:
+        evidence_items.append("Page could not be inspected")
+
+    if telemetry.get("override_reason") and telemetry.get("hard_override_triggered"):
+        evidence_items.append(str(telemetry.get("override_reason")))
+
     if not evidence_items:
         evidence_items.append("Standard domain lifecycle and clean structural heuristics")
 
     # Format 3-bullet forensic report
-    if threat_score >= 80:
+    if threat_score >= CRITICAL_THRESHOLD:
         threat_summary = f"Critical phishing and credential harvesting attack targeting end users via deceptive infrastructure."
         action = "Block URL immediately at firewall/DNS resolver, revoke any entered passwords, and quarantine related emails."
-    elif threat_score >= 50:
+    elif threat_score >= SUSPICIOUS_THRESHOLD:
         threat_summary = f"Suspicious link displaying anomaly indicators and high-risk domain metadata."
         action = "Caution advised. Isolate in sandbox container and inspect sender authenticity before interacting."
+    elif telemetry.get("analysis_complete") is False:
+        threat_summary = "No threat signatures found, but the page could not be inspected."
+        action = "Page could not be inspected. Proceed with caution and avoid entering credentials."
     else:
         threat_summary = f"Domain verified legitimate. No malicious evasion techniques or threat signatures detected."
         action = "No action required. Traffic permitted to proceed normally."
@@ -161,7 +185,10 @@ class FinalDecisionEngine:
         url_entropy_risk: int = 0,
         typosquat_risk: int = 0,
         sandbox_threat: float = 0.0,
-        vt_risk_score: float = 0.0
+        vt_risk_score: float = 0.0,
+        sandbox_unreachable: int = 0,
+        sandbox_blocked: int = 0,
+        known_good: bool = False
     ) -> Dict[str, Any]:
         """
         Fuses all 12+ telemetry features with deterministic guardrails.
@@ -197,6 +224,10 @@ class FinalDecisionEngine:
             threat_score = 95.0
             hard_override_triggered = True
             override_reason = "VirusTotal Flagged Malicious with Password Harvesting"
+        elif vt_risk_score >= VT_MALICIOUS_FLOOR:
+            threat_score = 90.0
+            hard_override_triggered = True
+            override_reason = "Flagged malicious by 2+ VirusTotal engines"
             
         # 2. Weighted Ensemble Fusion (If no hard override reached 100)
         if not hard_override_triggered:
@@ -233,14 +264,58 @@ class FinalDecisionEngine:
             
             threat_score = round(min(100.0, ensemble_base + booster), 2)
             
+        # 2b. Heuristic hard floors: each of these is dangerous by itself
+        floor_reasons: List[str] = []
+
+        def _floor(value: float, reason: str) -> None:
+            nonlocal threat_score, hard_override_triggered, override_reason
+            floor_reasons.append(reason)
+            if threat_score < value:
+                threat_score = value
+                hard_override_triggered = True
+                override_reason = reason if not override_reason else f"{override_reason}; {reason}"
+
+        flag_text = " ".join(heuristic_flags)
+        try:
+            parsed = urlparse(url if "://" in url else f"http://{url}")
+            path_query = f"{parsed.path} {parsed.query}"
+            try:
+                port = parsed.port
+            except ValueError:
+                port = None
+        except Exception:
+            path_query, port = "", None
+        non_standard_port = port is not None and port not in (80, 443)
+
+        if "RAW_IP_HOST" in flag_text and (_SENSITIVE_PATH_RE.search(path_query) or non_standard_port):
+            _floor(RAW_IP_FLOOR, "Raw IP host with credential-style path or non-standard port")
+        if "BRAND_IN_SUBDOMAIN" in flag_text:
+            _floor(BRAND_SUBDOMAIN_FLOOR, "Brand name abused in subdomain of unrelated domain")
+        if "USERINFO_AT_SPOOFING" in flag_text:
+            _floor(AT_SPOOF_FLOOR, "'@' userinfo used to spoof destination host")
+        if vt_risk_score >= VT_MALICIOUS_FLOOR:
+            threat_score = max(threat_score, VT_MALICIOUS_FLOOR)
+
+        # 2c. Incomplete analysis: never report plain clean for an uninspected page
+        analysis_complete = True
+        if (sandbox_unreachable == 1 or sandbox_blocked == 1) and not known_good:
+            analysis_complete = False
+            young_domain = 0 <= domain_age_days < 30
+            if (young_domain or heuristic_flags or typosquat_risk) and threat_score < UNINSPECTED_RISK_FLOOR:
+                threat_score = UNINSPECTED_RISK_FLOOR
+                hard_override_triggered = True
+                reason = "Page could not be inspected and other risk signals exist"
+                override_reason = reason if not override_reason else f"{override_reason}; {reason}"
+        threat_score = round(float(threat_score), 2)
+
         # 3. Categorical Verdict
-        if threat_score >= 80.0:
+        if threat_score >= CRITICAL_THRESHOLD:
             verdict = "CRITICAL FRAUD / PHISHING"
-        elif threat_score >= 50.0:
+        elif threat_score >= SUSPICIOUS_THRESHOLD:
             verdict = "SUSPICIOUS"
         else:
             verdict = "LEGITIMATE / CLEAN"
-            
+
         # 4. Telemetry payload
         telemetry = {
             "heuristic_flags": heuristic_flags,
@@ -261,7 +336,11 @@ class FinalDecisionEngine:
             "sandbox_threat_score": sandbox_threat,
             "vt_risk_score": vt_risk_score,
             "hard_override_triggered": hard_override_triggered,
-            "override_reason": override_reason
+            "override_reason": override_reason,
+            "heuristic_floors": floor_reasons,
+            "sandbox_unreachable": sandbox_unreachable,
+            "sandbox_blocked_unsafe_url": sandbox_blocked,
+            "analysis_complete": analysis_complete
         }
         
         # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)
@@ -271,6 +350,7 @@ class FinalDecisionEngine:
             "url": url,
             "threat_score": threat_score,
             "verdict": verdict,
+            "analysis_complete": analysis_complete,
             "summary": summary,
             "telemetry": telemetry
         }

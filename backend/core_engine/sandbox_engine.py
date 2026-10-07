@@ -1,13 +1,15 @@
 import time
 import logging
 import re
-import concurrent.futures
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 from typing import Dict, Any, Tuple
 from urllib.parse import urlparse, urljoin
 
+import requests
 import tldextract
-import whois
+
+from .url_safety import assert_public_url, UnsafeUrlError
 
 # Using Selenium for the custom headless browser sandbox
 from selenium import webdriver
@@ -49,7 +51,7 @@ TARGETED_BRANDS = {
         "allowed_domains": ["paypal.com", "paypal.me", "paypal-communication.com"]
     },
     "amazon": {
-        "keywords": ["amazon", "amazon prime", "aws"],
+        "keywords": ["amazon", "amazon prime", "amazon web services"],
         "allowed_domains": ["amazon.com", "amazon.in", "amazon.co.uk", "amzn.to", "aws.amazon.com"]
     },
     "apple": {
@@ -105,6 +107,43 @@ def is_chrome_available() -> bool:
             return True
     return False
 
+_KW_REGEX_CACHE: Dict[str, "re.Pattern"] = {}
+
+
+def _keyword_in_text(keyword: str, text: str) -> bool:
+    """Whole-word/phrase match ('aws' must not match 'laws')."""
+    pat = _KW_REGEX_CACHE.get(keyword)
+    if pat is None:
+        pat = re.compile(r"(?<![a-z0-9])" + re.escape(keyword.lower()) + r"(?![a-z0-9])")
+        _KW_REGEX_CACHE[keyword] = pat
+    return pat.search(text or "") is not None
+
+
+# Real brand names only (generic words like bank/login/secure are not brands)
+TITLE_MISMATCH_BRANDS = [
+    "paypal", "amazon", "microsoft", "apple", "netflix", "outlook", "linkedin",
+    "google", "dhl", "hdfc", "sbi", "chatgpt", "openai",
+]
+
+
+def _is_trusted_url(url: str) -> bool:
+    """Brand domain whose own login forms/redirects are trusted (user-content hosts are not)."""
+    from .link_threat_pipeline import is_brand_fast_path
+    return is_brand_fast_path(url)
+
+
+def _title_brand_mismatch(page_title: str, final_url: str, has_credential_form: bool) -> bool:
+    """Title names a real brand that the host does not contain, on a page with a credential form."""
+    if not has_credential_form or not page_title or _is_trusted_url(final_url):
+        return False
+    host = urlparse(final_url).netloc.lower()
+    for brand in TITLE_MISMATCH_BRANDS:
+        if _keyword_in_text(brand, page_title) and brand not in host:
+            print(f"   [!] Title Mismatch! Title claims '{brand}' but domain is '{host}'")
+            return True
+    return False
+
+
 def detect_brand_impersonation(driver, current_url: str) -> dict:
     """
     Detects if an unknown domain claims the identity of a known high-value brand
@@ -137,7 +176,7 @@ def detect_brand_impersonation(driver, current_url: str) -> dict:
         # Compare against targeted brands
         for brand, data in TARGETED_BRANDS.items():
             for keyword in data["keywords"]:
-                if keyword in combined_identity_text:
+                if _keyword_in_text(keyword, combined_identity_text):
                     # Brand claimed in DOM. Check if current domain is authorized:
                     is_authorized = any(
                         current_registered_domain == allowed or current_registered_domain.endswith("." + allowed)
@@ -190,65 +229,140 @@ class VirtualSandboxAnalyzer:
         'surge.sh', 'replit.app', 'replit.dev', 'ngrok.io', 'localtunnel.me'
     }
 
+    _DOMAIN_RE = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{1,62}$")
+    _AGE_CACHE: Dict[str, Tuple[float, Tuple[int, int, int]]] = {}
+    _AGE_LOCK = threading.Lock()
+    _AGE_TTL_KNOWN = 6 * 3600
+    _AGE_TTL_UNKNOWN = 10 * 60
+
+    @staticmethod
+    def _age_result(age_days: int) -> Tuple[int, int, int]:
+        if age_days < 14:
+            print(f"   [!] Zero-Day Scam Domain Detected! Registered {age_days} days ago (< 14 days)")
+            return age_days, 1, 90
+        if age_days < 30:
+            print(f"   [*] Newly Registered Domain Detected! Registered {age_days} days ago (< 30 days)")
+            return age_days, 1, 60
+        return age_days, 0, 0
+
     def _query_domain_age(self, url: str) -> Tuple[int, int, int]:
         """
-        Queries WHOIS data with a fast non-blocking timeout.
-        Skips dynamic multi-tenant cloud hosting platforms.
+        Domain registration age via RDAP over HTTPS (port 43 WHOIS is blocked on Render).
+        Unknown / not found / errors return (-1, 0, 0): never treated as new.
         Returns: (domain_age_days, newly_registered_domain_flag, domain_risk_score)
         """
+        unknown = (-1, 0, 0)
         try:
             ext = tldextract.extract(url)
             reg_domain = ext.registered_domain.lower() if ext.registered_domain else ""
             if not reg_domain or reg_domain in self.DYNAMIC_HOSTING_PROVIDERS:
-                return -1, 0, 0
-                
-            def _fetch_whois():
-                import socket
-                socket.setdefaulttimeout(1.2)
-                w = whois.whois(reg_domain)
-                creation_date = getattr(w, 'creation_date', None)
-                if isinstance(creation_date, list):
-                    creation_date = creation_date[0]
-                return creation_date
+                return unknown
+            if len(reg_domain) > 253 or not self._DOMAIN_RE.match(reg_domain):
+                return unknown
 
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            now = time.time()
+            with self._AGE_LOCK:
+                hit = self._AGE_CACHE.get(reg_domain)
+                if hit and hit[0] > now:
+                    return hit[1]
+
+            result = unknown
+            ttl = self._AGE_TTL_UNKNOWN
             try:
-                future = executor.submit(_fetch_whois)
-                creation_date = future.result(timeout=1.2)
-            finally:
-                executor.shutdown(wait=False, cancel_futures=True)
+                resp = requests.get(
+                    f"https://rdap.org/domain/{reg_domain}",
+                    headers={"Accept": "application/rdap+json, application/json"},
+                    timeout=3,
+                )
+                if resp.status_code == 200:
+                    events = (resp.json() or {}).get("events", [])
+                    for ev in events:
+                        if ev.get("eventAction") == "registration" and ev.get("eventDate"):
+                            created = datetime.fromisoformat(str(ev["eventDate"]).replace("Z", "+00:00"))
+                            if created.tzinfo is None:
+                                created = created.replace(tzinfo=timezone.utc)
+                            age_days = max(0, (datetime.now(timezone.utc) - created).days)
+                            result = self._age_result(age_days)
+                            ttl = self._AGE_TTL_KNOWN
+                            break
+            except Exception as e:
+                logger.debug(f"RDAP lookup failed for {reg_domain}: {e}")
 
-            if creation_date and isinstance(creation_date, datetime):
-                now = datetime.now(creation_date.tzinfo) if creation_date.tzinfo else datetime.now()
-                age_days = (now - creation_date).days
-                if age_days < 0:
-                    age_days = 0
-                    
-                if age_days < 14:
-                    print(f"   [!] Zero-Day Scam Domain Detected! Registered {age_days} days ago (< 14 days)")
-                    return age_days, 1, 90
-                elif age_days < 30:
-                    print(f"   [*] Newly Registered Domain Detected! Registered {age_days} days ago (< 30 days)")
-                    return age_days, 1, 60
-                else:
-                    return age_days, 0, 0
-        except concurrent.futures.TimeoutError:
-            pass
+            with self._AGE_LOCK:
+                self._AGE_CACHE[reg_domain] = (time.time() + ttl, result)
+            return result
         except Exception:
-            pass
-            
-        return -1, 0, 0
+            return unknown
+
+    MAX_REDIRECT_HOPS = 5
+    MAX_BODY_BYTES = 1_500_000
+    REQUEST_BUDGET_SECONDS = 5.0
+
+    def _safe_fetch(self, url: str):
+        """
+        SSRF-safe fetch: validates the URL and every redirect hop, follows redirects
+        manually (max 5), streams the body capped at 1.5 MB within a 5 s budget.
+        Returns (final_url, text, hops); text is '' for non-HTML content.
+        Raises UnsafeUrlError for unsafe targets.
+        """
+        current = assert_public_url(url)
+        hops = []
+        for _ in range(self.MAX_REDIRECT_HOPS + 1):
+            deadline = time.monotonic() + self.REQUEST_BUDGET_SECONDS
+            resp = requests.get(
+                current,
+                headers={"User-Agent": self.user_agent},
+                timeout=self.REQUEST_BUDGET_SECONDS,
+                allow_redirects=False,
+                verify=False,
+                stream=True,
+            )
+            try:
+                location = resp.headers.get("Location")
+                if 300 <= resp.status_code < 400 and location:
+                    nxt = urljoin(current, location)
+                    assert_public_url(nxt)
+                    hops.append(nxt)
+                    current = nxt
+                    continue
+
+                ctype = (resp.headers.get("Content-Type") or "").lower()
+                if ctype and not any(t in ctype for t in ("text/html", "application/xhtml", "text/plain")):
+                    return current, "", hops
+                body = b""
+                for chunk in resp.iter_content(chunk_size=16384):
+                    body += chunk
+                    if len(body) >= self.MAX_BODY_BYTES or time.monotonic() > deadline:
+                        break
+                body = body[: self.MAX_BODY_BYTES]
+                encoding = getattr(resp, "encoding", None) or "utf-8"
+                try:
+                    text = body.decode(encoding, errors="replace")
+                except LookupError:
+                    text = body.decode("utf-8", errors="replace")
+                return current, text, hops
+            finally:
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+        raise requests.TooManyRedirects(f"More than {self.MAX_REDIRECT_HOPS} redirects")
+
+    @staticmethod
+    def _blocked_features(features: Dict[str, Any]) -> Dict[str, Any]:
+        features['sandbox_unreachable'] = 1
+        features['sandbox_blocked_unsafe_url'] = 1
+        features['sandbox_threat_score'] = 40
+        return features
 
     def _analyze_with_requests(self, url: str, features: Dict[str, Any]) -> Dict[str, Any]:
         """
         Lightweight cloud-resilient sandbox: Analyzes HTTP response and DOM elements
         using requests + BeautifulSoup without requiring a heavy Chrome GUI browser.
         Ideal for cloud environments (Render/Heroku) with limited RAM (512MB).
+        SSRF-guarded: every URL and redirect hop must resolve to a public address.
         """
-        import requests
         from bs4 import BeautifulSoup
-        from urllib.parse import urlparse, urljoin
-        import tldextract
 
         defaults = {
             "sandbox_has_password_field": 0,
@@ -266,42 +380,43 @@ class VirtualSandboxAnalyzer:
             "sandbox_hidden_iframes": 0,
             "sandbox_title_mismatch": 0,
             "sandbox_unreachable": 0,
+            "sandbox_blocked_unsafe_url": 0,
             "sandbox_threat_score": 0
         }
         for k, v in defaults.items():
             features.setdefault(k, v)
 
         try:
+            assert_public_url(url)
+        except UnsafeUrlError as e:
+            print(f"[-] [CLOUD SANDBOX] URL blocked by SSRF guard: {e}")
+            return self._blocked_features(features)
+
+        try:
             print(f"[*] [CLOUD SANDBOX] Detonating URL via Lightweight DOM Analyzer: {url}")
             initial_url = url
-            resp = requests.get(
-                url,
-                headers={"User-Agent": self.user_agent},
-                timeout=5,
-                allow_redirects=True,
-                verify=False
-            )
-            final_url = resp.url
+            try:
+                final_url, html_text, hops = self._safe_fetch(url)
+            except UnsafeUrlError as e:
+                print(f"[-] [CLOUD SANDBOX] Redirect blocked by SSRF guard: {e}")
+                return self._blocked_features(features)
 
             current_ext = tldextract.extract(final_url)
             current_reg_domain = current_ext.registered_domain.lower()
-            initial_ext = tldextract.extract(initial_url)
-            initial_reg_domain = initial_ext.registered_domain.lower()
+            is_trusted_auth_domain = _is_trusted_url(final_url)
 
-            from .link_threat_pipeline import GLOBAL_CLEAN_DOMAINS
-            is_trusted_auth_domain = current_reg_domain in GLOBAL_CLEAN_DOMAINS
-
-            if len(resp.history) > 0:
-                if not (initial_reg_domain in GLOBAL_CLEAN_DOMAINS and current_reg_domain in GLOBAL_CLEAN_DOMAINS):
+            if hops:
+                if not (_is_trusted_url(initial_url) and is_trusted_auth_domain):
                     print(f"   [!] Redirect detected: {initial_url} -> {final_url}")
-                    features['sandbox_num_redirects'] = len(resp.history)
+                    features['sandbox_num_redirects'] = len(hops)
 
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            page_title = (soup.title.string or "").strip().lower() if soup.title else ""
+            soup = BeautifulSoup(html_text, 'html.parser')
+            page_title = (soup.title.string or "").strip().lower() if soup.title and soup.title.string else ""
 
             # Check password fields
             pwds = soup.find_all('input', {'type': lambda t: t and t.lower() == 'password'})
-            if len(pwds) > 0 or re.search(r'type=["\']password["\']', resp.text, re.I):
+            has_credential_form = len(pwds) > 0 or bool(re.search(r"type=[\"']password[\"']", html_text, re.I))
+            if has_credential_form:
                 if is_trusted_auth_domain:
                     features['sandbox_has_password_field'] = 0
                 else:
@@ -318,12 +433,12 @@ class VirtualSandboxAnalyzer:
                     action_reg_domain = action_ext.registered_domain.lower()
 
                     if action_reg_domain and current_reg_domain and action_reg_domain != current_reg_domain:
-                        if not (is_trusted_auth_domain and action_reg_domain in GLOBAL_CLEAN_DOMAINS):
+                        if not (is_trusted_auth_domain and _is_trusted_url(resolved_action)):
                             print(f"   [!] External Form Action Detected! {current_reg_domain} -> {action_reg_domain}")
                             features['external_form_action'] = 1
 
                     is_suspicious_endpoint = any(host in resolved_action.lower() for host in SUSPICIOUS_EXFILTRATION_HOSTS)
-                    is_raw_ip = bool(re.search(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', resolved_action))
+                    is_raw_ip = bool(re.search(r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", resolved_action))
                     if is_suspicious_endpoint or is_raw_ip:
                         print(f"   [!] Malicious Form Exfiltration Endpoint Detected: {resolved_action}")
                         features['suspicious_exfiltration'] = 1
@@ -339,23 +454,20 @@ class VirtualSandboxAnalyzer:
                     hidden_iframes += 1
             features['sandbox_hidden_iframes'] = hidden_iframes
 
-            # Title Mismatch
-            domain = urlparse(final_url).netloc.lower()
-            known_financial_brands = ['paypal', 'bank', 'login', 'secure', 'amazon', 'microsoft', 'apple', 'netflix', 'outlook', 'linkedin']
-            for brand in known_financial_brands:
-                if brand in page_title and brand not in domain:
-                    print(f"   [!] Title Mismatch! Title claims '{brand}' but domain is '{domain}'")
-                    features['sandbox_title_mismatch'] = 1
-                    break
+            # Title Mismatch (real brands only, and only with a credential form)
+            if _title_brand_mismatch(page_title, final_url, has_credential_form):
+                features['sandbox_title_mismatch'] = 1
 
-            # Brand Impersonation Check
+            # Brand Impersonation Check (word-boundary keyword matching)
             body_text = soup.get_text(separator=' ').lower()
+            body_head = body_text[:1000]
+            has_login_words = _keyword_in_text('login', body_text) or _keyword_in_text('sign in', body_text)
             for brand, data in TARGETED_BRANDS.items():
                 is_allowed = any(current_reg_domain == allowed or current_reg_domain.endswith('.' + allowed) for allowed in data['allowed_domains'])
                 if not is_allowed:
-                    title_match = any(kw in page_title for kw in data['keywords'])
-                    content_match = any(kw in body_text[:1000] for kw in data['keywords'])
-                    if title_match or (content_match and ('login' in body_text or 'sign in' in body_text)):
+                    title_match = any(_keyword_in_text(kw, page_title) for kw in data['keywords'])
+                    content_match = any(_keyword_in_text(kw, body_head) for kw in data['keywords'])
+                    if title_match or (content_match and has_login_words):
                         print(f"   [!] Brand Impersonation Detected! Claiming '{brand}' on unauthorized domain '{current_reg_domain}'")
                         features['brand_impersonation'] = 1
                         features['impersonated_brand'] = brand
@@ -364,29 +476,7 @@ class VirtualSandboxAnalyzer:
                         features['detected_target_brand'] = brand
                         break
 
-            # Threat score calculation
-            if is_trusted_auth_domain and not features.get('suspicious_exfiltration', 0):
-                threat_score = 0
-            else:
-                threat_score = 0
-                is_credential_risk = (
-                    features.get('brand_impersonation', 0) or
-                    features.get('external_form_action', 0) or
-                    features.get('suspicious_exfiltration', 0) or
-                    features.get('newly_registered_domain', 0) or
-                    features.get('sandbox_title_mismatch', 0)
-                )
-                if features.get('sandbox_has_password_field', 0) and is_credential_risk:
-                    threat_score += 45
-                if features.get('external_form_action', 0): threat_score += 40
-                if features.get('suspicious_exfiltration', 0): threat_score += 55
-                if features.get('brand_impersonation', 0): threat_score += 50
-                if features.get('newly_registered_domain', 0): threat_score += 35
-                if features.get('sandbox_title_mismatch', 0): threat_score += 30
-                if features.get('sandbox_num_redirects', 0): threat_score += 20
-                if features.get('sandbox_hidden_iframes', 0) > 0: threat_score += 25
-
-            features['sandbox_threat_score'] = min(100, threat_score)
+            features['sandbox_threat_score'] = self._score(features, is_trusted_auth_domain)
             print(f"[+] [CLOUD SANDBOX] Analysis Complete. Sandbox Score: {features['sandbox_threat_score']}")
             return features
 
@@ -395,6 +485,29 @@ class VirtualSandboxAnalyzer:
             features['sandbox_unreachable'] = 1
             features['sandbox_threat_score'] = 40
             return features
+
+    @staticmethod
+    def _score(features: Dict[str, Any], is_trusted_auth_domain: bool) -> int:
+        if is_trusted_auth_domain and not features.get('suspicious_exfiltration', 0):
+            return 0
+        threat_score = 0
+        is_credential_risk = (
+            features.get('brand_impersonation', 0) or
+            features.get('external_form_action', 0) or
+            features.get('suspicious_exfiltration', 0) or
+            features.get('newly_registered_domain', 0) or
+            features.get('sandbox_title_mismatch', 0)
+        )
+        if features.get('sandbox_has_password_field', 0) and is_credential_risk:
+            threat_score += 45
+        if features.get('external_form_action', 0): threat_score += 40
+        if features.get('suspicious_exfiltration', 0): threat_score += 55
+        if features.get('brand_impersonation', 0): threat_score += 50
+        if features.get('newly_registered_domain', 0): threat_score += 35
+        if features.get('sandbox_title_mismatch', 0): threat_score += 30
+        if features.get('sandbox_num_redirects', 0): threat_score += 20
+        if features.get('sandbox_hidden_iframes', 0) > 0: threat_score += 25
+        return min(100, threat_score)
 
     def analyze_link_in_sandbox(self, url: str) -> Dict[str, Any]:
         """
@@ -477,6 +590,10 @@ class VirtualSandboxAnalyzer:
             
             # 3. Record initial state and navigate
             initial_url = url
+            try:
+                assert_public_url(url)
+            except UnsafeUrlError:
+                return self._analyze_with_requests(url, features)  # re-blocks with the same guard
             driver.get(url)
             time.sleep(0.5) # Fast wait for JS dynamic SPAs / payloads to execute
             
@@ -487,12 +604,11 @@ class VirtualSandboxAnalyzer:
             initial_reg_domain = initial_ext.registered_domain.lower()
             
             # Check if live page or source belongs to verified global tech ecosystems
-            from .link_threat_pipeline import GLOBAL_CLEAN_DOMAINS
-            is_trusted_auth_domain = current_reg_domain in GLOBAL_CLEAN_DOMAINS
+            is_trusted_auth_domain = _is_trusted_url(final_url)
             
             # 4. Feature Extraction: Redirects (Ignore standard OAuth/SSO login redirects)
             if initial_url.lower().strip('/') != final_url.lower().strip('/'):
-                if initial_reg_domain in GLOBAL_CLEAN_DOMAINS and current_reg_domain in GLOBAL_CLEAN_DOMAINS:
+                if _is_trusted_url(initial_url) and is_trusted_auth_domain:
                     print(f"   [*] Legitimate SSO / OAuth redirect: {initial_reg_domain} -> {current_reg_domain}")
                     features['sandbox_num_redirects'] = 0
                 else:
@@ -501,6 +617,7 @@ class VirtualSandboxAnalyzer:
                 
             # 5. Feature Extraction: Password Harvesting Detection
             password_inputs = driver.find_elements(By.XPATH, "//input[@type='password']")
+            has_credential_form = len(password_inputs) > 0
             if len(password_inputs) > 0:
                 if is_trusted_auth_domain:
                     print(f"   [*] Verified Official SSO Login Form on {current_reg_domain} (Legitimate Authentication)")
@@ -531,7 +648,7 @@ class VirtualSandboxAnalyzer:
                     # Check 1: Action submits to a different registered domain
                     if action_reg_domain and current_reg_domain and action_reg_domain != current_reg_domain:
                         # Allow internal ecosystem cross-submissions (e.g. forms.gle -> google.com)
-                        if is_trusted_auth_domain and action_reg_domain in GLOBAL_CLEAN_DOMAINS:
+                        if is_trusted_auth_domain and _is_trusted_url(resolved_action):
                             print(f"   [*] Internal ecosystem form routing: {current_reg_domain} -> {action_reg_domain}")
                         else:
                             print(f"   [!] External Form Action Detected! Current: {current_reg_domain} -> Submits to: {action_reg_domain}")
@@ -561,15 +678,9 @@ class VirtualSandboxAnalyzer:
                 print(f"   [!] Hidden iframes detected: {hidden_iframes}")
                 
             # 8. Feature Extraction: Title & Brand Mismatch
-            page_title = driver.title.lower()
-            domain = urlparse(final_url).netloc.lower()
-            
-            known_financial_brands = ['paypal', 'bank', 'login', 'secure', 'amazon', 'microsoft', 'apple', 'netflix', 'outlook']
-            for brand in known_financial_brands:
-                if brand in page_title and brand not in domain:
-                    print(f"   [!] Title Mismatch! Title claims '{brand}' but domain is '{domain}'")
-                    features['sandbox_title_mismatch'] = 1
-                    break
+            page_title = (driver.title or "").lower()
+            if _title_brand_mismatch(page_title, final_url, has_credential_form):
+                features['sandbox_title_mismatch'] = 1
 
             # Feature 4: Brand Impersonation Check (Metadata Cross-Verification)
             brand_info = detect_brand_impersonation(driver, final_url)
@@ -580,29 +691,8 @@ class VirtualSandboxAnalyzer:
             features['detected_target_brand'] = brand_info.get("impersonated_brand") or ""
                     
             # 9. Calculate internal Sandbox Threat Score
-            if is_trusted_auth_domain and not features['suspicious_exfiltration']:
-                threat_score = 0
-            else:
-                threat_score = 0
-                is_credential_risk = (
-                    features['brand_impersonation'] or
-                    features['external_form_action'] or
-                    features['suspicious_exfiltration'] or
-                    features['newly_registered_domain'] or
-                    features['sandbox_title_mismatch']
-                )
-                if features['sandbox_has_password_field'] and is_credential_risk:
-                    threat_score += 45
-                if features['external_form_action']: threat_score += 40
-                if features['suspicious_exfiltration']: threat_score += 55
-                if features['brand_impersonation']: threat_score += 50
-                if features['newly_registered_domain']: threat_score += 35
-                if features['sandbox_title_mismatch']: threat_score += 30
-                if features['sandbox_num_redirects']: threat_score += 20
-                if features['sandbox_hidden_iframes'] > 0: threat_score += 25
-            
-            features['sandbox_threat_score'] = min(100, threat_score)
-            
+            features['sandbox_threat_score'] = self._score(features, is_trusted_auth_domain)
+
             print(f"[+] [CUSTOM SANDBOX] Analysis Complete. Sandbox Score: {features['sandbox_threat_score']}")
             return features
             

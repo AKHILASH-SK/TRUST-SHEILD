@@ -5,6 +5,7 @@ Maintains an ultra-fast (< 2 ms) local SQLite cache of known malicious indicator
 """
 
 import os
+import re
 import sqlite3
 import logging
 from datetime import datetime
@@ -95,6 +96,52 @@ class ThreatIntelDB:
         return count > 0
 
 
+    @staticmethod
+    def _build_lookup_keys(clean_input: str) -> set:
+        """Lookup keys: URL with/without scheme, www., trailing slash; host; registered
+        domain (unless it is a user-content platform); host+path."""
+        keys = set()
+        try:
+            no_scheme = re.sub(r"^[a-z][a-z0-9+.-]*://", "", clean_input)
+            for variant in (clean_input, no_scheme):
+                v = normalize_indicator(variant)
+                keys.add(v)
+                if v.startswith("www."):
+                    keys.add(v[4:])
+                keys.add(v.split("#")[0].split("?")[0].rstrip("/"))
+            keys.add(f"http://{no_scheme.rstrip('/')}")
+            keys.add(f"https://{no_scheme.rstrip('/')}")
+
+            parsed = urlparse(clean_input if "://" in clean_input else f"http://{clean_input}")
+            host = (parsed.hostname or "").rstrip(".")
+            if host:
+                keys.add(host)
+                bare = host[4:] if host.startswith("www.") else host
+                keys.add(bare)
+                path = parsed.path.rstrip("/")
+                if path:
+                    keys.add(f"{host}{path}")
+                    keys.add(f"{bare}{path}")
+
+                reg = tldextract.extract(host).registered_domain.lower()
+                if reg:
+                    # A bad URL on a shared platform must not block the whole platform.
+                    try:
+                        from .link_threat_pipeline import is_user_content_host
+                        shared = is_user_content_host(reg) or is_user_content_host(host)
+                    except Exception:
+                        shared = False
+                    if not shared:
+                        keys.add(reg)
+        except Exception:
+            pass
+        keys.discard("")
+        return keys
+
+    def count(self) -> int:
+        """Total number of indicators stored."""
+        return self.get_indicator_count()
+
     def check_indicator(self, url_or_domain: str) -> bool:
         """
         Queries SQLite to verify if the URL, its hostname, or its registered domain
@@ -104,34 +151,8 @@ class ThreatIntelDB:
             return False
             
         clean_input = url_or_domain.strip().lower()
-        
-        # Build list of potential indicator keys
-        keys_to_check = set()
-        
-        # 1. Full normalized URL (with and without protocol, with and without trailing slash)
-        keys_to_check.add(normalize_indicator(clean_input))
-        
-        # 2. Extract parsed components
-        try:
-            parsed = urlparse(clean_input if "://" in clean_input else f"http://{clean_input}")
-            host = parsed.netloc.split(':')[0]
-            if host:
-                keys_to_check.add(host)
-                # Without 'www.'
-                if host.startswith('www.'):
-                    keys_to_check.add(host[4:])
-                    
-            # 3. Extract registered domain
-            ext = tldextract.extract(clean_input)
-            if ext.registered_domain:
-                keys_to_check.add(ext.registered_domain.lower())
-                
-            # 4. Host + Path combination without query strings
-            if host and parsed.path and parsed.path != '/':
-                keys_to_check.add(f"{host}{parsed.path.rstrip('/')}")
-        except Exception:
-            pass
-            
+        keys_to_check = self._build_lookup_keys(clean_input)
+
         keys_list = [k for k in keys_to_check if k]
         if not keys_list:
             return False
