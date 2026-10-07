@@ -51,3 +51,8 @@ google-services.json
 secrets.properties
 credentials.json
 .credentials/
+# Local binaries and runtime data (never commit)
+backend/ngrok.exe
+backend/ngrok.zip
+backend/data/*.db
+backend/data/*.sqlite

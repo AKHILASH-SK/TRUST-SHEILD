@@ -14,14 +14,34 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', '5432')),
-    'dbname': os.getenv('DB_NAME', 'trustshield_db'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'postgres')
+from db_config import DB_CONFIG
+
+# Hosts where anyone can publish content: one bad URL there must never condemn the whole domain
+_FALLBACK_USER_CONTENT_HOSTS = {
+    "google.com", "sharepoint.com", "windows.net", "github.com", "github.io", "gitlab.com",
+    "notion.so", "dropbox.com", "typeform.com", "canva.com", "medium.com", "blogspot.com",
+    "weebly.com", "wixsite.com", "herokuapp.com", "netlify.app", "vercel.app", "pages.dev",
+    "workers.dev", "web.app", "firebaseapp.com", "t.me", "bit.ly", "tinyurl.com", "cutt.ly",
+    "forms.gle", "goo.gl", "t.co", "ow.ly", "is.gd", "rebrand.ly",
 }
+
+
+def _user_content_hosts():
+    try:
+        from core_engine.link_threat_pipeline import USER_CONTENT_HOSTS
+        return set(USER_CONTENT_HOSTS) | _FALLBACK_USER_CONTENT_HOSTS
+    except Exception:
+        return _FALLBACK_USER_CONTENT_HOSTS
+
+
+def _is_shared_host(domain):
+    """True when the domain (or its registrable parent) is a user-content/hosting platform."""
+    if not domain:
+        return False
+    hosts = _user_content_hosts()
+    parts = domain.split(".")
+    return any(".".join(parts[i:]) in hosts for i in range(len(parts) - 1))
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PhishingFeed")
@@ -44,12 +64,13 @@ class PhishingFeedImporter:
                 logger.warning("⚠️ PhishTank API key not set. Set PHISHTANK_API_KEY in .env")
                 return []
             
-            url = f"http://phishtank.com/api/fetch.php?apikey={self.phishtank_api_key}&format=json"
-            response = requests.get(url, timeout=30)
+            url = f"https://data.phishtank.com/data/{self.phishtank_api_key}/online-valid.json"
+            response = requests.get(url, timeout=60, headers={"User-Agent": "trustshield-feed/1.0"})
             response.raise_for_status()
-            
+
             data = response.json()
-            phishing_urls = [item['url'] for item in data.get('results', [])[:limit]]
+            items = data if isinstance(data, list) else data.get('results', [])
+            phishing_urls = [item['url'] for item in items[:limit] if isinstance(item, dict) and item.get('url')]
             logger.info(f"✅ Retrieved {len(phishing_urls)} URLs from PhishTank")
             return phishing_urls
             
@@ -120,63 +141,55 @@ class PhishingFeedImporter:
     
     def store_phishing_urls(self, urls, source='manual', threat_type='phishing'):
         """
-        Store phishing URLs in database
-        
+        Store phishing URLs in the database.
+
+        Each row is inserted inside its own savepoint, so one bad row never aborts the batch.
+        Returns (inserted, updated) where updated counts URLs that already existed.
+
         Args:
             urls: List of URLs or list of dicts with url/threat_type
-            source: Source name (phishtank, urlhaus, openpfish, manual)
-            threat_type: Type of threat (phishing, malware, scam)
+            source: Source name (phishtank, urlhaus, openphish, manual)
+            threat_type: Default threat type (phishing, malware, scam)
         """
-        try:
-            conn = psycopg.connect(**DB_CONFIG)
-            cur = conn.cursor()
-            
-            inserted = 0
-            updated = 0
-            
+        inserted = 0
+        updated = 0
+        failed = 0
+
+        with psycopg.connect(**DB_CONFIG) as conn:
             for item in urls:
-                # Handle both string URLs and dicts
                 if isinstance(item, dict):
                     url = item.get('url')
-                    threat_type = item.get('threat_type', 'phishing')
+                    item_threat_type = item.get('threat_type') or threat_type
                 else:
                     url = item
-                
-                if not url:
+                    item_threat_type = threat_type
+
+                url = (url or "").strip()
+                if not url or len(url) > 2048 or not url.lower().startswith(("http://", "https://")):
                     continue
-                
+
                 domain = self.extract_domain(url)
-                
+
                 try:
-                    # Try to insert
-                    cur.execute("""
-                        INSERT INTO phishing_links 
-                        (url, domain, threat_type, source, last_verified)
-                        VALUES (%s, %s, %s, %s, NOW())
-                        ON CONFLICT (url) DO UPDATE SET
-                            last_verified = NOW()
-                        RETURNING id
-                    """, (url, domain, threat_type, source))
-                    
-                    result = cur.fetchone()
-                    if result:
+                    with conn.transaction():
+                        row = conn.execute("""
+                            INSERT INTO phishing_links
+                                (url, domain, threat_type, source, last_verified)
+                            VALUES (%s, %s, %s, %s, NOW())
+                            ON CONFLICT (url) DO UPDATE SET last_verified = NOW()
+                            RETURNING (xmax = 0) AS inserted
+                        """, (url, domain, item_threat_type, source)).fetchone()
+                    if row and row[0]:
                         inserted += 1
-                
+                    else:
+                        updated += 1
                 except psycopg.Error as e:
-                    logger.debug(f"⚠️ Duplicate or error for {url}: {e}")
-                    updated += 1
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            logger.info(f"✅ Stored: {inserted} new, {updated} updated from {source}")
-            return inserted, updated
-            
-        except Exception as e:
-            logger.error(f"❌ Error storing URLs: {e}")
-            raise
-    
+                    failed += 1
+                    logger.debug(f"Skipped {url}: {e}")
+
+        logger.info(f"Stored: {inserted} new, {updated} existing, {failed} failed from {source}")
+        return inserted, updated
+
     def import_all_feeds(self):
         """Import from all available sources"""
         logger.info("🚀 Starting import from all feeds...")
@@ -214,102 +227,48 @@ class PhishingFeedImporter:
     
     def check_url_in_database(self, url):
         """
-        Check if URL exists in phishing database
-        Handles domain normalization (with/without www)
+        Check if a URL is in the phishing database.
+        Exact URL matches always count. A whole-domain match counts only for domains that are
+        not shared hosting / user-content platforms.
         Returns: (is_phishing: bool, threat_type: str, source: str)
         """
         try:
-            conn = psycopg.connect(**DB_CONFIG)
-            cur = conn.cursor()
-            
-            # Check exact URL match first
-            cur.execute("""
-                SELECT threat_type, source FROM phishing_links
-                WHERE url = %s
-                LIMIT 1
-            """, (url,))
-            
-            result = cur.fetchone()
-            if result:
-                cur.close()
-                conn.close()
-                return True, result[0], result[1]
-            
-            # Extract and normalize domain
-            domain = self.extract_domain(url)
-            if domain:
-                # Check exact normalized domain match
-                cur.execute("""
-                    SELECT threat_type, source FROM phishing_links
-                    WHERE domain = %s
-                    LIMIT 1
-                """, (domain,))
-                
-                result = cur.fetchone()
+            with psycopg.connect(**DB_CONFIG) as conn:
+                result = conn.execute(
+                    "SELECT threat_type, source FROM phishing_links WHERE url = %s LIMIT 1", (url,)
+                ).fetchone()
                 if result:
-                    cur.close()
-                    conn.close()
                     return True, result[0], result[1]
-                
-                # Also check with www prefix in case DB has it
-                domain_with_www = f"www.{domain}"
-                cur.execute("""
-                    SELECT threat_type, source FROM phishing_links
-                    WHERE domain = %s OR domain = %s
-                    LIMIT 1
-                """, (domain, domain_with_www))
-                
-                result = cur.fetchone()
-                if result:
-                    cur.close()
-                    conn.close()
-                    return True, result[0], result[1]
-            
-            cur.close()
-            conn.close()
+
+                domain = self.extract_domain(url)
+                if domain and not _is_shared_host(domain):
+                    result = conn.execute(
+                        "SELECT threat_type, source FROM phishing_links WHERE domain = %s OR domain = %s LIMIT 1",
+                        (domain, f"www.{domain}")
+                    ).fetchone()
+                    if result:
+                        return True, result[0], result[1]
+
             return False, None, None
-            
+
         except Exception as e:
-            logger.error(f"❌ Error checking URL: {e}")
+            logger.error(f"Error checking URL: {e}")
             return False, None, None
-    
+
     def get_database_stats(self):
         """Get statistics about phishing database"""
         try:
-            conn = psycopg.connect(**DB_CONFIG)
-            cur = conn.cursor()
-            
-            # Total URLs (ignore is_active for now since it might not be in all schemas)
-            cur.execute("SELECT COUNT(*) FROM phishing_links")
-            total = cur.fetchone()[0]
-            
-            # By threat type
-            cur.execute("""
-                SELECT threat_type, COUNT(*) 
-                FROM phishing_links 
-                GROUP BY threat_type
-            """)
-            by_type = dict(cur.fetchall())
-            
-            # By source
-            cur.execute("""
-                SELECT source, COUNT(*) 
-                FROM phishing_links 
-                GROUP BY source
-            """)
-            by_source = dict(cur.fetchall())
-            
-            cur.close()
-            conn.close()
-            
-            return {
-                'total': total,
-                'by_threat_type': by_type,
-                'by_source': by_source
-            }
-            
+            with psycopg.connect(**DB_CONFIG) as conn:
+                total = conn.execute("SELECT COUNT(*) FROM phishing_links").fetchone()[0]
+                by_type = dict(conn.execute(
+                    "SELECT threat_type, COUNT(*) FROM phishing_links GROUP BY threat_type").fetchall())
+                by_source = dict(conn.execute(
+                    "SELECT source, COUNT(*) FROM phishing_links GROUP BY source").fetchall())
+
+            return {'total': total, 'by_threat_type': by_type, 'by_source': by_source}
+
         except Exception as e:
-            logger.error(f"❌ Error getting stats: {e}")
+            logger.error(f"Error getting stats: {e}")
             return None
 
 if __name__ == "__main__":

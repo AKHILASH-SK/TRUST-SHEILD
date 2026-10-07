@@ -4,9 +4,11 @@ import os
 port = os.environ.get("PORT", "10000")
 bind = f"0.0.0.0:{port}"
 
-# Use 1 worker with 2 threads to allow concurrent health checks without blocking
+# One worker: rate-limit, lockout and graph state live in this process.
+# Threads let health checks and quick requests run while a slow scan is in flight.
 workers = 1
-threads = 2
+worker_class = "gthread"
+threads = int(os.environ.get("WEB_THREADS", "8"))
 
 # Generous 120s timeout to prevent premature worker terminations
 timeout = 120
