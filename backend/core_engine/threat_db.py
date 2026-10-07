@@ -33,6 +33,15 @@ def normalize_indicator(val: str) -> str:
     return clean
 
 
+def _is_protected_domain(registered_domain: str) -> bool:
+    """Brand domains and shared hosting platforms must never be blocked as a whole domain."""
+    try:
+        from .link_threat_pipeline import USER_CONTENT_HOSTS, BRAND_FAST_PATH_DOMAINS
+        return registered_domain in USER_CONTENT_HOSTS or registered_domain in BRAND_FAST_PATH_DOMAINS
+    except Exception:
+        return False
+
+
 class ThreatIntelDB:
     """
     Embedded SQLite Threat Cache for sub-2ms indicator lookups.
@@ -182,7 +191,12 @@ class ThreatIntelDB:
         # 1. Fetch from URLhaus (abuse.ch) JSON API
         try:
             urlhaus_endpoint = "https://urlhaus-api.abuse.ch/v1/urls/recent/"
-            resp = requests.get(urlhaus_endpoint, timeout=8.0)
+            urlhaus_headers = {"User-Agent": "trustshield-threat-sync/1.0"}
+            if os.getenv("URLHAUS_AUTH_KEY"):
+                urlhaus_headers["Auth-Key"] = os.environ["URLHAUS_AUTH_KEY"]
+            resp = requests.get(urlhaus_endpoint, timeout=8.0, headers=urlhaus_headers)
+            if resp.status_code in (401, 403):
+                logger.warning("   [ThreatIntelDB] URLhaus now requires a free auth key: set URLHAUS_AUTH_KEY")
             if resp.status_code == 200:
                 data = resp.json()
                 urls = data.get('urls', [])[:max_records]
@@ -191,11 +205,24 @@ class ThreatIntelDB:
                     if mal_url:
                         new_indicators.append((mal_url, "URLhaus"))
                         ext = tldextract.extract(mal_url)
-                        if ext.registered_domain:
-                            new_indicators.append((ext.registered_domain, "URLhaus_Domain"))
+                        reg = (getattr(ext, "top_domain_under_public_suffix", None) or ext.registered_domain or "").lower()
+                        if reg and not _is_protected_domain(reg):
+                            new_indicators.append((reg, "URLhaus_Domain"))
                 logger.info(f"   Fetched {len(urls)} live indicators from URLhaus.")
         except Exception as e:
             logger.warning(f"   [ThreatIntelDB] URLhaus live feed sync skipped: {e}")
+
+        # 1b. OpenPhish community feed (plain text, one URL per line)
+        try:
+            resp = requests.get("https://openphish.com/feed.txt", timeout=8.0,
+                                headers={"User-Agent": "trustshield-threat-sync/1.0"})
+            if resp.status_code == 200:
+                lines = [ln.strip() for ln in resp.text.splitlines() if ln.strip().lower().startswith(("http://", "https://"))]
+                for phish_url in lines[:max_records]:
+                    new_indicators.append((phish_url, "OpenPhish"))
+                logger.info(f"   Fetched {min(len(lines), max_records)} live indicators from OpenPhish.")
+        except Exception as e:
+            logger.warning(f"   [ThreatIntelDB] OpenPhish feed sync skipped: {e}")
 
         # 2. Batch insert into SQLite
         if new_indicators:
@@ -207,6 +234,29 @@ class ThreatIntelDB:
                 logger.error(f"   [ThreatIntelDB] Database insert failed during feed sync: {e}")
                 
         return inserted_count
+
+    def sync_if_stale(self, max_age_hours: float = 12.0) -> int:
+        """Syncs the public feeds when the cache is empty or older than max_age_hours."""
+        try:
+            with self._get_connection() as conn:
+                conn.execute("CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT)")
+                row = conn.execute("SELECT value FROM sync_meta WHERE key = 'last_sync'").fetchone()
+            last = datetime.fromisoformat(row[0]) if row else None
+        except Exception:
+            last = None
+        fresh = last is not None and (datetime.utcnow() - last).total_seconds() < max_age_hours * 3600
+        if fresh and self.get_indicator_count() > 0:
+            return 0
+        added = self.sync_threat_feeds()
+        if added:
+            try:
+                with self._get_connection() as conn:
+                    conn.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_sync', ?)",
+                                 (datetime.utcnow().isoformat(),))
+                    conn.commit()
+            except Exception as e:
+                logger.warning(f"[ThreatIntelDB] Could not record sync time: {e}")
+        return added
 
     def get_indicator_count(self) -> int:
         """Returns the total number of indicators cached in the local database."""
@@ -226,4 +276,7 @@ def get_threat_db() -> ThreatIntelDB:
     global _global_threat_db
     if _global_threat_db is None:
         _global_threat_db = ThreatIntelDB()
+        if os.getenv("ENABLE_THREAT_SYNC", "true").lower() == "true":
+            import threading
+            threading.Thread(target=_global_threat_db.sync_if_stale, name="threat-sync", daemon=True).start()
     return _global_threat_db

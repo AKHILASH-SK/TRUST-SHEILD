@@ -10,6 +10,7 @@ os.environ["DB_HOST"] = "127.0.0.1"
 os.environ["DB_PORT"] = "1"
 os.environ["DB_PASSWORD"] = "test"
 os.environ["DB_CONNECT_TIMEOUT"] = "1"
+os.environ["ENABLE_THREAT_SYNC"] = "false"
 os.environ["SECRET_KEY"] = "test-secret-key-for-unit-tests-only"
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
 os.environ.pop("RENDER", None)
