@@ -28,7 +28,8 @@ data class RegisterResponse(
     val name: String,
     val email: String,
     val phone_number: String,
-    val created_at: String
+    val created_at: String,
+    val token: String? = null
 )
 
 /**
@@ -47,7 +48,8 @@ data class LoginResponse(
     val name: String,
     val email: String,
     val phone_number: String,
-    val message: String
+    val message: String,
+    val token: String? = null
 )
 
 // ===== Link Scan Models =====
@@ -60,7 +62,8 @@ data class LinkScanRequest(
     val url: String,
     val risk_level: String,
     val reasons: String,
-    val verdict: String
+    val verdict: String,
+    val source_app: String? = null
 )
 
 /**
@@ -73,7 +76,9 @@ data class LinkScanResponse(
     val risk_level: String,
     val reasons: String,
     val verdict: String,
-    val analyzed_at: String
+    val analyzed_at: String,
+    val source_app: String? = null,
+    val threat_score: Float? = null
 )
 
 /**
@@ -131,18 +136,3 @@ data class HealthCheckResponse(
 data class ErrorResponse(
     val error: String
 )
-
-// ===== Simulation Models =====
-
-data class SimulationRequest(
-    val phone_number: String
-)
-
-data class SimulationResponse(
-    val status: String,
-    val message: String,
-    val phone_number: String?,
-    val phishing_link: String?,
-    val safe_link: String?
-)
-

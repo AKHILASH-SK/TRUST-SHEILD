@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
                 // Small delay for splash effect (optional)
                 delay(500)
                 
-                if (userId != -1 && isLoggedIn) {
+                if (userId != -1 && isLoggedIn && !com.example.trustshield.network.AuthStore.token.isNullOrBlank()) {
                     // User is logged in - go to HomeActivity
                     Log.d(TAG, "User logged in, navigating to HomeActivity")
                     navigateToHome()

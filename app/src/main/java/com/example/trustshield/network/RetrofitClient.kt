@@ -29,7 +29,8 @@ class RetrofitClient private constructor(private val baseUrl: String) {
     private fun buildRetrofit() {
         // Create logging interceptor for debugging
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+            redactHeader("Authorization")
         }
         
         // Create Retry Interceptor for Render cold starts
@@ -59,8 +60,21 @@ class RetrofitClient private constructor(private val baseUrl: String) {
             }
         }
         
+        // Attach the bearer token to every request and drop it when the server rejects it
+        val authInterceptor = Interceptor { chain ->
+            val token = AuthStore.token
+            val request = if (token.isNullOrBlank()) chain.request()
+            else chain.request().newBuilder().header("Authorization", "Bearer $token").build()
+            val response = chain.proceed(request)
+            if (response.code == 401 && !token.isNullOrBlank()) {
+                AuthStore.expireSession()
+            }
+            response
+        }
+
         // Create OkHttp client with interceptors
         val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
             .addInterceptor(loggingInterceptor)
             .addInterceptor(retryInterceptor)
             .connectTimeout(90, TimeUnit.SECONDS)

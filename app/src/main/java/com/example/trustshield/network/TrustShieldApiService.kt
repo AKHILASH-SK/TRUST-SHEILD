@@ -80,16 +80,4 @@ interface TrustShieldApiService {
      */
     @POST("/api/links/explain")
     suspend fun explainLink(@Body request: LinkExplainRequest): Response<LinkExplainResponse>
-    
-    // ===== Live Threat Simulation =====
-    
-    /**
-     * Trigger Live Hackathon Threat Simulation
-     * POST /api/simulate/run
-     * 
-     * Sends phishing attack immediately, then safe link after 15 seconds
-     */
-    @POST("/api/simulate/run")
-    suspend fun triggerSimulation(@Body request: SimulationRequest): Response<SimulationResponse>
 }
-

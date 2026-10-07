@@ -76,7 +76,8 @@ class LinkScanRecorder(private val context: Context) {
                     url = url,
                     risk_level = riskLevel.name,
                     reasons = reasons.joinToString(", "),
-                    verdict = verdict
+                    verdict = verdict,
+                    source_app = sourceApp
                 )
                 
                 // Call backend API

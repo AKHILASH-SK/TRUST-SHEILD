@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.trustshield.R
+import com.example.trustshield.network.AuthStore
 import com.example.trustshield.network.RetrofitClient
 import com.example.trustshield.network.models.LoginRequest
 import com.google.android.material.button.MaterialButton
@@ -125,6 +126,7 @@ class LoginActivity : AppCompatActivity() {
                     
                     // Save user data to SharedPreferences
                     saveUserData(loginResponse.id, loginResponse.name, loginResponse.email, loginResponse.phone_number)
+                    AuthStore.saveToken(this@LoginActivity, loginResponse.token)
                     
                     Toast.makeText(this@LoginActivity, "Login successful! Welcome ${loginResponse.name}", Toast.LENGTH_SHORT).show()
                     navigateToHome()
@@ -133,6 +135,7 @@ class LoginActivity : AppCompatActivity() {
                     // Handle error response
                     val errorMessage = when (response.code()) {
                         401 -> "Invalid phone number or PIN"
+                        429 -> "Too many attempts. Try again in a few minutes"
                         400 -> "Missing required fields"
                         404 -> "User not found"
                         500 -> "Server error. Please try again later"

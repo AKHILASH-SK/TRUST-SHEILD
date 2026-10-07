@@ -181,7 +181,9 @@ class RegistrationActivity : AppCompatActivity() {
                 } else {
                     // Handle error response
                     val errorMessage = when (response.code()) {
-                        400 -> "Email or phone number already registered"
+                        400 -> "Please check the details you entered"
+                        409 -> "An account with this email or phone number already exists"
+                        429 -> "Too many attempts. Try again later"
                         422 -> "Invalid input data"
                         500 -> "Server error. Please try again later"
                         else -> "Registration failed: ${response.code()} ${response.message()}"

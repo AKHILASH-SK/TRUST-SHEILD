@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.example.trustshield.R
 import com.example.trustshield.adapters.LinkHistoryAdapter
+import com.example.trustshield.network.AuthStore
 import com.example.trustshield.network.RetrofitClient
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.bottomnavigation.BottomNavigationView
@@ -37,7 +38,6 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
     private lateinit var scanFab: FloatingActionButton
     private lateinit var bottomNav: BottomNavigationView
-    private var btnTriggerSimulation: com.google.android.material.button.MaterialButton? = null
     
     private val linkHistoryAdapter = LinkHistoryAdapter()
     
@@ -50,8 +50,8 @@ class HomeActivity : AppCompatActivity() {
             val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
             val userId = sharedPref.getInt("user_id", -1)
             
-            if (userId == -1) {
-                Log.w(TAG, "No logged in user found")
+            if (userId == -1 || AuthStore.token.isNullOrBlank()) {
+                Log.w(TAG, "No active session found")
                 navigateToLogin()
                 return
             }
@@ -87,7 +87,6 @@ class HomeActivity : AppCompatActivity() {
         swipeRefresh = findViewById(R.id.swipe_refresh_layout)
         scanFab = findViewById(R.id.fab_scan)
         bottomNav = findViewById(R.id.bottom_navigation)
-        btnTriggerSimulation = findViewById(R.id.btn_trigger_simulation)
     }
     
     private fun setupToolbar() {
@@ -103,10 +102,6 @@ class HomeActivity : AppCompatActivity() {
     
     private fun setupListeners() {
         bottomNav.selectedItemId = R.id.nav_home
-        
-        btnTriggerSimulation?.setOnClickListener {
-            triggerLiveThreatSimulation()
-        }
         
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -229,50 +224,6 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
         )
-    }
-    
-    private fun triggerLiveThreatSimulation() {
-        val sharedPref = getSharedPreferences("trustshield_prefs", Context.MODE_PRIVATE)
-        val userPhone = sharedPref.getString("user_phone", "") ?: ""
-        val userId = sharedPref.getInt("user_id", -1)
-        
-        if (userPhone.isBlank()) {
-            Toast.makeText(this, "No registered phone number found. Please log in again.", Toast.LENGTH_LONG).show()
-            return
-        }
-        
-        btnTriggerSimulation?.isEnabled = false
-        btnTriggerSimulation?.text = "Sending..."
-        Toast.makeText(this, "🚀 Starting simulation! Phishing link arriving on WhatsApp...", Toast.LENGTH_SHORT).show()
-        
-        lifecycleScope.launch {
-            try {
-                val apiService = RetrofitClient.getInstance().getApiService()
-                val response = apiService.triggerSimulation(com.example.trustshield.network.models.SimulationRequest(userPhone))
-                
-                if (response.isSuccessful) {
-                    Toast.makeText(
-                        this@HomeActivity,
-                        "✅ PayPal phishing link sent! Amazon safe link arriving in 15s.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    
-                    // Automatically refresh history after 18 seconds to show both intercepted scans
-                    kotlinx.coroutines.delay(18000)
-                    if (userId != -1) {
-                        loadLinkHistory(userId)
-                    }
-                } else {
-                    Toast.makeText(this@HomeActivity, "Simulation error: ${response.code()}", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Simulation trigger error: ${e.message}", e)
-                Toast.makeText(this@HomeActivity, "Error starting simulation: ${e.message}", Toast.LENGTH_SHORT).show()
-            } finally {
-                btnTriggerSimulation?.isEnabled = true
-                btnTriggerSimulation?.text = "Test Demo"
-            }
-        }
     }
     
     private fun loadLinkHistory(userId: Int) {
