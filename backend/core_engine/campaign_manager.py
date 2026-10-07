@@ -19,7 +19,9 @@ via the existing database.py integration.
 
 import hashlib
 import logging
+import threading
 import uuid
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
@@ -30,37 +32,73 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Origin IPs whose ISP/ASN string matches a shared mail provider say nothing about the actor
+# (millions of unrelated senders share them), so the IP is excluded from fingerprints.
+_SHARED_MAIL_PROVIDER_MARKERS = (
+    "google", "gmail", "microsoft", "outlook", "office365", "amazon", "yahoo", "zoho",
+    "mailgun", "sendgrid", "proofpoint", "mimecast", "sendinblue", "mailchimp", "protonmail",
+)
+MIN_INGEST_SCORE = 40.0
+MAX_CAMPAIGNS = 500
+MAX_INCIDENTS_PER_CAMPAIGN = 500
+
+
+def _is_shared_mail_provider(isp: str, asn: str = "") -> bool:
+    hay = f"{isp or ''} {asn or ''}".lower()
+    return any(m in hay for m in _SHARED_MAIL_PROVIDER_MARKERS)
+
+
+def _first_malicious_url_domain(analysis_result: Dict[str, Any]) -> str:
+    try:
+        import tldextract
+        ext = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
+    except Exception:
+        ext = None
+    for link in analysis_result.get("link_investigation", []) or []:
+        if float(link.get("threat_score", 0) or 0) >= 50.0 and link.get("url"):
+            url = str(link["url"])
+            if ext:
+                reg = ext(url).registered_domain
+                if reg:
+                    return reg.lower()
+            return url.split("//")[-1].split("/")[0].lower()
+    return ""
+
+
 def _fingerprint(analysis_result: Dict[str, Any]) -> str:
     """
-    Generates a campaign fingerprint from the strongest infrastructure signals.
-    Emails sharing the same fingerprint are grouped into the same campaign.
+    Campaign fingerprint = origin IP + sender domain + registrable domain of the first malicious
+    URL (whichever are present). The origin IP is skipped when it belongs to a shared mail
+    provider. With no signal at all the key is the constant 'UNKNOWN:' (no timestamp).
     """
-    origin = analysis_result.get("origin_intelligence", {})
-    metadata = analysis_result.get("metadata", {})
-    whois = analysis_result.get("whois_intelligence", {})
+    origin = analysis_result.get("origin_intelligence", {}) or {}
+    metadata = analysis_result.get("metadata", {}) or {}
+    whois = analysis_result.get("whois_intelligence", {}) or {}
 
-    # Primary: originating IP (most reliable infra signal)
     orig_ip = origin.get("originating_ip", "") or ""
-    # Secondary: sender domain
-    from_domain = metadata.get("from_domain", "") or ""
-    # Tertiary: registrar (shared registrar = shared infra)
-    registrar = whois.get("registrar", "") or ""
-    # Quaternary: ASN
-    isp = origin.get("origin_isp", "") or ""
+    if orig_ip == "Unknown" or _is_shared_mail_provider(origin.get("origin_isp", ""), origin.get("origin_asn", "")):
+        orig_ip = ""
+    from_domain = (metadata.get("from_domain", "") or "").lower()
+    url_domain = _first_malicious_url_domain(analysis_result)
 
-    # Build fingerprint from strongest available signals
-    if orig_ip and orig_ip != "Unknown":
-        raw = f"IP:{orig_ip}"
-    elif from_domain:
-        raw = f"DOMAIN:{from_domain}"
-    elif registrar and registrar != "Unknown":
-        raw = f"REGISTRAR:{registrar}"
-    elif isp and isp != "Unknown":
-        raw = f"ISP:{isp}"
-    else:
-        raw = f"UNKNOWN:{_utcnow_iso()}"
+    parts = []
+    if orig_ip:
+        parts.append(f"IP:{orig_ip}")
+    if from_domain:
+        parts.append(f"DOMAIN:{from_domain}")
+    if url_domain:
+        parts.append(f"URL:{url_domain}")
+    if not parts:
+        registrar = whois.get("registrar", "") or ""
+        isp = origin.get("origin_isp", "") or ""
+        if registrar and registrar != "Unknown":
+            parts.append(f"REGISTRAR:{registrar}")
+        elif isp and isp != "Unknown" and not _is_shared_mail_provider(isp):
+            parts.append(f"ISP:{isp}")
+        else:
+            parts.append("UNKNOWN:")
 
-    return hashlib.md5(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
 
 
 class CaseManager:
@@ -71,7 +109,8 @@ class CaseManager:
 
     def __init__(self):
         # campaign_id → campaign dict
-        self._campaigns: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
+        self._campaigns: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
         # fingerprint → campaign_id
         self._fingerprint_index: Dict[str, str] = {}
         # incident_id → campaign_id
@@ -84,22 +123,32 @@ class CaseManager:
         self,
         analysis_result: Dict[str, Any],
         incident_id: Optional[str] = None,
-        eml_filename: str = ""
+        eml_filename: str = "",
+        min_score: float = MIN_INGEST_SCORE
     ) -> Dict[str, Any]:
         """
         Ingests an analysis result as a new incident.
         Automatically groups it into an existing or new campaign.
+        Incidents scoring below ``min_score`` (default 40) are NOT ingested.
         Returns the campaign it was assigned to.
         """
         if not incident_id:
-            incident_id = str(uuid.uuid4())[:8].upper()
+            incident_id = uuid.uuid4().hex
+        score_in = float(analysis_result.get("overall_threat_score", 0.0) or 0.0)
+        if score_in < min_score:
+            return {"incident_id": incident_id, "campaign_id": None, "campaign_name": "",
+                    "campaign_incident_count": 0, "is_new_campaign": False, "ingested": False,
+                    "reason": f"threat_score {score_in} below min_score {min_score}"}
+        with self._lock:
+            return self._ingest_locked(analysis_result, incident_id, eml_filename)
 
+    def _ingest_locked(self, analysis_result: Dict[str, Any], incident_id: str, eml_filename: str) -> Dict[str, Any]:
         fp = _fingerprint(analysis_result)
         campaign_id = self._fingerprint_index.get(fp)
 
         if not campaign_id:
             # Create new campaign
-            campaign_id = f"CAMP-{str(uuid.uuid4())[:6].upper()}"
+            campaign_id = f"CAMP-{uuid.uuid4().hex[:16].upper()}"
             self._campaigns[campaign_id] = {
                 "campaign_id": campaign_id,
                 "fingerprint": fp,
@@ -126,7 +175,13 @@ class CaseManager:
                 "campaign_name": ""  # Auto-generated below
             }
             self._fingerprint_index[fp] = campaign_id
+            while len(self._campaigns) > MAX_CAMPAIGNS:
+                old_id, old = self._campaigns.popitem(last=False)
+                self._fingerprint_index.pop(old.get("fingerprint"), None)
+                for inc in old.get("incidents", []):
+                    self._incident_index.pop(inc.get("incident_id"), None)
 
+        self._campaigns.move_to_end(campaign_id)
         campaign = self._campaigns[campaign_id]
         campaign["last_seen"] = _utcnow_iso()
         campaign["incident_count"] += 1
@@ -180,6 +235,9 @@ class CaseManager:
             "evidence_hash_sha256": analysis_result.get("evidence_hash_sha256", ""),
         }
         campaign["incidents"].append(incident_record)
+        if len(campaign["incidents"]) > MAX_INCIDENTS_PER_CAMPAIGN:
+            dropped = campaign["incidents"].pop(0)
+            self._incident_index.pop(dropped.get("incident_id"), None)
         self._incident_index[incident_id] = campaign_id
 
         # Auto-generate campaign name on first incident
@@ -192,6 +250,7 @@ class CaseManager:
             "campaign_name": campaign["campaign_name"],
             "campaign_incident_count": campaign["incident_count"],
             "is_new_campaign": campaign["incident_count"] == 1,
+            "ingested": True,
         }
 
     def _generate_campaign_name(self, analysis_result: Dict[str, Any], campaign_id: str) -> str:
@@ -230,7 +289,7 @@ class CaseManager:
     def get_all_campaigns(self, min_incidents: int = 1) -> List[Dict[str, Any]]:
         """Returns all campaigns, sorted by last_seen descending."""
         result = [
-            c for c in self._campaigns.values()
+            c for c in list(self._campaigns.values())
             if c["incident_count"] >= min_incidents
         ]
         result.sort(key=lambda x: x["last_seen"], reverse=True)
@@ -255,7 +314,7 @@ class CaseManager:
             return self.get_all_campaigns()
 
         results = []
-        for camp in self._campaigns.values():
+        for camp in list(self._campaigns.values()):
             infra = camp.get("infrastructure", {})
             searchable = " ".join([
                 camp.get("campaign_name", ""),

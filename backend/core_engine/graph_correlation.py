@@ -16,9 +16,14 @@ Optional: networkx is used for centrality analysis if installed.
 
 import hashlib
 import logging
+import threading
+from collections import OrderedDict
 from typing import Dict, Any, List, Optional, Set
 
 logger = logging.getLogger(__name__)
+
+MAX_NODES = 2000
+MIN_INGEST_SCORE = 40.0
 
 # ============================================================================
 # NODE TYPES
@@ -46,7 +51,7 @@ EDGE_TYPES = {
 def _node_id(node_type: str, value: str) -> str:
     """Generates a stable, unique node ID for a given type+value pair."""
     key = f"{node_type}::{value.lower().strip()}"
-    return hashlib.md5(key.encode()).hexdigest()[:12]
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
 class ThreatInfrastructureGraph:
@@ -58,12 +63,25 @@ class ThreatInfrastructureGraph:
     """
 
     def __init__(self):
-        self.nodes: Dict[str, Dict[str, Any]] = {}  # node_id → node_data
+        self._lock = threading.RLock()
+        self.nodes: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()  # node_id → node_data (LRU order)
         self.edges: List[Dict[str, Any]] = []        # list of edge dicts
         self._edge_set: Set[str] = set()             # dedup edge keys
 
     def add_node(self, node_type: str, value: str, metadata: Optional[Dict] = None) -> str:
         """Add or update a node. Returns its node_id."""
+        with self._lock:
+            return self._add_node_locked(node_type, value, metadata)
+
+    def _evict_if_needed(self) -> None:
+        if len(self.nodes) <= MAX_NODES:
+            return
+        while len(self.nodes) > MAX_NODES:
+            self.nodes.popitem(last=False)
+        self.edges = [e for e in self.edges if e["source"] in self.nodes and e["target"] in self.nodes]
+        self._edge_set = {f"{e['source']}→{e['target']}→{e['type']}" for e in self.edges}
+
+    def _add_node_locked(self, node_type: str, value: str, metadata: Optional[Dict] = None) -> str:
         nid = _node_id(node_type, value)
         if nid not in self.nodes:
             self.nodes[nid] = {
@@ -78,24 +96,33 @@ class ThreatInfrastructureGraph:
                 "metadata": metadata or {}
             }
         self.nodes[nid]["incident_count"] = self.nodes[nid].get("incident_count", 0) + 1
+        self.nodes.move_to_end(nid)
+        self._evict_if_needed()
         return nid
 
     def add_edge(self, from_id: str, to_id: str, edge_type: str, label: str = "") -> None:
         """Add a directed edge between two nodes (deduplicated)."""
         if not from_id or not to_id or from_id == to_id:
             return
-        edge_key = f"{from_id}→{to_id}→{edge_type}"
-        if edge_key in self._edge_set:
-            return
-        self._edge_set.add(edge_key)
-        self.edges.append({
-            "source": from_id,
-            "target": to_id,
-            "type": edge_type,
-            "label": label or EDGE_TYPES.get(edge_type, edge_type)
-        })
+        with self._lock:
+            if from_id not in self.nodes or to_id not in self.nodes:
+                return
+            edge_key = f"{from_id}→{to_id}→{edge_type}"
+            if edge_key in self._edge_set:
+                return
+            self._edge_set.add(edge_key)
+            self.edges.append({
+                "source": from_id,
+                "target": to_id,
+                "type": edge_type,
+                "label": label or EDGE_TYPES.get(edge_type, edge_type)
+            })
 
     def build_from_analysis(self, analysis_result: Dict[str, Any], incident_id: str = "") -> Dict[str, Any]:
+        with self._lock:
+            return self._build_locked(analysis_result, incident_id)
+
+    def _build_locked(self, analysis_result: Dict[str, Any], incident_id: str = "") -> Dict[str, Any]:
         """
         Ingests a unified pipeline analysis result and adds all entities
         and relationships to the graph.
@@ -285,8 +312,13 @@ def get_global_graph() -> ThreatInfrastructureGraph:
     return _GLOBAL_GRAPH
 
 
-def ingest_analysis_to_graph(analysis_result: Dict[str, Any], incident_id: str = "") -> Dict[str, Any]:
-    """Ingests a completed analysis result into the global threat graph."""
+def ingest_analysis_to_graph(analysis_result: Dict[str, Any], incident_id: str = "",
+                             min_score: float = MIN_INGEST_SCORE) -> Dict[str, Any]:
+    """Ingests a completed analysis into the global threat graph (only if threat_score >= min_score)."""
+    score = float(analysis_result.get("overall_threat_score", 0.0) or 0.0)
+    if score < min_score:
+        return {"new_node_ids": [], "new_edges_count": 0, "ingested": False,
+                "total_graph_nodes": len(_GLOBAL_GRAPH.nodes), "total_graph_edges": len(_GLOBAL_GRAPH.edges)}
     return _GLOBAL_GRAPH.build_from_analysis(analysis_result, incident_id)
 
 

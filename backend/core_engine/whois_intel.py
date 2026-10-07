@@ -2,37 +2,51 @@
 TrustShield V2 - WHOIS & Domain Intelligence Module (whois_intel.py)
 Performs domain registration intelligence analysis to identify:
   - Newly registered / burner domains (< 30 days old)
-  - Privacy-shielded registrations
-  - Suspicious registrar patterns
+  - Privacy-redacted registrations (informational only, never penalised)
   - DNS record anomalies
-Uses ICANN RDAP (REST over HTTPS - port 443) as primary lookup engine to ensure
-100% cloud compatibility (bypassing outbound port 43 firewall blocks on Render / AWS),
-with graceful fallback to python-whois and DNS heuristics.
+Uses ICANN RDAP (REST over HTTPS - port 443) via rdap.org as the ONLY registration lookup
+engine (works on cloud hosts that block outbound port 43). There is deliberately no port-43
+python-whois fallback. Registrar identity is NOT used as a risk signal: Namecheap, Tucows,
+Porkbun, etc. are used by millions of legitimate domains.
 """
 
 import logging
 import re
+import threading
+import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
+from urllib.parse import quote, urljoin
 
 import requests
+import tldextract
 import dns.resolver
 import dns.exception
 
+from .url_safety import assert_public_url, UnsafeUrlError
+
 logger = logging.getLogger(__name__)
 
-# Registrars commonly used by attackers for anonymous bulk registrations
-SUSPICIOUS_REGISTRARS = [
-    "namecheap", "porkbun", "njalla", "privacyguardian", "domainsbyproxy",
-    "whoisguard", "privacyprotect", "networksolutions privacy", "contactprivacy",
-    "identity protection", "tucows domains"
-]
+RDAP_BASE = "https://rdap.org/domain/"
+RDAP_BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json"
+RDAP_TIMEOUT = (3.0, 3.5)  # (connect, read)
+DNS_TIMEOUT = 2.5
+_MAX_REDIRECTS = 3
 
-# Privacy shield markers found in WHOIS data
+# Offline-safe public-suffix extractor (bundled snapshot, no network fetch).
+_TLD = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
+
+# Strict hostname: dot-separated LDH labels, alphabetic (or punycode) TLD, <= 253 chars.
+_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$"
+)
+
+# Markers (matched against REGISTRANT entity name/handle only) for privacy-redacted records.
+# Informational only - privacy redaction is the GDPR default for most registrars.
 PRIVACY_SHIELD_MARKERS = [
-    "privacy", "whoisguard", "redacted for privacy", "identity shield",
-    "contact privacy", "domains by proxy", "protected", "registrant name: redacted",
-    "withheld", "statutory masking"
+    "redacted for privacy", "whoisguard", "domains by proxy", "domainsbyproxy",
+    "contact privacy", "privacy service", "privacyguardian", "withheld for privacy",
+    "statutory masking", "identity protection service",
 ]
 
 # ccTLD to country mapping for reliable fallback
@@ -104,51 +118,116 @@ def _infer_country(domain: str, adr_country: str = "") -> str:
     return "Global / Unrestricted"
 
 
-def _lookup_rdap(domain: str) -> Optional[Dict[str, Any]]:
+_bootstrap_lock = threading.Lock()
+_bootstrap_cache: Dict[str, Any] = {"tlds": None, "fetched": 0.0}
+_BOOTSTRAP_TTL = 86400.0
+
+
+def _normalise_domain(domain: str) -> Optional[str]:
+    """Validate strictly and reduce to the registrable domain, or None if invalid."""
+    d = (domain or "").strip().lower().rstrip(".")
+    if not _DOMAIN_RE.match(d):
+        return None
+    try:
+        res = _TLD(d)
+        reg = getattr(res, 'top_domain_under_public_suffix', None) or res.registered_domain
+    except Exception:
+        reg = ""
+    reg = (reg or "").lower()
+    return reg if reg and _DOMAIN_RE.match(reg) else None
+
+
+def _rdap_get(url: str):
+    """GET with SSRF checks on the URL and every redirect hop (rdap.org redirects to registries)."""
+    headers = {
+        "Accept": "application/rdap+json, application/json",
+        "User-Agent": "TrustShield-Forensics/2.0 (Forensic Intelligence Platform)",
+    }
+    for _ in range(_MAX_REDIRECTS + 1):
+        assert_public_url(url)
+        resp = requests.get(url, headers=headers, timeout=RDAP_TIMEOUT, allow_redirects=False)
+        if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("Location"):
+            url = urljoin(url, resp.headers["Location"])
+            continue
+        return resp
+    return None
+
+
+def _rdap_supported_tlds() -> Optional[Set[str]]:
+    """TLDs that have an RDAP service per the IANA bootstrap file; None if it cannot be fetched."""
+    with _bootstrap_lock:
+        cached = _bootstrap_cache["tlds"]
+        if cached is not None and time.monotonic() - _bootstrap_cache["fetched"] < _BOOTSTRAP_TTL:
+            return cached
+    try:
+        resp = _rdap_get(RDAP_BOOTSTRAP_URL)
+        if resp is None or resp.status_code != 200:
+            return None
+        tlds: Set[str] = set()
+        for entry in resp.json().get("services", []):
+            for t in entry[0]:
+                tlds.add(str(t).lower())
+        with _bootstrap_lock:
+            _bootstrap_cache["tlds"] = tlds
+            _bootstrap_cache["fetched"] = time.monotonic()
+        return tlds
+    except Exception as e:
+        logger.debug(f"RDAP bootstrap fetch failed: {e}")
+        return None
+
+
+def _lookup_rdap(registrable: str) -> Optional[Dict[str, Any]]:
     """
-    Performs an ICANN RDAP (RFC 7482 / RFC 9083) query over standard HTTPS (port 443).
-    Bypasses port 43 firewall restrictions present on Render, AWS, and modern cloud platforms.
+    RDAP query (RFC 7482 / 9083) for a REGISTRABLE domain.
+    Returns the RDAP JSON; {"unregistered": True} only when the registrable domain 404s on a TLD
+    that is known to support RDAP; {"unknown": True} for any other 404; None on failure.
     """
     try:
-        url = f"https://rdap.org/domain/{domain}"
-        headers = {
-            "Accept": "application/rdap+json, application/json",
-            "User-Agent": "TrustShield-Forensics/2.0 (Forensic Intelligence Platform)"
-        }
-        resp = requests.get(url, headers=headers, timeout=3.5, allow_redirects=True)
-        if resp.status_code == 200:
-            return resp.json()
-        elif resp.status_code == 404:
-            logger.info(f"RDAP returned 404 for {domain} (unregistered or NXDOMAIN)")
-            return {"unregistered": True}
+        resp = _rdap_get(RDAP_BASE + quote(registrable, safe=""))
+    except UnsafeUrlError as e:
+        logger.warning(f"RDAP URL rejected by SSRF guard: {e}")
+        return None
     except Exception as e:
-        logger.debug(f"RDAP query failed for {domain}: {e}")
+        logger.debug(f"RDAP query failed for {registrable}: {e}")
+        return None
+    if resp is None:
+        return None
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except ValueError:
+            return None
+    if resp.status_code == 404:
+        tld = registrable.rsplit(".", 1)[-1]
+        supported = _rdap_supported_tlds()
+        if supported is not None and tld in supported:
+            return {"unregistered": True}
+        return {"unknown": True}
     return None
 
 
 def lookup_whois(domain: str) -> Dict[str, Any]:
     """
-    Performs a WHOIS / RDAP lookup on the given domain and returns structured intelligence.
+    Performs an RDAP lookup on the registrable domain of ``domain`` and returns structured intelligence.
 
     Returns:
         {
-          "domain": str,
-          "registrar": str,
-          "creation_date": str (ISO),
-          "expiry_date": str (ISO),
+          "domain": str, "registrable_domain": str | None,
+          "registrar": str, "creation_date": str (ISO), "expiry_date": str (ISO),
           "domain_age_days": int | None,
-          "is_newly_registered": bool,   # True if < 30 days old
-          "is_privacy_shielded": bool,   # Registrant details hidden
-          "is_suspicious_registrar": bool,
+          "is_newly_registered": bool,      # True if < 30 days old
+          "is_privacy_shielded": bool,      # Registrant redacted (informational only)
+          "is_suspicious_registrar": bool,  # always False (registrar is not a risk signal)
           "registrant_country": str,
-          "whois_risk_score": float,     # 0.0 – 100.0
+          "whois_risk_score": float,        # 0.0 - 100.0
           "whois_risk_flags": list[str],
-          "whois_available": bool        # False if WHOIS lookup failed
+          "whois_available": bool           # False if the lookup failed / was inconclusive
         }
     """
     domain = (domain or "").strip().lower()
     base = {
         "domain": domain,
+        "registrable_domain": None,
         "registrar": "Unknown",
         "creation_date": None,
         "expiry_date": None,
@@ -162,112 +241,74 @@ def lookup_whois(domain: str) -> Dict[str, Any]:
         "whois_available": False
     }
 
-    if not domain or len(domain) < 3 or "." not in domain:
+    registrable = _normalise_domain(domain)
+    if not registrable:
+        base["whois_risk_flags"].append("INFO: Not a valid registrable hostname; RDAP lookup skipped")
         return base
+    base["registrable_domain"] = registrable
 
     risk_score = 0.0
-    flags = []
+    flags = base["whois_risk_flags"]
     rdap_success = False
 
-    # ---- 1. Primary: ICANN RDAP via HTTPS ---------------------------------
-    rdap_data = _lookup_rdap(domain)
+    rdap_data = _lookup_rdap(registrable)
+    unregistered = bool(rdap_data and rdap_data.get("unregistered"))
 
-    if rdap_data:
-        if rdap_data.get("unregistered"):
-            flags.append("UNREGISTERED_DOMAIN: Domain has no active WHOIS registration record")
-            risk_score += 35.0
-            base["whois_available"] = False
-        else:
-            base["whois_available"] = True
-            rdap_success = True
+    if unregistered:
+        flags.append("UNREGISTERED_DOMAIN: Registrable domain has no registration record (RDAP 404)")
+        risk_score += 35.0
+    elif rdap_data and rdap_data.get("unknown"):
+        flags.append("INFO: RDAP returned 404 but registration status could not be established "
+                     "(TLD without RDAP or bootstrap unavailable)")
+    elif rdap_data:
+        base["whois_available"] = True
+        rdap_success = True
 
-            # Registration / Expiry dates
-            for ev in rdap_data.get("events", []):
-                act = ev.get("eventAction")
-                dt = ev.get("eventDate")
-                if act == "registration" and dt:
-                    base["creation_date"] = dt
-                elif act == "expiration" and dt:
-                    base["expiry_date"] = dt
+        for ev in rdap_data.get("events", []):
+            act = ev.get("eventAction")
+            dt = ev.get("eventDate")
+            if act == "registration" and dt:
+                base["creation_date"] = dt
+            elif act == "expiration" and dt:
+                base["expiry_date"] = dt
 
-            # Entities: Registrar, Country, Privacy Shield
-            adr_country = ""
-            for ent in rdap_data.get("entities", []):
-                roles = ent.get("roles", [])
-                vcard = ent.get("vcardArray", [])
+        adr_country = ""
+        for ent in rdap_data.get("entities", []):
+            roles = ent.get("roles", [])
+            vcard = ent.get("vcardArray", [])
+            items = vcard[1] if len(vcard) > 1 and isinstance(vcard[1], list) else []
 
-                # Registrar name
-                if "registrar" in roles and len(vcard) > 1:
-                    for item in vcard[1]:
-                        if item[0] == "fn" and item[3]:
-                            base["registrar"] = str(item[3]).strip()
+            if "registrar" in roles:
+                for item in items:
+                    if item and item[0] == "fn" and item[3]:
+                        base["registrar"] = str(item[3]).strip()
 
-                # Registrant address / country
-                if len(vcard) > 1:
-                    for item in vcard[1]:
-                        if item[0] == "adr" and isinstance(item[3], list) and item[3]:
-                            cand = str(item[3][-1]).strip()
-                            if cand and len(cand) <= 3:
-                                adr_country = cand
+            for item in items:
+                if item and item[0] == "adr" and isinstance(item[3], list) and item[3]:
+                    cand = str(item[3][-1]).strip()
+                    if cand and len(cand) <= 3:
+                        adr_country = cand
 
-                # Privacy indicators
-                handle = str(ent.get("handle", "")).lower()
+            if "registrant" in roles:
                 ent_name = ""
-                if len(vcard) > 1:
-                    for item in vcard[1]:
-                        if item[0] == "fn":
-                            ent_name = str(item[3]).lower()
-                combined_entity = f"{handle} {ent_name}"
+                for item in items:
+                    if item and item[0] == "fn":
+                        ent_name = str(item[3]).lower()
+                combined_entity = f"{str(ent.get('handle', '')).lower()} {ent_name}"
                 if any(p in combined_entity for p in PRIVACY_SHIELD_MARKERS):
                     base["is_privacy_shielded"] = True
 
-            base["registrant_country"] = _infer_country(domain, adr_country)
+        base["registrant_country"] = _infer_country(registrable, adr_country)
 
-    # ---- 2. Well-Known Domain Fast-Path (if RDAP didn't populate) ---------
-    if not rdap_success and domain in WELL_KNOWN_DOMAINS:
-        wk = WELL_KNOWN_DOMAINS[domain]
+    # Well-known infrastructure fast-path (if RDAP didn't populate)
+    if not rdap_success and not unregistered and registrable in WELL_KNOWN_DOMAINS:
+        wk = WELL_KNOWN_DOMAINS[registrable]
         base["whois_available"] = True
         base["registrar"] = wk["registrar"]
         base["creation_date"] = wk["creation_date"]
         base["registrant_country"] = wk["country"]
-        rdap_success = True
 
-    # ---- 3. Fallback: python-whois (for local execution) -----------------
-    if not rdap_success:
-        try:
-            import whois as pywhois
-            w = pywhois.whois(domain)
-            if w and getattr(w, "domain_name", None):
-                base["whois_available"] = True
-                registrar = _safe_str(getattr(w, "registrar", None))
-                if registrar:
-                    base["registrar"] = registrar
-
-                creation = getattr(w, "creation_date", None)
-                if isinstance(creation, list):
-                    creation = creation[0]
-                if creation:
-                    base["creation_date"] = creation.isoformat() if hasattr(creation, "isoformat") else str(creation)
-
-                expiry = getattr(w, "expiration_date", None)
-                if isinstance(expiry, list):
-                    expiry = expiry[0]
-                if expiry:
-                    base["expiry_date"] = expiry.isoformat() if hasattr(expiry, "isoformat") else str(expiry)
-
-                country = _safe_str(getattr(w, "country", None))
-                base["registrant_country"] = _infer_country(domain, country)
-
-                # Privacy check
-                registrant_name = _safe_str(getattr(w, "name", None)).lower()
-                org = _safe_str(getattr(w, "org", None)).lower()
-                combined_text = f"{registrant_name} {org} {registrar.lower()}"
-                if any(marker in combined_text for marker in PRIVACY_SHIELD_MARKERS):
-                    base["is_privacy_shielded"] = True
-        except Exception as e:
-            logger.debug(f"Local python-whois fallback failed for {domain}: {e}")
-
-    # ---- 4. Calculate Domain Age & Evaluate Risk --------------------------
+    # Domain age & risk
     if base["creation_date"]:
         try:
             c_str = str(base["creation_date"]).replace("Z", "+00:00")
@@ -285,64 +326,53 @@ def lookup_whois(domain: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # Check suspicious registrar
-    registrar_lower = (base.get("registrar") or "").lower()
-    if any(susp in registrar_lower for susp in SUSPICIOUS_REGISTRARS):
-        base["is_suspicious_registrar"] = True
-        risk_score += 20.0
-        flags.append(f"SUSPICIOUS_REGISTRAR: '{base['registrar']}' commonly used for anonymous bulk registrations")
-
-    # Check privacy shield
     if base["is_privacy_shielded"]:
-        risk_score += 15.0
-        flags.append("PRIVACY_SHIELDED: Registrant identity hidden behind privacy protection service")
+        flags.append("INFO: Registrant details are privacy-redacted (common default; not scored)")
 
-    # Ensure country is always a human-readable string
     if not base["registrant_country"] or base["registrant_country"] == "Unknown":
-        base["registrant_country"] = _infer_country(domain)
+        base["registrant_country"] = _infer_country(registrable)
 
-    # ---- 5. DNS Anomaly Checks (always run) ------------------------------
+    # DNS anomaly checks (only definitive NXDOMAIN/NoAnswer count; timeouts are ignored)
     try:
         resolver = dns.resolver.Resolver()
-        resolver.timeout = 2.5
-        resolver.lifetime = 2.5
+        resolver.timeout = DNS_TIMEOUT
+        resolver.lifetime = DNS_TIMEOUT
+        absent = (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer)
 
-        # Check for A record
         try:
             resolver.resolve(domain, 'A')
-        except Exception:
+        except absent:
             flags.append("NO_A_RECORD: Domain does not resolve to any IP address")
             risk_score += 10.0
+        except Exception:
+            pass
 
-        # Check for MX records
         try:
             resolver.resolve(domain, 'MX')
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-            flags.append("NO_MX_RECORD: Domain has no mail exchange records — likely a burner/attacker domain")
+        except absent:
+            flags.append("NO_MX_RECORD: Domain has no mail exchange records - likely a burner/attacker domain")
             risk_score += 20.0
         except Exception:
             pass
 
-        # Check for TXT / SPF
         try:
             txt_answers = resolver.resolve(domain, 'TXT')
             txt_strings = []
             for rdata in txt_answers:
-                for s in rdata.strings:
-                    txt_strings.append(s.decode('utf-8', errors='ignore') if isinstance(s, bytes) else str(s))
-            has_spf = any(t.startswith("v=spf1") for t in txt_strings)
-            if not has_spf:
-                flags.append("NO_SPF_RECORD: Domain publishes no SPF policy — easy to spoof")
+                for part in rdata.strings:
+                    txt_strings.append(part.decode('utf-8', errors='ignore') if isinstance(part, bytes) else str(part))
+            if not any(t.lower().startswith("v=spf1") for t in txt_strings):
+                flags.append("NO_SPF_RECORD: Domain publishes no SPF policy - easy to spoof")
                 risk_score += 10.0
+        except dns.resolver.NoAnswer:
+            flags.append("NO_SPF_RECORD: Domain publishes no SPF policy - easy to spoof")
+            risk_score += 10.0
         except Exception:
             pass
-
     except Exception as e:
         logger.debug(f"DNS checks failed for {domain}: {e}")
 
-    # Cap score
     base["whois_risk_score"] = round(min(100.0, risk_score), 1)
-    base["whois_risk_flags"] = flags
     return base
 
 

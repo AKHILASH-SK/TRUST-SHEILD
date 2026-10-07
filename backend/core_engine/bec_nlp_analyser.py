@@ -224,19 +224,31 @@ def analyse_email_body(subject: str, body: str, sender_display_name: str = "") -
     # ------------------------------------------------------------------
     nlp_class = "LEGITIMATE"
 
-    # Priority order: BEC > PHISHING > IMPERSONATED > SUSPICIOUS > LEGITIMATE
-    if bec_total >= 2 or (bec_total >= 1 and urgency_count >= 1):
+    # Category-based gating: a single keyword/category can never reach BEC_FRAUD (>= 60).
+    # BEC needs two DISTINCT categories: (urgency | authority) + payment/invoice/credentials.
+    payment_cat = (bec_payment_count + bec_invoice_count) > 0
+    authority_cat = bec_exec_count > 0
+    urgency_cat = urgency_count > 0
+    cred_cat = cred_count > 0
+    impersonate_cat = impersonate_count > 0
+    categories = sum([payment_cat, authority_cat, urgency_cat, cred_cat])
+
+    bec_combo = payment_cat and (urgency_cat or authority_cat or cred_cat)
+    phish_combo = cred_cat and (urgency_cat or impersonate_cat or cred_count >= 2)
+
+    if bec_combo and (bec_total >= 2 or authority_cat or urgency_cat):
         nlp_class = "BEC_FRAUD"
-        risk_score = max(bec_risk, 75.0)
-    elif cred_count >= 2 or (cred_count >= 1 and urgency_count >= 1):
+        risk_score = max(min(bec_risk, 100.0), 60.0)
+    elif phish_combo:
         nlp_class = "PHISHING"
-        risk_score = max(phish_risk, 70.0)
-    elif impersonate_count >= 2 or (impersonate_count >= 1 and (cred_count >= 1 or urgency_count >= 1)):
+        risk_score = max(phish_risk, 60.0)
+    elif impersonate_cat and (cred_cat or urgency_cat or impersonate_count >= 2) and categories >= 1:
         nlp_class = "IMPERSONATED"
-        risk_score = max(phish_risk, 55.0)
+        risk_score = max(min(phish_risk, 100.0), 45.0)
     elif bec_total >= 1 or cred_count >= 1 or impersonate_count >= 1 or urgency_count >= 2:
+        # Single signal category: capped at 30.
         nlp_class = "SUSPICIOUS"
-        risk_score = max(bec_risk, phish_risk, urgency_score * 0.5, 30.0)
+        risk_score = min(30.0, max(bec_risk, phish_risk, urgency_score * 0.5, 15.0))
     else:
         nlp_class = "LEGITIMATE"
         risk_score = min(20.0, urgency_score * 0.2)

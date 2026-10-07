@@ -12,6 +12,7 @@ Integrates into parse_email_file() in email_forensics.py.
 """
 
 import email
+import hashlib
 import logging
 import re
 from typing import Dict, Any, List
@@ -46,6 +47,13 @@ HIGH_RISK_EXTENSIONS = {
     ".sh", ".bash", ".msi", ".jar", ".reg", ".hta", ".lnk", ".cpl",
 }
 
+# Disk images auto-mount on Windows and bypass Mark-of-the-Web: treated as high risk.
+DISK_IMAGE_EXTENSIONS = {".iso", ".img", ".vhd", ".vhdx"}
+HIGH_RISK_EXTENSIONS = HIGH_RISK_EXTENSIONS | DISK_IMAGE_EXTENSIONS
+
+# Unicode bidi controls used to visually reverse a filename (RTLO spoofing).
+BIDI_OVERRIDE_CHARS = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069"
+
 # Macro-enabled Office documents
 MACRO_ENABLED_EXTENSIONS = {
     ".docm", ".dotm", ".xlsm", ".xltm", ".xlam", ".pptm", ".potm",
@@ -66,6 +74,15 @@ MEDIUM_RISK_EXTENSIONS = {
     ".html", ".htm",                # Can contain phishing pages
     ".svg",                         # Can contain embedded JS
 }
+
+
+def sanitize_filename(filename: str):
+    """Returns (clean_name, had_bidi_override). Strips bidi controls, NULs, trailing dots/spaces."""
+    name = str(filename or "")
+    had_bidi = any(c in name for c in BIDI_OVERRIDE_CHARS)
+    name = "".join(c for c in name if c not in BIDI_OVERRIDE_CHARS and c != "\x00")
+    name = name.rstrip(" .\t")
+    return name, had_bidi
 
 
 def _get_extension(filename: str) -> str:
@@ -120,7 +137,9 @@ def analyse_attachments(raw_email_bytes: bytes) -> Dict[str, Any]:
         "has_high_risk_attachment": False,
         "has_macro_enabled_document": False,
         "has_archive_attachment": False,
-        "has_double_extension": False
+        "has_double_extension": False,
+        "has_rtlo_filename": False,
+        "suspicious_attachments": 0
     }
 
     if not raw_email_bytes:
@@ -139,22 +158,38 @@ def analyse_attachments(raw_email_bytes: bytes) -> Dict[str, Any]:
     for part in msg.walk():
         content_disposition = str(part.get("Content-Disposition", "")).lower()
         content_type = (part.get_content_type() or "").lower()
-        filename = part.get_filename() or ""
+        raw_filename = part.get_filename() or ""
 
-        # Only inspect parts with a filename or explicit attachment disposition
-        is_attachment = "attachment" in content_disposition or (
-            filename and "inline" not in content_disposition
+        if part.is_multipart() or content_type.startswith("multipart/"):
+            continue
+        # Inspect: explicit attachments, parts with a filename, and unnamed non-text parts.
+        is_attachment = (
+            "attachment" in content_disposition
+            or bool(raw_filename and "inline" not in content_disposition)
+            or (not raw_filename and not content_type.startswith("text/"))
         )
-        if not is_attachment or not filename:
+        if not is_attachment:
             continue
 
+        filename, had_bidi = sanitize_filename(raw_filename)
+        if not filename:
+            filename = "(unnamed)"
+
         result["total_attachments"] += 1
-        ext = _get_extension(filename)
+        ext = _get_extension(filename) if filename != "(unnamed)" else ""
         double_ext = _has_double_extension(filename)
 
         attachment_risk = 0.0
         attachment_flags = []
         risk_category = "LOW"
+
+        # Rule 0: right-to-left override filename spoofing
+        if had_bidi:
+            attachment_risk = max(attachment_risk, 85.0)
+            attachment_flags.append(f"RTLO_FILENAME_SPOOFING: filename {raw_filename!r} contains Unicode bidi override characters")
+            result["has_rtlo_filename"] = True
+            result["has_high_risk_attachment"] = True
+            risk_category = "CRITICAL"
 
         # Rule 1: High-risk MIME type
         if content_type in HIGH_RISK_MIME_TYPES:
@@ -166,7 +201,8 @@ def analyse_attachments(raw_email_bytes: bytes) -> Dict[str, Any]:
         # Rule 2: High-risk file extension
         if ext in HIGH_RISK_EXTENSIONS:
             attachment_risk = max(attachment_risk, 80.0)
-            attachment_flags.append(f"DANGEROUS_EXTENSION: {ext} — executable/script file")
+            kind = "disk image (auto-mounts, bypasses Mark-of-the-Web)" if ext in DISK_IMAGE_EXTENSIONS else "executable/script file"
+            attachment_flags.append(f"DANGEROUS_EXTENSION: {ext} — {kind}")
             result["has_high_risk_attachment"] = True
             risk_category = "CRITICAL"
 
@@ -212,18 +248,24 @@ def analyse_attachments(raw_email_bytes: bytes) -> Dict[str, Any]:
             attachment_flags.append(f"MIME_EXTENSION_MISMATCH: Claimed {content_type} but filename ends with {ext}")
             risk_category = "CRITICAL"
 
-        # Estimate file size from payload
+        # Size and SHA-256 of the decoded payload
         try:
             payload = part.get_payload(decode=True)
+            if isinstance(payload, str):
+                payload = payload.encode("utf-8", errors="replace")
             file_size = len(payload) if payload else 0
+            sha256 = hashlib.sha256(payload or b"").hexdigest()
         except Exception:
             file_size = 0
+            sha256 = None
 
         attachment_entry = {
             "filename": filename,
             "extension": ext,
             "mime_type": content_type,
             "file_size_bytes": file_size,
+            "sha256": sha256,
+            "original_filename": raw_filename if had_bidi else None,
             "risk_category": risk_category,
             "attachment_risk_score": round(min(100.0, attachment_risk), 1),
             "flags": attachment_flags,
@@ -235,6 +277,8 @@ def analyse_attachments(raw_email_bytes: bytes) -> Dict[str, Any]:
             flags.extend([f"[{filename}] {flag}" for flag in attachment_flags])
 
         cumulative_risk = max(cumulative_risk, attachment_risk)
+        if attachment_risk >= 35.0:
+            result["suspicious_attachments"] += 1
 
     # Determine overall attachment risk level
     if cumulative_risk >= 80.0:

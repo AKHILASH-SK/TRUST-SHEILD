@@ -19,6 +19,9 @@ from typing import Dict, Any, List, Optional
 from .email_forensics import parse_email_file
 from .geo_tracer import generate_route_map, resolve_ip_location
 from .link_threat_pipeline import analyze_url
+from .url_heuristics import parse_url_heuristics
+
+MAX_LINKS_ANALYZED = 12
 
 # New SIH-required modules
 try:
@@ -86,7 +89,9 @@ def classify_threat_attribution(
             "details": "Originating IP is a known Tor/VPN/Proxy node."
         }
 
-    if auth_data.get("spf_pass") is False and auth_data.get("dmarc_pass") is False:
+    spf_state = auth_data.get("spf_state") or ("pass" if auth_data.get("spf_pass") else "fail")
+    dmarc_state = auth_data.get("dmarc_state") or ("pass" if auth_data.get("dmarc_pass") else "fail")
+    if spf_state == "fail" and dmarc_state == "fail":
         return {
             "type": "SPOOFED_IDENTITY_UNAUTHENTICATED",
             "confidence": "CRITICAL",
@@ -100,7 +105,7 @@ def classify_threat_attribution(
             "details": "BEC tactic detected: Reply-To routes to external infrastructure."
         }
 
-    if mx_data.get("has_mx_records") is False:
+    if mx_data.get("has_mx_records") is False and not mx_data.get("lookup_error"):
         return {
             "type": "DIRECT_MALICIOUS_MTA",
             "confidence": "HIGH",
@@ -134,7 +139,8 @@ def generate_incident_summary(
     origin: Dict[str, Any],
     link_results: List[Dict[str, Any]],
     risk_factors: List[str],
-    attribution: Optional[Dict[str, str]] = None
+    attribution: Optional[Dict[str, str]] = None,
+    analysis_complete: bool = True
 ) -> str:
     """Generates an executive forensic narrative and court-ready incident summary."""
     subject = metadata.get("subject", "No Subject")
@@ -157,6 +163,12 @@ def generate_incident_summary(
             f"• Threat Summary: SUSPICIOUS ACTIVITY ({overall_threat_score}/100) [Attribution: {attr_type}]. "
             f"Email '{subject}' displays anomalous technical headers or unverified authentication protocols."
         )
+    elif not analysis_complete:
+        summary_lines.append(
+            f"• Threat Summary: ANALYSIS INCOMPLETE ({overall_threat_score}/100) [Attribution: {attr_type}]. "
+            f"No threat indicators were found in the stages that completed for '{subject}' from '{sender}', "
+            f"but some analysis stages failed, so this is NOT a clean verdict."
+        )
     else:
         summary_lines.append(
             f"• Threat Summary: LEGITIMATE / CLEAN ({overall_threat_score}/100) [Attribution: {attr_type}]. "
@@ -168,7 +180,8 @@ def generate_incident_summary(
         evidence_str = "; ".join(risk_factors)
         summary_lines.append(f"• Key Forensic Evidence: {evidence_str}.")
     else:
-        summary_lines.append("• Key Forensic Evidence: All authentication protocols aligned; no malicious URLs detected.")
+        summary_lines.append("• Key Forensic Evidence: No indicators found in completed stages." if not analysis_complete
+                             else "• Key Forensic Evidence: All authentication protocols aligned; no malicious URLs detected.")
 
     # 3. Recommended Action
     if verdict == "CRITICAL FRAUD / PHISHING":
@@ -179,6 +192,10 @@ def generate_incident_summary(
     elif verdict == "SUSPICIOUS / UNVERIFIED ORIGIN":
         summary_lines.append(
             "• Recommended Action: FLAG TO USER. Apply warning banner to message and restrict external link execution."
+        )
+    elif not analysis_complete:
+        summary_lines.append(
+            "• Recommended Action: REVIEW MANUALLY. Analysis was incomplete; re-run or inspect the failed stages."
         )
     else:
         summary_lines.append(
@@ -217,6 +234,8 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
                 "route_map": []
             },
             "link_investigation": [],
+            "analysis_errors": ["Empty input"],
+            "analysis_complete": False,
             "incident_summary": "• Threat Summary: Empty or invalid email file provided.\n• Key Forensic Evidence: No data.\n• Recommended Action: Upload valid .eml file."
         }
 
@@ -231,13 +250,19 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     origin_tracing = forensics.get("origin_tracing", {})
     payload = forensics.get("payload", {})
 
+    analysis_errors: List[str] = list(forensics.get("analysis_errors", []))
     originating_ip = origin_tracing.get("originating_ip")
     hops_data = origin_tracing.get("hops", [])
 
     # =========================================================================
     # Step B: Trace Server Hops & Geolocation
     # =========================================================================
-    route_map = generate_route_map(hops_data)
+    try:
+        route_map = generate_route_map(hops_data)
+    except Exception as e:
+        logger.warning(f"Geo route map error: {e}")
+        analysis_errors.append(f"Geolocation stage failed: {type(e).__name__}: {e}")
+        route_map = []
 
     # Identify originating node details
     origin_geo = None
@@ -249,7 +274,10 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
                 break
         # Fallback to direct resolution if not matched
         if not origin_geo:
-            origin_geo = resolve_ip_location(originating_ip)
+            try:
+                origin_geo = resolve_ip_location(originating_ip)
+            except Exception as e:
+                analysis_errors.append(f"Origin geolocation failed: {type(e).__name__}: {e}")
     
     origin_country = origin_geo.get("country", "Unknown") if origin_geo else "Unknown"
     origin_isp = origin_geo.get("isp", "Unknown") if origin_geo else "Unknown"
@@ -259,6 +287,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
 
     origin_intelligence = {
         "originating_ip": originating_ip or "Unknown",
+        "origin_ip": originating_ip or "Unknown",
+        "connecting_ip": origin_tracing.get("connecting_ip") or "Unknown",
+        "routes_truncated": any(h.get("hops_truncated") for h in route_map),
         "origin_country": origin_country,
         "origin_isp": origin_isp,
         "is_anonymized_node": is_anonymized_node,
@@ -278,11 +309,23 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     max_link_score = 0.0
     critical_link_detected = False
 
-    unique_links = list(dict.fromkeys(extracted_links))[:8]
+    unique_links = list(dict.fromkeys(extracted_links))
 
-    for idx, link in enumerate(unique_links):
+    # Score every link with the cheap heuristics first; fully analyse the riskiest MAX_LINKS_ANALYZED.
+    heuristics: Dict[str, Dict[str, Any]] = {}
+    for link in unique_links:
         try:
-            # If critical threat already confirmed on previous link, run fast-path heuristics on remaining
+            heuristics[link] = parse_url_heuristics(link)
+        except Exception as e:
+            heuristics[link] = {"heuristic_risk_score": 50.0, "heuristic_flags": [f"HEURISTIC_ERROR: {e}"]}
+            analysis_errors.append(f"Link heuristics failed for {link[:80]}: {type(e).__name__}")
+    ranked = sorted(unique_links, key=lambda u: float(heuristics[u].get("heuristic_risk_score", 0.0)), reverse=True)
+    to_analyze = set(ranked[:MAX_LINKS_ANALYZED])
+    ordered_full = [u for u in ranked if u in to_analyze]
+    skipped = [u for u in unique_links if u not in to_analyze]
+
+    for idx, link in enumerate(ordered_full):
+        try:
             should_skip_sandbox = skip_link_sandbox or (critical_link_detected and idx > 0)
             link_analysis = analyze_url(
                 url=link,
@@ -302,17 +345,39 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
                 "threat_score": score,
                 "verdict": verdict,
                 "summary": link_analysis.get("summary", ""),
-                "telemetry": link_analysis.get("telemetry", {})
+                "telemetry": link_analysis.get("telemetry", {}),
+                "analysis_depth": "full"
             })
         except Exception as e:
             logger.error(f"Error analyzing URL {link}: {e}")
+            analysis_errors.append(f"Link analysis failed for {link[:80]}: {type(e).__name__}: {e}")
             link_investigation.append({
                 "url": link,
                 "threat_score": 50.0,
                 "verdict": "SUSPICIOUS / ANALYSIS_ERROR",
                 "summary": f"Sandbox analysis encountered an error: {str(e)}",
-                "telemetry": {}
+                "telemetry": {},
+                "analysis_depth": "error"
             })
+
+    # Skipped links still get heuristic-only results; heuristic-flagged ones count as issues.
+    for link in skipped:
+        h = heuristics[link]
+        hscore = float(h.get("heuristic_risk_score", 0.0))
+        flagged = hscore >= 50.0
+        if flagged:
+            max_link_score = max(max_link_score, hscore)
+        link_investigation.append({
+            "url": link,
+            "threat_score": hscore,
+            "verdict": "SUSPICIOUS (HEURISTIC ONLY)" if flagged else "NOT FULLY ANALYSED (HEURISTIC ONLY)",
+            "summary": "; ".join(h.get("heuristic_flags", [])[:3]),
+            "telemetry": {"heuristic_flags": h.get("heuristic_flags", [])},
+            "analysis_depth": "heuristic_only"
+        })
+    links_total = len(unique_links)
+    links_analyzed = len(ordered_full)
+    links_skipped = len(skipped)
 
     # =========================================================================
     # Step D: Calculate Global Email Threat Score (0.0 to 100.0)
@@ -336,12 +401,16 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     dkim_pass = bool(auth.get("dkim_pass", False))
     dmarc_pass = bool(auth.get("dmarc_pass", False))
 
-    if not spf_pass and not dmarc_pass:
+    spf_state = auth.get("spf_state") or ("pass" if spf_pass else "fail")
+    dmarc_state = auth.get("dmarc_state") or ("pass" if dmarc_pass else "fail")
+    if spf_state == "fail" and dmarc_state == "fail":
         base_threat += 30.0
         risk_factors.append("Failed SPF & DMARC Sender Identity Verification")
-    elif not dmarc_pass:
+    elif dmarc_state == "fail":
         base_threat += 15.0
         risk_factors.append("Failed DMARC Policy Alignment")
+    elif dmarc_state == "indeterminate" or spf_state == "indeterminate":
+        risk_factors.append("SPF/DMARC could not be fully evaluated (DNS error) - not scored as failure")
 
     # 3. Reply-To Mismatch (BEC spoofing indicator: +35 points)
     reply_to_mismatch = bool(metadata.get("reply_to_mismatch", False))
@@ -389,7 +458,8 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         origin=origin_intelligence,
         link_results=link_investigation,
         risk_factors=risk_factors,
-        attribution=threat_attribution
+        attribution=threat_attribution,
+        analysis_complete=not analysis_errors
     )
 
     # =========================================================================
@@ -411,6 +481,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
                 risk_factors.append(f"NLP Body Analysis: {nlp_class} detected (score {nlp_risk}/100)")
         except Exception as e:
             logger.warning(f"BEC/NLP analyser error: {e}")
+            analysis_errors.append(f"BEC/NLP stage failed: {type(e).__name__}: {e}")
+    else:
+        analysis_errors.append("BEC/NLP stage unavailable (module import failed)")
 
     # =========================================================================
     # Step H: WHOIS & Domain Intelligence
@@ -428,12 +501,13 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
                     overall_threat_score = round(min(100.0, overall_threat_score + whois_contribution), 1)
                 if whois_intelligence.get("is_newly_registered"):
                     risk_factors.append(f"WHOIS: Domain registered {whois_intelligence.get('domain_age_days')} day(s) ago (newly registered burner domain)")
-                if whois_intelligence.get("is_privacy_shielded"):
-                    risk_factors.append("WHOIS: Registrant identity hidden behind privacy protection service")
-                if whois_intelligence.get("is_suspicious_registrar"):
-                    risk_factors.append(f"WHOIS: Suspicious registrar detected: {whois_intelligence.get('registrar')}")
+                if any(str(f).startswith("UNREGISTERED_DOMAIN") for f in whois_intelligence.get("whois_risk_flags", [])):
+                    risk_factors.append("WHOIS: Sender domain has no registration record")
         except Exception as e:
             logger.warning(f"WHOIS intel error: {e}")
+            analysis_errors.append(f"WHOIS stage failed: {type(e).__name__}: {e}")
+    else:
+        analysis_errors.append("WHOIS stage unavailable (module import failed)")
 
     # =========================================================================
     # Step I: Attachment Risk Analysis
@@ -446,9 +520,12 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             if attach_risk >= 60.0:
                 boost = min(25.0, attach_risk * 0.3)
                 overall_threat_score = round(min(100.0, overall_threat_score + boost), 1)
-                risk_factors.append(f"Attachment Risk: {attachment_analysis.get('attachment_risk_level')} — {attachment_analysis.get('total_attachments')} suspicious attachment(s) detected")
+                risk_factors.append(f"Attachment Risk: {attachment_analysis.get('attachment_risk_level')} — {attachment_analysis.get('suspicious_attachments', attachment_analysis.get('total_attachments'))} suspicious attachment(s) detected")
         except Exception as e:
             logger.warning(f"Attachment analyser error: {e}")
+            analysis_errors.append(f"Attachment stage failed: {type(e).__name__}: {e}")
+    else:
+        analysis_errors.append("Attachment stage unavailable (module import failed)")
 
     # Recalculate final verdict after all boosts
     if overall_threat_score >= 80.0:
@@ -467,7 +544,8 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         origin=origin_intelligence,
         link_results=link_investigation,
         risk_factors=risk_factors,
-        attribution=threat_attribution
+        attribution=threat_attribution,
+        analysis_complete=not analysis_errors
     )
 
     # =========================================================================
@@ -475,6 +553,8 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     # =========================================================================
     result = {
         "evidence_hash_sha256": evidence_hash,
+        "evidence_hash": evidence_hash,
+        "raw_size_bytes": forensics.get("raw_size_bytes", len(eml_bytes)),
         "overall_threat_score": overall_threat_score,
         "verdict": final_verdict,
         "threat_attribution": threat_attribution,
@@ -495,15 +575,24 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             "dkim_pass": dkim_pass,
             "dkim_details": auth.get("dkim_details", ""),
             "dmarc_pass": dmarc_pass,
-            "dmarc_details": auth.get("dmarc_details", "")
+            "dmarc_details": auth.get("dmarc_details", ""),
+            "spf_state": spf_state,
+            "dkim_state": auth.get("dkim_state", "pass" if dkim_pass else "fail"),
+            "dmarc_state": dmarc_state,
+            "dmarc_policy": auth.get("dmarc_policy"),
         },
+        "links_total": links_total,
+        "links_analyzed": links_analyzed,
+        "links_skipped": links_skipped,
         "sender_domain_intelligence": mx_data,
         "origin_intelligence": origin_intelligence,
         "link_investigation": link_investigation,
         "nlp_analysis": nlp_analysis,
         "whois_intelligence": whois_intelligence,
         "attachment_analysis": attachment_analysis,
-        "incident_summary": incident_summary
+        "incident_summary": incident_summary,
+        "analysis_errors": analysis_errors,
+        "analysis_complete": not analysis_errors
     }
 
     # =========================================================================
