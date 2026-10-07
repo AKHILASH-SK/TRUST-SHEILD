@@ -138,11 +138,11 @@ def visit(sandbox, url: str, label: int, source: str) -> Dict:
 
 def deep_links(html: str, base_url: str, limit: int = 2) -> List[str]:
     """Same-site internal links from a benign page: benign URLs that also have paths."""
-    from bs4 import BeautifulSoup
+    from core_engine.htmlsafe import make_soup
     from urllib.parse import urljoin
     base_reg = split_url(base_url)["registered"]
     out: List[str] = []
-    for a in BeautifulSoup(html[:300_000], "html.parser").find_all("a", href=True):
+    for a in make_soup(html, 300_000).find_all("a", href=True):
         href = urljoin(base_url, a["href"].strip())
         parts = split_url(href)
         if href.startswith(("http://", "https://")) and parts["registered"] == base_reg \

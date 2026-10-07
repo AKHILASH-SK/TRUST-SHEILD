@@ -20,7 +20,7 @@ import time
 from email import policy
 from typing import Dict, Any, List, Optional, Tuple
 
-from bs4 import BeautifulSoup
+from .htmlsafe import make_soup
 import dns.resolver
 import dns.exception
 import dns.name
@@ -741,7 +741,7 @@ def extract_payload_and_links_ex(msg: email.message.EmailMessage) -> Tuple[str, 
                 body_text_parts.append(decoded_text.strip())
                 extracted_urls.extend(_scan_text_urls(decoded_text))
             else:
-                soup = BeautifulSoup(decoded_text, "html.parser")
+                soup = make_soup(decoded_text)
                 body_text_parts.append(soup.get_text(separator=" ", strip=True))
 
                 base_host_scheme = None

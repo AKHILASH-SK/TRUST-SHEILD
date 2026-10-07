@@ -11,6 +11,7 @@ import requests
 import tldextract
 
 from .url_safety import assert_public_url, UnsafeUrlError
+from .htmlsafe import make_soup
 
 # Using Selenium for the custom headless browser sandbox
 from selenium import webdriver
@@ -420,7 +421,7 @@ class VirtualSandboxAnalyzer:
                     print(f"   [!] Redirect detected: {initial_url} -> {final_url}")
                     features['sandbox_num_redirects'] = len(hops)
 
-            soup = BeautifulSoup(html_text, 'html.parser')
+            soup = make_soup(html_text)
             page_title = (soup.title.string or "").strip().lower() if soup.title and soup.title.string else ""
 
             # Check password fields

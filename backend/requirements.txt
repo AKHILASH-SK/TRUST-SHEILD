@@ -7,6 +7,7 @@ requests==2.31.0
 APScheduler==3.10.4
 selenium==4.15.2
 beautifulsoup4==4.12.2
+lxml>=5.0
 whois==0.9.7
 selenium-stealth==1.0.6
 

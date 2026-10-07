@@ -99,9 +99,11 @@ def main() -> None:
     lex_raw = lex["model"].predict_proba(lex_in)[:, 1]
     lex_prob = lex["calibrator"].predict(lex_raw)
 
-    page_X = np.array([
-        [page_features(unpack_html(r["html_gz_b64"]), r.get("final_url") or r["url"], r["url"], r.get("sandbox") or {})[n]
-         for n in PAGE_MODEL_PAGE_FEATURES] for r in rows], dtype=np.float32)
+    page_rows = []
+    for r in rows:
+        pf = page_features(unpack_html(r["html_gz_b64"]), r.get("final_url") or r["url"], r["url"], r.get("sandbox") or {})
+        page_rows.append([pf[n] for n in PAGE_MODEL_PAGE_FEATURES])
+    page_X = np.array(page_rows, dtype=np.float32)
     X = np.hstack([lex_X, page_X, lex_prob.reshape(-1, 1).astype(np.float32)])
 
     split = np.array([trainlib.split_of(g) for g in groups])

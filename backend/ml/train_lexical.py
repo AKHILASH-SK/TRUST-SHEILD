@@ -33,7 +33,11 @@ from ml.features import FEATURE_VERSION, LEXICAL_HOST_FEATURES, group_key, lexic
 
 
 def _featurize_chunk(urls: List[str]) -> np.ndarray:
-    return np.array([[lexical_features(u)[n] for n in LEXICAL_HOST_FEATURES] for u in urls], dtype=np.float32)
+    rows = []
+    for u in urls:
+        f = lexical_features(u)          # compute once per URL, then read the host columns
+        rows.append([f[n] for n in LEXICAL_HOST_FEATURES])
+    return np.array(rows, dtype=np.float32)
 
 
 def featurize(urls: List[str], n_jobs: int) -> np.ndarray:

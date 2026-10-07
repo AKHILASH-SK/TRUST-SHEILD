@@ -205,7 +205,8 @@ LEXICAL_HOST_FEATURES: List[str] = [
 
 # Shortcuts that separate the datasets rather than the classes
 BIASED_FEATURES = {"is_https", "ends_with_slash", "final_is_https"}
-PAGE_MODEL_LEXICAL_FEATURES: List[str] = [f for f in LEXICAL_FEATURES if f not in BIASED_FEATURES]
+# the page model also sees only host-level link features; path-shaped features are dataset shortcuts
+PAGE_MODEL_LEXICAL_FEATURES: List[str] = list(LEXICAL_HOST_FEATURES)
 
 
 def lexical_features(url: str) -> Dict[str, float]:
@@ -329,7 +330,7 @@ def _registered(url_or_host: str) -> str:
 def page_features(html: str, final_url: str, initial_url: str,
                   sandbox: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
     """Features from the rendered page. `sandbox` is the dict returned by the sandbox engine."""
-    from bs4 import BeautifulSoup
+    from core_engine.htmlsafe import make_soup
 
     sandbox = sandbox or {}
     if not html:
@@ -339,7 +340,7 @@ def page_features(html: str, final_url: str, initial_url: str,
         return feats
 
     html = html[:400_000]
-    soup = BeautifulSoup(html, "html.parser")
+    soup = make_soup(html)
     final_reg = _registered(final_url)
     final_parts = split_url(final_url)
     init_parts = split_url(initial_url)
