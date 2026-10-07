@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import re
@@ -102,6 +103,8 @@ def is_chrome_available() -> bool:
         ]
         if any(os.path.exists(p) for p in paths):
             return True
+    if os.environ.get("CHROME_BIN") and os.path.exists(os.environ["CHROME_BIN"]):
+        return True
     for name in ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome']:
         if shutil.which(name):
             return True
@@ -205,6 +208,9 @@ class VirtualSandboxAnalyzer:
     def __init__(self):
         # Configure Headless Chrome with anti-bot stealth and silent/fast execution options
         self.chrome_options = Options()
+        # Containers install Chromium at a fixed path (see backend/Dockerfile)
+        if os.environ.get("CHROME_BIN"):
+            self.chrome_options.binary_location = os.environ["CHROME_BIN"]
         self.chrome_options.add_argument("--headless=new")
         self.chrome_options.add_argument("--disable-gpu")
         self.chrome_options.add_argument("--disable-software-rasterizer")
@@ -549,7 +555,12 @@ class VirtualSandboxAnalyzer:
         driver = None
         try:
             # 2. Initialize the Stealth Sandbox Browser
-            driver = webdriver.Chrome(options=self.chrome_options)
+            driver_path = os.environ.get("CHROMEDRIVER_PATH")
+            if driver_path:
+                from selenium.webdriver.chrome.service import Service
+                driver = webdriver.Chrome(service=Service(driver_path), options=self.chrome_options)
+            else:
+                driver = webdriver.Chrome(options=self.chrome_options)
             driver.set_page_load_timeout(4)
             driver.set_script_timeout(3)
             
