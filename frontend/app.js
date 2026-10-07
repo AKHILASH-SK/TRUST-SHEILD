@@ -6,6 +6,16 @@
 // Global API Base resolution:
 // When served over HTTP/HTTPS (localhost or Render cloud), use relative path ('')
 // When opened directly as a local file (file://), fallback to Render cloud
+// Bearer token from a TrustShield sign-in (stored by the login screen)
+function authHeaders() {
+  try {
+    const token = localStorage.getItem('ts_token');
+    return token ? { Authorization: 'Bearer ' + token } : {};
+  } catch (e) {
+    return {};
+  }
+}
+
 var API_BASE = window.location.protocol.startsWith('http')
   ? ''
   : 'https://trust-sheild.onrender.com';
@@ -836,6 +846,7 @@ async function processEmlFile(file) {
   try {
     const response = await fetch(`${API_BASE}/api/forensics/analyze-eml`, {
       method: 'POST',
+      headers: authHeaders(),
       body: formData
     });
 
@@ -2085,7 +2096,7 @@ async function loadVaultCasesHistory() {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_BASE}/api/forensics/cases?limit=50`);
+    const res = await fetch(`${API_BASE}/api/forensics/cases?limit=50`, { headers: authHeaders() });
     if (res.ok) {
       const data = await res.json();
       cachedVaultCases = data.cases || [];
@@ -2495,8 +2506,8 @@ async function exportDossierPdf(e) {
 
     const response = await fetch(`${API_BASE}/api/forensics/export-pdf`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentReport)
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ case_id: currentReport.case_id })
     });
 
     if (!response.ok) {
