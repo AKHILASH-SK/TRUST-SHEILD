@@ -36,6 +36,9 @@ import tldextract
 from .url_safety import UnsafeUrlError, assert_public_url
 
 logger = logging.getLogger("trustshield.browser_sandbox")
+# Closing the browser while a request is still in flight makes Playwright's event loop log a harmless (but very noisy)
+# "CancelledError" traceback. The scan result is unaffected, so keep the console readable.
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 try:  # pragma: no cover - environment dependent
     from playwright.sync_api import Error as PlaywrightError
@@ -467,6 +470,7 @@ class BrowserSandbox:
         self.nav_urls: List[str] = []
         self.landing_registered = ""
         self._landing_https = False
+        self._closing = False
 
     # ---- request control -------------------------------------------------------------------------------------
     def _host_allowed(self, url: str) -> bool:
@@ -485,6 +489,12 @@ class BrowserSandbox:
         return ok
 
     def _route(self, route, request) -> None:
+        if self._closing:                     # the scan is over: answer immediately so nothing is left pending
+            try:
+                route.abort()
+            except Exception:
+                pass
+            return
         try:
             url = request.url
             if not url.startswith(("http://", "https://")):
@@ -567,6 +577,7 @@ class BrowserSandbox:
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True, args=args)
+                context = None
                 try:
                     device = dict(pw.devices.get("Pixel 7") or pw.devices.get("Pixel 5") or {})
                     context = browser.new_context(**device, locale="en-IN", timezone_id="Asia/Kolkata",
@@ -579,6 +590,12 @@ class BrowserSandbox:
                     self._run(page, context, url, budget, ev)
                     self._screenshot(page, ev)
                 finally:
+                    self._closing = True
+                    try:
+                        if context is not None:
+                            context.unroute_all(behavior="ignoreErrors")     # drop pending request handlers before closing
+                    except Exception:
+                        pass
                     browser.close()
         except Exception as exc:
             logger.warning("browser sandbox crashed on %s: %s", url[:80], exc)
