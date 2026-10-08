@@ -59,3 +59,7 @@ backend/data/*.sqlite
 
 # ML datasets and trained artifacts built locally
 backend/ml/data/
+
+# Local screen recordings and large media (GitHub rejects files over 100 MB)
+*.mp4
+*.mov

@@ -1,0 +1,831 @@
+================================================================================
+PROJECT NEURAL SCHEMA  -  TRUSTSHIELD
+Full system extraction, reverse-engineered from the repository
+Branch documented: hackathon/backend-hardening   (master is the untouched original)
+Document date: 2026-10-08
+Secrets policy: every secret value is shown as [SECRET PRESENT - VALUE REDACTED].
+Anything that could not be confirmed from the repository is marked
+"UNKNOWN - NOT DETERMINABLE FROM AVAILABLE PROJECT FILES."
+Status legend: REAL (works as claimed) | PARTIAL | MOCKED | HARDCODED | PLANNED | BROKEN | UNUSED
+================================================================================
+
+
+================================================================================
+1. PROJECT IDENTITY
+================================================================================
+Name ................. TrustShield (repo folder "TrustShield"; hosted URL slug is misspelled "trust-sheild")
+One line ............. Real-time phishing prevention for phone users plus a forensic investigation portal for email.
+Purpose .............. Stop people from opening phishing links BEFORE they open them (intercept links in
+                       notifications), and give security teams a sealed, court-style forensic record of phishing emails.
+Problem solved ....... Phishing links arrive via SMS/WhatsApp/email; users only learn they were scams after clicking.
+Target users ......... (a) Consumers on Android (WhatsApp/SMS scams), (b) organisations / IT teams (browser extension +
+                       email analysis), (c) forensic investigators (case IDs, evidence hashing, PDF dossiers, route maps).
+Target environment ... Android 10+ (minSdk 29), web browsers (Chrome extension MV3, SOC web portal), Python backend.
+Project owner context  Year-long personal project of the developer, intended also as placement project; being presented
+                       at HACKERING 2.0 Round 2 (RVITM Bengaluru, 8-10 Oct 2026, 36-hour offline hackathon, "Open
+                       Innovation" track = build/implement the idea presented in the previous round).
+
+CURRENT STATUS (honest)
+  - Android app (Kotlin, XML views): working notification-based link interception with 3-tier checking. REAL.
+  - Backend pipelines (link + email forensics): working, hardened this session (auth, sealing, SSRF guard). REAL.
+  - ML classifier: CODE COMPLETE (collector, trainers, runtime, integration, tests) but NO TRAINED MODEL FILE EXISTS YET.
+    Until the developer runs training, the link verdict comes from rules only.
+  - "Link Gate" (intercept the tap, scan, then open the browser): PLANNED, NOT IMPLEMENTED. No http/https intent filter exists.
+  - Consumer portal / Organization console: PLANNED. Only the original forensic "SOC portal" exists (frontend/).
+  - Play Store publication: PLANNED, not started.
+
+IMPLEMENTED vs CLAIMED (README/pitch claims versus code)
+  Claim: "ML classification model" ............ At the time of this document: NOT TRAINED. Legacy RandomForest (9 hand-typed
+                                                rows) exists but is never called. New LightGBM stage is code only.
+  Claim: "Sandbox analysis" .................... On Render: NO real browser. A plain HTTP fetch + HTML parse (no JavaScript).
+                                                Real headless Chromium only runs where Chrome exists (local machine / the new Docker image).
+  Claim: "VirusTotal API final layer" .......... REAL but conditional: needs VIRUSTOTAL_API_KEY; free tier 4 req/min, 500/day.
+  Claim: "Phishing domain DB (Firebase)" ....... REAL on Android side (Firebase Realtime DB node "phishing_domains", cached locally).
+  Claim: "Tamper-evident sealed evidence" ...... REAL after this session (HMAC-SHA256 seal re-verified on every read).
+                                                Before this session it was NOT real (see section 14).
+  Claim: "Court admissibility / BSA 2023 compliance" in older UI strings: NOT a technical guarantee; legal claim is unverified.
+
+Core value proposition: detect and block phishing before the click, with explainable evidence.
+Main use cases: (1) WhatsApp/SMS link arrives -> notification scanned -> alert. (2) Analyst uploads .eml -> case, route map,
+                SPF/DKIM/DMARC audit, PDF dossier. (3) Webmail -> Chrome extension -> same analysis. (4) Manual link scan in app.
+Hackathon angle: "zero-click" prevention + forensic trail; planned story = app catches it, portal proves it.
+
+
+================================================================================
+2. COMPLETE TECH STACK  (versions read from requirements.txt, gradle files, and the dev machine's installed packages)
+================================================================================
+BACKEND (Python 3.11.9 pinned for deploy via .python-version; dev machine runs Python 3.13.7; Docker image python:3.11-slim)
+  Flask 2.3.2 (pinned) .............. web framework; backend/app.py. Replaceable.
+  flask-cors 4.0.0 .................. CORS; restricted origins. Replaceable.
+  Werkzeug (Flask dependency) ....... ProxyFix middleware, uploads. Essential (transitive). app.py patches werkzeug.__version__.
+  itsdangerous 2.2.0 (transitive) ... signed bearer tokens (URLSafeTimedSerializer). Essential for auth in security.py.
+  psycopg[binary] >=3.1.0 (3.3.3) ... PostgreSQL driver, used for all runtime SQL. Essential.
+  SQLAlchemy >=2.0 (2.0.48) ......... only database.py/models.py/brand_verification.py. Partly legacy; API itself uses raw psycopg.
+  bcrypt 4.1.1 ...................... PIN hashing. Essential.
+  python-dotenv 1.0.0 ............... .env loading. Replaceable.
+  requests 2.31.0 pinned (2.32.5 installed) ... all outbound HTTP (feeds, RDAP, VirusTotal, geo). Essential.
+  APScheduler 3.10.4 ................ optional 6-hourly phishing-feed import (ENABLE_SCHEDULER=true). Replaceable.
+  selenium 4.15.2 + selenium-stealth 1.0.6 ... headless Chromium sandbox (only when Chrome exists). Essential for real sandbox.
+  beautifulsoup4 4.12.2 + lxml >=5.0 (6.1.3) . HTML parsing via core_engine/htmlsafe.py (lxml preferred; html.parser fallback is
+                                                 size-capped because html.parser can hang minutes on malicious markup).
+  tldextract 5.1.1 pinned (5.3.2 installed) .. registrable-domain extraction; ml/features.py uses an OFFLINE suffix snapshot.
+  Levenshtein >=0.23 (0.27.4) ....... only legacy ml_engine.py (UNUSED path).
+  scikit-learn >=1.3 (1.8.0) ........ isotonic calibration (training) and legacy RandomForest (UNUSED).
+  lightgbm >=4.3 (4.7.0) ............ NEW: gradient boosted trees for the ML stage (training and runtime).
+  numpy >=1.26 (2.4.1), joblib >=1.3 (1.5.3) ... model I/O and arrays.
+  pandas 3.0.1 ...................... training/collection only (backend/ml/requirements-train.txt), not in production requirements.
+  dnspython >=2.6 (2.8.0) ........... SPF/DKIM/DMARC DNS lookups. Essential for forensics.
+  dkimpy >=1.1.5 (1.1.8) ............ DKIM signature verification. Essential for forensics.
+  reportlab >=4.0 (5.0.1) ........... PDF dossier generation. Essential for PDF export.
+  google-genai (2.22.0) ............. Gemini client; referenced only in a non-default code path (UNUSED in practice, see section 7).
+  whois 0.9.7 ....................... in requirements but NO LONGER imported by the main pipeline (legacy files only). python-whois 0.9.6 also installed locally. Candidate to delete.
+  gunicorn 21.2.0 ................... production WSGI server (not installed on the Windows dev box). Essential for deploy.
+
+FRONTEND (SOC portal, frontend/)
+  Plain HTML + vanilla JavaScript (frontend/index.html 1369 lines, frontend/app.js 2537 lines). No build step, no framework.
+  Tailwind CSS via CDN script (https://cdn.tailwindcss.com, JIT in browser; not for production use). Version: UNKNOWN (CDN latest).
+  Leaflet 1.9.4 via unpkg (maps). Google Fonts: Inter, JetBrains Mono. Served by Flask at /portal.
+  A second tiny static page docs/index.html (73 lines) is the APK download page on GitHub Pages (https://akhilash-sk.github.io/TRUST-SHEILD/).
+
+ANDROID APP (Kotlin, XML views; Compose dependencies exist but UI is XML/AppCompat)
+  Android Gradle Plugin 8.13.2, Kotlin 2.0.21, compileSdk 36, targetSdk 36, minSdk 29, JVM target 11. versionName 1.0 / versionCode 1.
+  AndroidX core-ktx 1.17.0, lifecycle-runtime-ktx 2.9.4, activity-compose 1.11.0, Compose BOM 2024.09.00 (Compose declared; UI is mostly XML).
+  AppCompat 1.6.1, Material 1.10.0, RecyclerView 1.3.2, SwipeRefreshLayout 1.1.0.
+  Retrofit 2.9.0 + converter-gson 2.9.0, OkHttp 4.11.0 + logging-interceptor 4.11.0.
+  kotlinx-coroutines-android 1.7.3 (+ play-services 1.7.3).
+  Firebase BOM 33.0.0: firebase-database-ktx (phishing domain list), firebase-auth-ktx (declared; app auth is the Flask backend, not Firebase Auth).
+  MPAndroidChart v3.1.0 (via jitpack.io). google-services Gradle plugin (app/google-services.json is git-ignored; template provided).
+  Debug/release APKs are committed in apk/ and docs/ (binary files in git).
+
+CHROME EXTENSION (chrome_extension/): Manifest V3 "TrustShield Email Analyzer" v1.0, permissions activeTab+scripting, host permissions http/https all.
+  Plain JS (content.js 571 lines, popup.js 163, popup.html 102, popup.css 399).
+
+DATABASES / STORAGE
+  PostgreSQL (hosted; dev .env host name indicates a Neon serverless Postgres instance - exact host REDACTED). Version UNKNOWN.
+  SQLite files created at runtime (not committed any more): backend/data/threat_intel.db (threat indicator cache),
+         backend/data/vt_cache.db (VirusTotal cache).
+  Firebase Realtime Database (Android reads node "phishing_domains").
+  Android SharedPreferences "trustshield_prefs" (user id, name, email, phone, auth_token, wallet_balance, cached phishing domains).
+
+EXTERNAL SERVICES
+  VirusTotal API v3 (domain reputation/popularity), OpenPhish / PhishTank / URLhaus / Phishing.Database (feeds),
+  RDAP via rdap.org + IANA bootstrap (domain age), ipwho.is and ip-api.com (IP geolocation + proxy flags),
+  Clearbit Autocomplete (brand verification in brand_verification.py; availability of this public endpoint: UNKNOWN),
+  Gemini / Groq / OpenAI (referenced in final_decision_engine.py, not used by default), Green-API WhatsApp (REMOVED this session).
+
+HOSTING / DEPLOYMENT
+  Render free tier (https://trust-sheild.onrender.com/) via root Procfile. New: Dockerfile + fly.toml (Fly.io, not yet deployed).
+  GitHub Pages for docs/ download page. Ngrok was used in dev (binary removed from git tracking).
+
+BUILD / PACKAGE TOOLS: Gradle wrapper (Android), pip + requirements.txt (backend), Docker (new). No npm/package.json for the portal.
+  backend/server.js (126 lines) is a legacy Node/Express "check-domain" API from an early version: UNUSED, no package.json.
+DEV TOOLS: pytest (not in requirements), Android Studio, Git.
+
+
+================================================================================
+3. PROJECT ARCHITECTURE
+================================================================================
+ASCII DIAGRAM
+
+ CONSUMER PATH
+   WhatsApp/SMS/etc. ──notification──► NotificationListener (Android)
+        │                                   │ LinkExtractor/UrlNormalizer
+        │                                   ▼
+        │                     Tier 1 on-device rules (OfficialDomainRegistry, whitelist, rule checks)
+        │                                   ▼
+        │                     Tier 2 Firebase "phishing_domains" (cached on device)
+        │                                   ▼
+        │                     Tier 3 backend ──HTTPS+Bearer──► Flask API (/api/sandbox-check, /api/links/scan)
+        │                                                          │
+        ▼                                                          ▼
+   AlertNotificationManager (heads-up alert)         LinkThreatPipeline (server)
+                                                      heuristics → threat DB → fast-path/VirusTotal → sandbox → ML → fusion
+                                                          │            │            │          │
+                                                    SQLite threat   VirusTotal   headless    LightGBM models
+                                                       cache        (cached)     Chromium or   (if trained)
+                                                                                 HTTP fetch
+                                                          ▼
+                                                     PostgreSQL (users, link_scans, ...)
+
+ ORGANISATION / INVESTIGATOR PATH
+   .eml upload (portal) ┐
+   Chrome extension ────┴──► Flask API (/api/forensics/analyze-eml, /api/extension/analyze)
+                                   │
+                                   ▼
+                      unified_email_pipeline (A..K steps):
+                      email_forensics (parse, SPF/DKIM/DMARC) → geo_tracer (route/IPs) → link pipeline (links)
+                      → score → attribution → BEC NLP → WHOIS(RDAP) → attachments → graph/campaign correlation
+                                   │
+                                   ▼
+                      evidence_seal (HMAC) → PostgreSQL forensic_cases (insert-only) → PDF (reportlab) / portal UI (Leaflet)
+
+COMPONENTS (what / where / in / out / depends)
+  Android app ........... app/src/main/java/com/example/trustshield/ ; in: notifications, user input ; out: alerts, API calls ;
+                          depends on Flask API + Firebase ; depended on by users only.
+  Flask API ............. backend/app.py (single file ~1500 lines) + security.py, evidence_seal.py, db_config.py ;
+                          in: HTTP ; out: JSON/PDF ; depends on PostgreSQL, core_engine/*, ml/*.
+  Link pipeline ......... backend/core_engine/link_threat_pipeline.py (+ url_heuristics, threat_db, good_domain_checker,
+                          sandbox_engine, final_decision_engine, url_safety, htmlsafe).
+  Email forensic pipeline backend/core_engine/unified_email_pipeline.py (+ email_forensics, geo_tracer, whois_intel,
+                          attachment_analyser, bec_nlp_analyser, graph_correlation, campaign_manager, report_generator).
+  ML subsystem .......... backend/ml/* (features, datasets, collect_dataset, trainlib, train_lexical, train_page,
+                          model_runtime, evaluate_live). Runtime artifacts: backend/core_engine/trained_models/*.joblib (ABSENT today).
+  SOC web portal ........ frontend/index.html + app.js, served at /portal by Flask.
+  Chrome extension ...... chrome_extension/ ; posts webmail content to /api/extension/analyze, opens portal case by id.
+  Deployment ............ Procfile (Render), Dockerfile + fly.toml (Fly.io), gunicorn.conf.py.
+
+
+================================================================================
+4. REPOSITORY STRUCTURE (important files only; "PC" = production-critical)
+================================================================================
+TrustShield/
+├── PROJECT_NEURAL_SCHEMA.txt ............ this document
+├── CONTEXT.md ........................... domain glossary (terms: Consumer, Organization, Link Gate, Fast-Path Whitelist, ...)
+├── README.md ............................ install + demo instructions (partly outdated: mentions removed Green-API demo)
+├── Procfile ............................. Render start command (PC)
+├── Dockerfile / .dockerignore / fly.toml  container with Chromium + libgomp for real sandbox (PC for Fly deploy)
+├── .env.example ......................... documented environment variables (no secrets)
+├── build.gradle.kts, settings.gradle.kts, gradle/libs.versions.toml, gradlew(.bat) ... Android build
+├── app/ ................................. ANDROID APP
+│   ├── build.gradle.kts ................. versions, BuildConfig.BASE_URL from .env/local.properties (PC)
+│   └── src/main/
+│       ├── AndroidManifest.xml .......... activities, NotificationListener service, permissions (PC)
+│       ├── java/com/example/trustshield/
+│       │   ├── TrustShieldApp.kt ........ Application; loads saved auth token (PC, new)
+│       │   ├── NotificationListener.kt .. 395 lines; intercepts notifications; runs 3-tier analysis (PC)
+│       │   ├── LinkExtractor.kt, UrlNormalizer.kt ... URL extraction/normalising
+│       │   ├── LinkAnalyzer.kt .......... 641 lines; Tier 1 rules: official registry, whitelist, IP/typosquat/homograph/etc. (PC)
+│       │   ├── OfficialDomainRegistry.kt  brand -> official domains; synced from /api/brands/official
+│       │   ├── PhishingDomainCheckerFirebase.kt  Tier 2: Firebase node "phishing_domains" + local cache
+│       │   ├── SandboxChecker.kt ........ Tier 3: POST /api/sandbox-check via HttpURLConnection (now sends Bearer token)
+│       │   ├── LinkScanRecorder.kt ...... POST /api/links/scan (sends source_app = notification package)
+│       │   ├── AlertNotificationManager.kt  heads-up alerts (dangerous/suspicious)
+│       │   ├── PermissionManager.kt, LinkTracker.kt, TestActivity.kt, MainActivity.kt (legacy duplicate)
+│       │   ├── network/ (RetrofitClient.kt with auth interceptor, TrustShieldApiService.kt, AuthStore.kt, models/ApiModels.kt)
+│       │   ├── activities/ (Main router, Login, Registration, Home, Dashboard, LinkDetail, Profile, Settings, Permission...)
+│       │   ├── adapters/, models/, config/BackendConfig.kt, firebase/FirebaseService.kt, ui/theme/ (Compose theme, mostly unused)
+│       └── res/layout/*.xml ............. XML screens (Home, Dashboard, LinkDetail, Login, Registration, Permission, Profile...)
+├── backend/ ............................. PYTHON BACKEND
+│   ├── app.py ........................... ALL HTTP routes + case vault functions (PC)
+│   ├── security.py ...................... tokens, auth decorators, rate limit, lockout, safe errors (PC, new)
+│   ├── evidence_seal.py ................. HMAC sealing of forensic cases (PC, new)
+│   ├── db_config.py ..................... single DB config; production requires DB_HOST/DB_PASSWORD (PC, new)
+│   ├── phishing_feed.py ................. imports PhishTank/URLhaus/OpenPhish into Postgres table phishing_links; Tier-0 lookup (PC)
+│   ├── good_domain_checker.py ........... VirusTotal reputation client + cache + rate limiter (PC)
+│   ├── brand_verification.py ............ Clearbit-based brand verification; uses SQLAlchemy (partly legacy)
+│   ├── database.py, models.py, schemas.py  SQLAlchemy models (User, LinkScan, ScanFeature, ForensicCase) - mostly legacy
+│   ├── init_db.py, fix_database.py, migrate_domains.py, seed_brands.py, view_database.py ... setup/maintenance scripts
+│   ├── sandbox_analyzer.py, advanced_sandbox.py, good_domain_checker (old), server.js ... LEGACY / UNUSED
+│   ├── gunicorn.conf.py ................. 1 worker, gthread, 8 threads, 120s timeout
+│   ├── requirements.txt, .python-version (3.11.9)
+│   ├── core_engine/
+│   │   ├── link_threat_pipeline.py ...... link pipeline orchestrator (PC)
+│   │   ├── url_heuristics.py ............ stage-1 URL rules (PC)
+│   │   ├── threat_db.py ................. SQLite threat cache + OpenPhish/URLhaus sync (PC)
+│   │   ├── sandbox_engine.py ............ Selenium Chromium sandbox + HTTP DOM fallback + RDAP age (PC)
+│   │   ├── final_decision_engine.py ..... fusion + hard overrides + floors + ML integration (PC)
+│   │   ├── url_safety.py ................ SSRF guard (PC, new)    htmlsafe.py ... safe HTML parsing (PC, new)
+│   │   ├── unified_email_pipeline.py .... email orchestrator (PC)   email_forensics.py ... headers/SPF/DKIM/DMARC (PC)
+│   │   ├── geo_tracer.py, whois_intel.py, attachment_analyser.py, bec_nlp_analyser.py, graph_correlation.py,
+│   │   │   campaign_manager.py, report_generator.py (PDF)
+│   │   ├── ml_engine.py, meta_classifier.py ... LEGACY ML (imported, never executed in the live path)
+│   │   ├── trained_models/meta_model.pkl  legacy RandomForest on 9 hand-typed rows (UNUSED)
+│   │   └── test_*.py ................... older tests that need live network/DNS
+│   ├── ml/ .............................. NEW ML subsystem (README.md inside explains usage)
+│   │   ├── features.py (single feature source), datasets.py, collect_dataset.py, trainlib.py,
+│   │   │   train_lexical.py, train_page.py, model_runtime.py, evaluate_live.py, requirements-train.txt
+│   │   └── data/ (git-ignored: raw feeds, pages.jsonl, eval_report.json)
+│   └── tests/ ........................... 144 pytest tests (security, pipeline, forensics, ML); conftest.py isolates DB/env
+├── frontend/ ............................ SOC portal (index.html, app.js) (PC)
+├── chrome_extension/ .................... MV3 extension (manifest, content.js, popup.*)
+├── docs/ ................................ GitHub Pages download page + debug APK
+├── images/ .............................. README screenshots (step_*.png, test_*.png)
+└── apk/ ................................. committed debug/release APKs (binary in git)
+
+Local-only, untracked files in repo root (not part of the product): InShot_*.mp4, Linkdin.eml, STRIKERS-2.pdf, image.png.
+
+
+================================================================================
+5. APPLICATION FLOW
+================================================================================
+5.1 FIRST RUN (Android)
+  1. MainActivity (activities/MainActivity.kt) routes: user_id + is_logged_in + auth token present -> Home, else Login.
+  2. Registration: POST /api/auth/register (name, last_name, email, phone_number, 4-8 digit PIN) -> user created; user returns to Login.
+  3. Login: POST /api/auth/login -> {id,name,email,phone_number,token}. App saves user fields + token (SharedPreferences, AuthStore).
+  4. HomeActivity checks Notification Listener access; if missing -> PermissionActivity (guides user; README explains sideload
+     "Allow restricted settings" step). Asks POST_NOTIFICATIONS.
+5.2 REAL-TIME LINK INTERCEPTION (core feature)
+  1. Android delivers a notification to NotificationListener (service bound with notification-listener permission).
+  2. LinkExtractor/UrlNormalizer pull URLs from notification text (and URLSpans in text lines).
+  3. LinkAnalyzer Tier 1 (on device, instant): Official Domain Registry (VERIFIED_OFFICIAL -> SAFE, BRAND_ABUSE -> DANGEROUS),
+     legacy trusted whitelist -> SAFE, rule checks (IP host, typosquatting via Levenshtein-style similarity, homograph, long URL,
+     many hyphens, shorteners, phishing keywords, subdomain flooding, odd port). Unknown domain => SUSPICIOUS "needs Tier 3".
+  4. If Tier 1 = DANGEROUS -> alert immediately + record to backend and stop.
+  5. Tier 2: PhishingDomainCheckerFirebase.checkDomain(url): local cache of Firebase "phishing_domains" (DANGEROUS/SUSPICIOUS/SAFE).
+  6. LinkScanRecorder POSTs /api/links/scan (user token; url, risk_level, reasons, verdict, source_app). The SERVER re-analyses:
+     Tier-0 Postgres phishing DB match -> DANGEROUS; else runs the full server pipeline (section 7); stores the result in link_scans.
+  7. If backend says DANGEROUS where device said otherwise, app raises an alert. SandboxChecker (/api/sandbox-check) is the explicit Tier 3 call.
+  8. History: HomeActivity/DashboardActivity call GET /api/links/history/<user_id> (Bearer). LinkDetailActivity calls /api/links/explain.
+5.3 EMAIL FORENSICS (portal)
+  1. Analyst opens /portal, uploads .eml -> POST /api/forensics/analyze-eml (multipart).
+  2. unified_email_pipeline.analyze_email_pipeline(eml_bytes) runs steps A-K (section 18).
+  3. Server generates case_id "TSF-<16 hex>", seals (HMAC), INSERTs into forensic_cases, returns dossier + integrity block.
+  4. Portal renders summary, headers, route map (Leaflet), IOC list, attack graph, evidence vault, timeline, report.
+  5. Export: POST /api/forensics/export-pdf {case_id} -> PDF built from the stored sealed case.
+  6. Verification: POST /api/forensics/verify-hash (case id or SHA-256) and /verify-file (re-hash an uploaded file).
+5.4 CHROME EXTENSION
+  1. content.js scrapes subject/sender/body/links from an open webmail page; popup.js sends POST /api/extension/analyze
+     (tries local http://127.0.0.1:8000 then cloud https://trust-sheild.onrender.com).
+  2. Backend synthesises a minimal RFC-5322 message (no real transport headers), runs the same email pipeline, stores a case.
+  3. Extension opens /portal/ with the case id; portal loads GET /api/forensics/case/<id>.
+5.5 DATA COLLECTION / TRAINING (developer workflow)  see section 7 and backend/ml/README.md.
+
+
+================================================================================
+6. FEATURES  (status brutally stated)
+================================================================================
+F1  Notification link interception (Android) ......... REAL. Needs sideloading + "restricted settings" + notification access.
+F2  On-device Tier-1 rules ........................... REAL (LinkAnalyzer.kt). Brand list synced from backend; hardcoded trusted list also exists.
+F3  Firebase phishing-domain list (Tier 2) ........... REAL if Firebase project + google-services.json are configured (file is git-ignored; template only).
+F4  Server link pipeline ............................. REAL (section 7). Quality: see section 14 (earlier live test: weak on new links without ML).
+F5  ML classifier (lexical + page) ................... CODE COMPLETE, NOT TRAINED. Planned first training: developer-run.
+F6  Real browser sandbox ............................. PARTIAL. Works wherever Chromium exists (local, Docker). On Render: HTTP-only fallback.
+F7  VirusTotal reputation ............................ PARTIAL. Requires key; free-tier limits; cached 24h in SQLite.
+F8  Manual link scan in app (Home screen) ............ REAL.
+F9  Scan history & statistics (Dashboard, MPAndroidChart) ... REAL (uses /api/links/history).
+F10 AI "explain" summary per link .................... PARTIAL/MOCK: text is produced by a deterministic template (generate_deterministic_summary),
+                                                        not by an LLM. Gemini path exists but is never enabled.
+F11 Live Threat Simulation (Green-API WhatsApp) ...... REMOVED this session (code, credentials default, endpoint, Android card deleted).
+F12 Email forensics (.eml): headers, SPF/DKIM/DMARC .. REAL (rewritten this session; tri-state results).
+F13 Route map / IP geolocation ....................... REAL, depends on ipwho.is / ip-api.com availability + free-tier limits.
+F14 WHOIS / RDAP domain intelligence ................. REAL (RDAP over HTTPS only; port-43 WHOIS removed).
+F15 BEC / NLP text analysis .......................... PARTIAL: regex/keyword rules in bec_nlp_analyser.py; no transformer model is installed.
+F16 Attachment risk analysis ......................... REAL (filename/MIME/extension rules, RTLO, sha256); no malware scanning of payloads.
+F17 Graph correlation & campaign grouping ............ PARTIAL: in-memory only (lost on restart), global (not per tenant), ingest only incidents scoring >= 40.
+F18 Evidence vault: seal, verify hash, verify file ... REAL after this session; seal key = EVIDENCE_SIGNING_KEY (or SECRET_KEY).
+F19 PDF dossier export ............................... REAL; built from stored case; prints integrity status as stored (no hardcoded legal claims).
+F20 Chrome extension ................................. PARTIAL: works against hosted/local backend; scraping selectors are fragile; no auth token support (anonymous endpoint, rate-limited).
+F21 "Live Attack Studio" modal in portal ............. PARTIAL/MOCK-LIKE: demonstration generator in frontend; behaviour not verified in this review.
+F22 Auth (phone + PIN, bearer token) ................. REAL. No password reset, no refresh tokens, no email verification.
+F23 Admin phishing import / feed import .............. REAL, requires X-Admin-Key (ADMIN_API_KEY); disabled if unset.
+F24 Link Gate (open-link middleware) ................. PLANNED. NOT IMPLEMENTED.
+F25 Consumer portal / Organization console ........... PLANNED.
+F26 Play Store release ............................... PLANNED (research done: notification listener allowed with disclosure + data safety + privacy policy).
+
+Endpoint-level detail for each feature is in section 10.
+
+
+================================================================================
+7. AI / ML / NEURAL SYSTEM  (MOST IMPORTANT SECTION)
+================================================================================
+SUMMARY OF WHAT IS AI vs RULES
+  - Server link verdict TODAY (no model files present): 100% rules, heuristics, reputation lookups and a weighted formula. NOT ML.
+  - Email verdict: rules + weighted additive scoring; BEC "NLP" is regex/keyword rules. NOT ML.
+  - New ML stage: LightGBM models, code complete, UNTRAINED (no .joblib exists).
+  - LLM (Gemini/Groq/OpenAI): referenced but never invoked in the live path.
+  - Legacy RandomForest "meta_classifier": trained on 9 hand-typed rows, imported but never called. UNUSED. Do not claim it.
+
+7.1 LINK PIPELINE (backend/core_engine/link_threat_pipeline.py :: LinkThreatPipeline.analyze_url)
+  INPUT: URL string (validated http/https, <=2048 chars, no whitespace) -> OUTPUT dict:
+         {url, threat_score 0-100, verdict, analysis_complete, summary, telemetry{...}}.
+  Stage 1  Heuristics (url_heuristics.parse_url_heuristics): raw-IP host (+45), '@' userinfo spoofing in the authority (+40),
+           brand keyword inside subdomain while root differs (+50), >=3 stacked subdomains (+25), Shannon entropy of URL >4.5 (+20),
+           URL length >120 (+10); score capped at 100; flags list. Brand list 28 keywords; short brands use token boundaries.
+  Stage 2  Threat DB (threat_db.ThreatIntelDB.check_indicator): SQLite table malicious_indicators(indicator PK, source, date_added);
+           keys tried: full URL, host, host without www, host+path, registered domain (registered domain skipped for brand
+           domains and user-content hosts). Hit => score 100, instant block. Auto-sync from OpenPhish (and URLhaus if URLHAUS_AUTH_KEY)
+           when empty or older than 12 h (background thread, ENABLE_THREAT_SYNC). Max ~1500 records per sync.
+  Stage 2.5 Fast path + VirusTotal:
+           BRAND_FAST_PATH_DOMAINS (64 brand registrable domains) => score 0, skip sandbox, "LEGITIMATE / CLEAN".
+           USER_CONTENT_HOSTS (~100 entries: docs.google.com, sharepoint.com, github.io, blogspot.com, t.me, shorteners, and free hosts such as
+           vercel.app, pages.dev, netlify.app, onrender.com ...) are NEVER auto-safe (exact host and any subdomain). The free-host group was
+           added late in this session after a review found vercel.app/pages.dev were missing (their platform rank would have vouched for evil subdomains). VirusTotal v3 /domains/<d>: popularity rank <100k => risk 0, <500k => 10;
+           >=2 malicious engines => risk 95 (vt_malicious). Cache: 24 h definitive / 5 min errors, SQLite backend/data/vt_cache.db;
+           client limiter 4/min and 500/day; HTTP 429 never cached (60 s backoff). timeout 2 s.
+  Stage 3  Sandbox (sandbox_engine.VirtualSandboxAnalyzer.analyze_link_in_sandbox):
+           a) SSRF guard url_safety.assert_public_url (scheme http/https only, no credentials, resolve DNS, every address must be
+              public/global; applied to the initial URL and each redirect hop in the HTTP path).
+           b) Domain age via RDAP (rdap.org), 3 s timeout, cached; <14 d => risk 90, <30 d => 60; unknown => -1 (no signal).
+           c) If Chrome available (not when env RENDER/DYNO/FORCE_CLOUD_SANDBOX set): Selenium headless Chromium with stealth,
+              page_load_timeout 4 s, +0.5 s wait; extracts password inputs, forms and their action targets, hidden iframes,
+              title/brand mismatch, brand impersonation; stores page HTML (<=400 KB) for ML features.
+              Else/ on error: HTTP "Cloud DOM sandbox": manual redirect following (<=5 hops, each re-validated), 5 s budget,
+              1.5 MB body cap, HTML parse (no JavaScript executed). JS-built login forms are INVISIBLE in this mode.
+           d) Detections: password field on non-brand domain, form action to another registered domain, exfiltration hosts
+              (api.telegram.org, discord.com, discordapp.com, formspree.io, formcarry.com, emailjs.com, webtooid.com, pastebin.com, raw IPs,
+              https page posting to http), hidden iframes (<=1px or display:none), brand impersonation vs an 11-brand list
+              (word-boundary keyword match in title/meta/body), title mismatch (real brand names only, requires credential form).
+           e) sandbox_threat_score additive (password+risk 45, external form 40, exfiltration 55, brand impersonation 50,
+              new domain 35, title mismatch 30, redirect 20, hidden iframe 25; capped 100). Unreachable => 40.
+  Stage 4  ML (ml/model_runtime.ModelRuntime.score)  -- see 7.2. Returns None if no artifacts => rules continue.
+  Stage 5  Fusion (final_decision_engine.FinalDecisionEngine.evaluate):
+           Hard overrides (first match wins): known DB match 100; exfiltration+password 100; brand impersonation+password 100;
+           brand impersonation+external form 95; domain<14d + password 90; VT>=90 + password 95; VT>=90 alone 90 (VT_MALICIOUS_FLOOR).
+           Else weighted sum: sandbox 0.30, heuristic 0.15, nlp 0.20 (0 for links), domain-age 0.15, VT 0.10 (default VT=35),
+           typosquat flag 0.10 (75 if the heuristic "brand in subdomain" fired) + boosters (brand imp +45, exfil +45, external form +35,
+           password-with-risk +30, title mismatch +25, entropy +15, hidden iframe +20).
+           If ML present and no hard override: threat_score := ml.score (monotonic map of probability; see 7.2).
+           Floors (raise only): raw-IP host with credential-style path or non-standard port 60; brand-in-subdomain 70; '@' spoof 65.
+           Incomplete analysis (sandbox unreachable or blocked): analysis_complete=False; score floored to 50 only if a risk signal exists
+           (domain<30d, heuristic flags, typosquat flag).
+           Verdict: >=80 "CRITICAL FRAUD / PHISHING", >=50 "SUSPICIOUS", else "LEGITIMATE / CLEAN".
+           App mapping (app.py to_client_verdict): CRITICAL->DANGEROUS, SUSPICIOUS->SUSPICIOUS, else SAFE.
+           Explanation text: deterministic 3-bullet template (Threat Summary / Key Forensic Evidence / Recommended Action), plus an ML line.
+  Fallbacks: no VT key -> VT stage skipped (default 35); VT 429 -> neutral; sandbox failure -> HTTP fallback -> unreachable score 40;
+             ML missing/error -> rules; DB errors -> app keeps client verdict as hint with tier "CLIENT_ONLY".
+
+7.2 NEW ML SUBSYSTEM (backend/ml/)  -- STATUS: UNTRAINED
+  Models (two, both LightGBM LGBMClassifier via scikit-learn API, class_weight="balanced", early stopping on val logloss,
+          up to 3000 trees, lr 0.05 (0.03 if <20k rows), leaves 63 (15 small), subsample .8, colsample .8, lambda 1, seed 7):
+   (1) LEXICAL model  artifact: core_engine/trained_models/lexical_model.joblib (+ .json report, lexical_train_urls.npy)
+       Input: 28 HOST-LEVEL features from ml/features.LEXICAL_HOST_FEATURES (host length, hyphens, digits, entropy, subdomain count/length,
+              TLD id/abused TLD, scam keywords in host, brand-in-unrelated-domain (58-brand map), free-hosting flag, shortener, token stats, punycode, IP host...).
+              Path/query/length/scheme features are DELIBERATELY excluded (dataset-shortcut risk: benign sets are bare home pages).
+              A leading "www." is stripped before features.
+       Training data (ml/datasets.py, all public, label 1 = malicious phishing OR malware): PhishTank online-valid CSV (~70k),
+              URLhaus csv_online (~27k), Phishing.Database ACTIVE (~789k; capped 70k), OpenPhish (~300), PhiUSIIL phishing (~100k; capped 70k);
+              benign: PhiUSIIL legitimate (~135k), Tranco top-1M home pages (90k sample), plus benign deep links from collected pages.
+              Per-site cap 6 URLs per class; URLs/sites present in collected pages.jsonl are held out.
+       Split: deterministic by site (md5 of group key): 70/15/15 train/val/test, no site on two sides.
+       Calibration: isotonic regression on validation. Thresholds: t_high = lowest probability whose DANGEROUS precision >= 99% at an assumed
+              5% real-world malicious prevalence (benign reweighted); t_low = highest probability below which <=2% of malicious fall.
+              Between t_low and t_high => SUSPICIOUS.
+   (2) PAGE model  artifact: page_model.joblib  (FINAL ML stage)
+       Input: 28 host features + 44 page features (ml/features.page_features: forms, password inputs, form action external/empty/POST,
+              scripts (inline/external), links (external ratio, null links), iframes (hidden), images, meta refresh, JS redirect,
+              title (length, login words, brand, brand mismatch), body text length, login wording, external favicon, right-click blocked,
+              obfuscation calls (eval/atob/unescape/fromCharCode/document.write), SPA-shell flag, redirects, host change, domain age,
+              new-domain flag, sandbox flags, copyright-brand mismatch, unique external domains) + lexical probability (out-of-sample).
+              Excluded shortcut features: is_https, ends_with_slash, final_is_https. Unreachable pages are NOT used for training;
+              they fall back to the lexical model at runtime.
+       Training data: backend/ml/data/pages.jsonl produced by ml/collect_dataset.py: visits URLs in real Chromium INSIDE DOCKER, stores
+              sandbox features + zlib/base64 HTML (<=250 KB). Malicious mix: PhishTank 40%, Phishing.Database 25%, OpenPhish 20%, URLhaus 15%;
+              benign: Tranco stratified over rank buckets 1-1k, 1k-10k, 10k-100k, 100k-1M plus up to N same-site deep links.
+              Measured collection speed: ~1,000 pages/hour with 4 browsers.
+  Runtime (ml/model_runtime.py): env ENABLE_ML (default true), TRUSTSHIELD_ML_DIR override. If page fetched + page model + lexical model:
+       page model; else lexical model; else None. Output: probability, band (SAFE if p<=t_low, DANGEROUS if p>=t_high, else SUSPICIOUS),
+       score (piecewise-linear so that bands align with the 50/80 verdict cut-offs: <=t_low -> 0..49, between -> 50..79.9, >=t_high -> 80..100),
+       model name/version, lexical probability, top positive SHAP-style contributions (LightGBM pred_contrib) mapped to readable labels.
+  Evaluation: ml/evaluate_live.py pulls the freshest OpenPhish/PhishTank links and unseen Tranco sites (excluding training URLs/sites), runs the full
+       pipeline (threat DB and VirusTotal OFF by default) and prints band percentages, misses, false alarms, latency.
+  Dry-run evidence from development (NOT final metrics): 8,000-row lexical dry run gave ROC-AUC ~0.86; 303-page toy page model gave AUC 0.88
+       versus 0.74 for lexical alone on 66 test pages (22 malicious). Statistically weak; real numbers require the full run.
+  Earlier live probe (rules only, empty threat DB, no VirusTotal, HTTP sandbox): 24 live OpenPhish URLs -> only 2 flagged;
+       12 legitimate sites -> 2 falsely flagged (mozilla.org, news.ycombinator.com). This is the baseline the ML work targets.
+  Known ML risks: dataset artefacts (path/https/www), cloaking phishing pages, label noise (URLhaus includes malware), covariate shift between
+       feed pages and real traffic, small page set when only a few thousand pages are collected.
+
+7.3 LEGACY / UNUSED AI
+  - core_engine/ml_engine.py MultiModalFusionEngine: imports Levenshtein, optional HuggingFace "ealvaradob/bert-finetuned-phishing"
+    (only if transformers installed - it is NOT in requirements), GoodDomainChecker, EnsembleMetaClassifier. Imported by app.py, never instantiated.
+  - core_engine/meta_classifier.py EnsembleMetaClassifier: RandomForestClassifier(n_estimators=10) trained on 9 hand-typed rows over
+    [nlp_score, typosquat_risk, sandbox_threat_score, has_password]; saved as trained_models/meta_model.pkl. UNUSED.
+  - final_decision_engine.generate_llm_incident_summary(): Gemini 2.5 Flash (timeout 2 s) when fast_mode=False; no caller passes False => never runs.
+    GROQ_API_KEY / OPENAI_API_KEY are read but no active code path uses them. No prompts are active in production.
+  - bec_nlp_analyser.py: 5-class taxonomy (LEGITIMATE/SUSPICIOUS/IMPERSONATED/PHISHING/BEC_FRAUD) from keyword/regex signals; BEC_FRAUD >=60 needs a
+    payment/invoice signal plus a second category (urgency/authority/credentials); single category capped 30. No embeddings, no vector DB, no RAG.
+
+7.4 DECISION ABOUT CLAIMS
+  Safe to say: layered detection (feeds + reputation + behaviour analysis), explainable evidence, sealed forensic records, ML stage built with
+  honest held-out evaluation. NOT safe to say until trained and measured: "ML-powered", any accuracy/recall number, "detects any new link".
+
+
+================================================================================
+8. DATA MODEL
+================================================================================
+PostgreSQL tables (runtime SQL uses raw psycopg)
+  users ................ id PK, name, last_name, email UNIQUE, phone_number UNIQUE, pin (bcrypt hash, 60 chars), created_at, updated_at.
+                         DDL IS NOT IN THE REPOSITORY (only SQLAlchemy model in models.py: pin declared String(10) - a bcrypt hash needs >=60).
+                         Actual column width in the live database: UNKNOWN - NOT DETERMINABLE FROM AVAILABLE PROJECT FILES.
+  link_scans ........... id PK, user_id FK users.id, url, risk_level, reasons TEXT, verdict TEXT, analyzed_at;
+                         added at app start by ensure_link_scan_columns(): source_app VARCHAR(100), threat_score FLOAT,
+                         analysis_complete BOOLEAN; index (user_id, analyzed_at DESC). Base DDL: UNKNOWN (not in repo).
+  scan_features ........ id, scan_id FK, feature_name, feature_value, extracted_at (SQLAlchemy model only; not used by API).
+  forensic_cases ....... case_id VARCHAR(50) PK ("TSF-" + 16 hex), evidence_hash VARCHAR(64) (SHA-256 of ORIGINAL uploaded bytes),
+                         verdict, threat_score, sender, subject, dossier_json TEXT (canonical JSON, WITHOUT integrity block),
+                         raw_eml TEXT (legacy), raw_eml_bytes BYTEA (original bytes), created_at TIMESTAMP,
+                         owner_user_id INTEGER NULL, signature VARCHAR(64) (HMAC-SHA256 hex), sealed_at VARCHAR(40) (exact signed timestamp).
+                         Indexes on hash, created_at, owner. Insert-only in code.
+  phishing_links ....... id, url UNIQUE (<=2048), domain, threat_type, source, confidence, date_added, last_verified, is_active. (init_db.py)
+  phishing_feed_sources  id, name UNIQUE, url, last_fetch, next_fetch, is_active (created, not used by code paths seen).
+  official_brands ...... id, name UNIQUE, primary_domain, aliases JSONB, trusted_subdomains JSONB, trusted_cdns JSONB, date_added.
+SQLite (runtime, git-ignored): threat_intel.db {malicious_indicators(indicator PK, source, date_added), sync_meta(key,value)};
+                               vt_cache.db {vt_cache(domain-keyed JSON + expiry)}.
+Firebase Realtime DB: node phishing_domains (schema UNKNOWN - read by Android PhishingDomainCheckerFirebase.kt).
+
+KEY JSON STRUCTURES
+  Login response: {id, name, email, phone_number, token, message}. Token = itsdangerous signed {"uid": <int>}, salt "trustshield-auth-v1", max age 30 days.
+  Link scan request: {url, risk_level, reasons, verdict, source_app?, user_id?(must equal token user)}; response adds id, analyzed_at, threat_score,
+                     analysis_complete, tier_0_match, tier_analyzed (CLIENT_ONLY | TIER_0 | V2_LINK_PIPELINE).
+  Link pipeline result: {url, threat_score, verdict, analysis_complete, summary, telemetry{heuristic_flags, known_db_match, sandbox_has_password,
+                     external_form_action, suspicious_exfiltration, domain_age_days, brand_impersonation, title_mismatch, hidden_iframes,
+                     vt_risk_score, hard_override_triggered, override_reason, heuristic_floors, rule_score, ml_used, ml_probability, ml_band,
+                     ml_model, ml_model_version, ml_lexical_probability, ml_signals, analysis_complete}}.
+  Email dossier (unified_email_pipeline): verdict, overall_threat_score, metadata{from,to,subject,reply_to,reply_to_mismatch,from_domain,...},
+                     authentication{spf_*,dkim_*,dmarc_*, *_state, dmarc_policy, dkim_signatures}, route_map[{hop_number,ip,city,country,lat,lon,
+                     isp,asn,is_proxy,is_hosting,is_suspicious_proxy,geo_status}], origin_intelligence, link_investigation[{url,threat_score,verdict,
+                     analysis_depth,...}], links_total/links_analyzed/links_skipped, threat_attribution{type,...}, nlp_analysis, whois_intelligence,
+                     attachment_analysis, evidence_hash_sha256/evidence_hash/raw_size_bytes, analysis_complete, analysis_errors, risk_factors,
+                     graph/campaign info; the API adds case_id and integrity{status VERIFIED|TAMPERED|NOT SEALED, signature, sealed_at, algorithm}.
+  Training record (pages.jsonl line): {url,label,source,ts,elapsed,status ok|blocked|unreachable|error,final_url,sandbox{...},html_gz_b64}.
+DATA FLOW: Android -> /api/links/scan -> pipeline -> link_scans; portal/extension -> /api/forensics/* -> pipeline -> forensic_cases (+ in-memory graph).
+
+
+================================================================================
+9. DATABASE
+================================================================================
+  Technology: PostgreSQL via psycopg 3 (no pooling; one connection per request via db_cursor() context manager; connect_timeout 8 s,
+              env DB_CONNECT_TIMEOUT). Config: backend/db_config.py reads DB_HOST, DB_PORT(5432), DB_NAME(trustshield_db), DB_USER(postgres),
+              DB_PASSWORD. In production (RENDER / FLY_APP_NAME / RAILWAY_ENVIRONMENT / TRUSTSHIELD_ENV=production) DB_HOST and DB_PASSWORD are mandatory.
+  Migrations: NONE (no Alembic). Schema evolves via ALTER TABLE ... IF NOT EXISTS at app start (forensic_cases, link_scans) and ad-hoc scripts
+              (init_db.py, fix_database.py, migrate_domains.py, seed_brands.py).
+  CRUD: users INSERT/SELECT; link_scans INSERT/SELECT/UPDATE (explain scoped to owner); forensic_cases INSERT + SELECT only;
+        phishing_links UPSERT (savepoint per row) / SELECT; official_brands SELECT (and SQLAlchemy writes in brand_verification.py).
+  Persistence: forensic cases durable in Postgres; graph and campaign data in process memory only; rate limits/lockouts in process memory.
+  Seed/mock data: seed_brands.py seeds official_brands; Android has hardcoded brand/trusted lists as offline fallback.
+  Known limitations: users/link_scans DDL missing from repo; two DB access styles (psycopg and SQLAlchemy); legacy scripts contain default
+  credentials (postgres/postgres) for local use; local dev .env currently points at the cloud database (tests override this).
+  NOTE: on first import during this session the app executed additive ALTER TABLE statements against that cloud database (nullable columns only).
+
+
+================================================================================
+10. API DOCUMENTATION   (backend/app.py; base URL = hosted Render URL or local http://<ip>:8000)
+================================================================================
+Common: JSON; auth = "Authorization: Bearer <token>"; errors = {"error": "..."} (500s add "reference" id; no stack traces).
+Rate limits are per process (in memory). CORS origins from CORS_ORIGINS + chrome-extension://*. Max upload MAX_UPLOAD_BYTES (10 MB).
+Body size/URL limits: URL <=2048, no whitespace/CRLF, http(s) only.
+
+GET /, /health, /healthz, /api/health ......... health JSON. Public.
+GET /portal, /portal/, /portal/<file>, /app.js, /index.html ... serves frontend/. Public, no-cache.
+GET /api/brands/official ....................... official brand list for the app (name, primaryDomain, aliases, trustedSubdomains, trustedCdns). Public, 30/min.
+POST /api/auth/register ........................ body {name,last_name,email,phone_number,pin(4-8 digits)}; 201 {id,...,token}; 400 validation; 409 duplicate; 5 per 10 min per IP.
+POST /api/auth/login ........................... body {phone_number,pin}; 200 {id,...,token}; 401 uniform "Invalid phone number or PIN"; 429 after 5 failures/15 min per phone+IP; 20/min/IP.
+GET  /api/auth/me .............................. Bearer; profile.
+POST /api/links/scan ........................... Bearer, 30/min/user. See section 8. Calls phishing_importer (Tier 0, Postgres) then run_link_pipeline (cap MAX_CONCURRENT_ANALYSES, 20 s wait -> else CLIENT_ONLY).
+POST /api/links/explain ........................ Bearer, 20/min/user; body {scan_id|url}; returns stored or freshly generated summary (owner-scoped update).
+GET  /api/links/history/<user_id> .............. Bearer; user_id must equal token user (403 otherwise); query limit(<=2000), offset, verdict, q; latest scan per URL.
+POST /api/sandbox-check ........................ Bearer, 30/min/user; body {url}; returns {verdict SAFE|SUSPICIOUS|DANGEROUS, confidence, details, summary, analysis_complete,...}; 503 when busy.
+POST /api/phishing/check ....................... public, 60/min; {url} -> {is_phishing, threat_type, source}.
+GET  /api/phishing/stats ....................... public counts.
+GET  /api/phishing/samples ..................... admin key (X-Admin-Key).
+POST /api/phishing/import, /api/phishing/import-feeds ... admin key; <=5000 URLs per request.
+POST /api/forensics/analyze-eml ................ optional Bearer (sets case owner), 10/min/IP; multipart "file" or raw body; returns dossier + case_id + integrity.
+GET  /api/forensics/case/<case_id> ............. public capability lookup (id format TSF-<16 hex> only; legacy 6-digit ids -> 404), 60/min; no raw evidence returned.
+GET  /api/forensics/case/<case_id>/evidence .... Bearer owner only; returns original bytes (.eml).
+GET  /api/forensics/cases ...................... Bearer; caller's own cases.
+POST /api/forensics/verify-hash ................ {query: case id or SHA-256}; recomputes the seal; returns integrity_status (VERIFIED/TAMPERED/NOT SEALED); 30/min.
+POST /api/forensics/verify-file ................ multipart file; hashes and looks up; 20/min.
+POST /api/forensics/export-pdf ................. optional Bearer; {case_id} or multipart .eml (unsealed); returns PDF; 10/min.
+GET  /api/graph, POST /api/graph/shared-infra .. Bearer; GLOBAL in-memory graph (not per user) - see limitations.
+GET  /api/campaigns, /api/campaigns/search, /api/campaigns/<id> ... Bearer; global in-memory campaigns.
+POST /api/forensics/nlp-analyze ................ public, 20/min; {subject, body, sender}.
+GET|POST /api/forensics/whois .................. public, 20/min; domain via query or JSON (RDAP).
+POST /api/forensics/attachment-check ........... public, 10/min; multipart .eml.
+POST /api/extension/analyze .................... optional Bearer, 10/min/IP; {subject, sender, body, links[]} -> synthetic .eml -> pipeline -> stored case.
+REMOVED: POST /api/simulate/run (Green-API demo).
+Internal functions: persist_forensic_case, retrieve_forensic_case, retrieve_case_by_hash, fetch_case_raw_bytes, list_forensic_cases_for_user,
+  run_link_pipeline (semaphore), to_client_verdict, normalize_input_url.
+External APIs called: VirusTotal v3, rdap.org (+ IANA bootstrap), ipwho.is, ip-api.com (HTTP), OpenPhish, PhishTank, URLhaus, Clearbit autocomplete,
+  Firebase RTDB (from Android only).
+
+
+================================================================================
+11. CONFIGURATION & ENVIRONMENT
+================================================================================
+Server variables (names only; real values in .env are [SECRET PRESENT - VALUE REDACTED])
+  TRUSTSHIELD_ENV ........ "production" forces strict config (also implied by RENDER / FLY_APP_NAME / RAILWAY_ENVIRONMENT). Optional.
+  SECRET_KEY ............. REQUIRED in production; signs bearer tokens; dev falls back to a random per-process key (tokens die on restart). security.py
+  EVIDENCE_SIGNING_KEY ... HMAC key for case seals; falls back to SECRET_KEY. Optional but strongly recommended (separate key).
+  ADMIN_API_KEY .......... enables admin endpoints via X-Admin-Key; unset = disabled.
+  DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_CONNECT_TIMEOUT ... Postgres. DB_HOST/DB_PASSWORD required in production.
+  VIRUSTOTAL_API_KEY ..... enables VT stage. Optional.            GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY ... optional, unused paths.
+  PHISHTANK_API_KEY ...... optional feed key.                      URLHAUS_AUTH_KEY ... optional (URLhaus API now appears to require a key).
+  CORS_ORIGINS ........... comma list of allowed web origins.      ENABLE_SCHEDULER ... "true" starts the 6-hour feed import.
+  ENABLE_THREAT_SYNC ..... default true: auto-sync SQLite threat cache.     ENABLE_ML ... default true.   TRUSTSHIELD_ML_DIR ... model dir override.
+  MAX_UPLOAD_BYTES (10 MB), MAX_CONCURRENT_ANALYSES (default 4; Docker sets 2), TOKEN_MAX_AGE_SECONDS (30 days), WEB_THREADS (8), PORT.
+  CHROME_BIN, CHROMEDRIVER_PATH ... set in Docker for the real sandbox.   FORCE_CLOUD_SANDBOX ... force HTTP-only sandbox.   RENDER / DYNO ... disable Chrome.
+Android build variables (read from root .env or local.properties by app/build.gradle.kts)
+  BACKEND_ENV (local|hosted), BACKEND_IP, BACKEND_PORT, HOSTED_BACKEND_URL (default https://trust-sheild.onrender.com/) -> BuildConfig.BASE_URL.
+  Defaults are HARDCODED (BACKEND_IP 172.168.68.215, port 8000).
+Android secrets: app/google-services.json (git-ignored; template only) = Firebase project config. [SECRET PRESENT - VALUE REDACTED if configured]
+Stale keys present in local .env (no longer used): GREEN_API_URL / GREEN_API_ID_INSTANCE / GREEN_API_TOKEN_INSTANCE (Green-API removed).
+  The old Green-API token is still in git HISTORY and must be rotated: [SECRET PRESENT - VALUE REDACTED].
+
+
+================================================================================
+12. DEPENDENCIES
+================================================================================
+  Production (backend/requirements.txt): see section 2. Training-only: pandas, pyarrow (ml/requirements-train.txt).
+  Dev/test: pytest (installed ad hoc, not listed), junit/espresso (Android).
+  Pins/old: Flask 2.3.2, selenium 4.15.2, requests 2.31.0 (installed 2.32.5), beautifulsoup4 4.12.2 - older versions; no vulnerability audit has been run.
+  Mixed pin styles (== vs >=) make builds non-reproducible: psycopg, SQLAlchemy, scikit-learn, Levenshtein, google-genai, dnspython, dkimpy,
+     reportlab, lightgbm, numpy, joblib, lxml unpinned.
+  Suspicious/unneeded: whois==0.9.7 (different package from python-whois; main code no longer imports it), google-genai (unused path),
+     SQLAlchemy (legacy), scikit-learn at runtime (only legacy RF; calibrator is a scikit-learn IsotonicRegression pickled inside the artifact - so scikit-learn IS
+     needed at runtime once models exist), Levenshtein (legacy).
+  Deployment risks: LightGBM needs libgomp1 (added to Dockerfile; Render native Python image may lack it); lxml/numpy wheels fine on 3.11;
+     Chromium only in Docker; Render free tier 512 MB RAM cannot run Chrome; Android: jitpack dependency for MPAndroidChart.
+  Binary files tracked in git: apk/*.apk, docs/TrustShield-debug.apk (large; consider releases instead).
+
+
+================================================================================
+13. DEPLOYMENT
+================================================================================
+  Local backend (Windows dev, no Docker):  cd backend ; pip install -r requirements.txt ; set env vars (.env) ; python app.py   (runs Flask on 0.0.0.0:8000, debug off)
+  Tests: from repo root  PYTHONPATH=backend python -m pytest backend/tests -q   (144 tests, ~90 s; DB/network isolated by conftest.py)
+  Android: open in Android Studio; set BACKEND_ENV/HOSTED_BACKEND_URL in .env; place app/google-services.json; ./gradlew assembleDebug.
+  Render (current prod): Procfile -> "gunicorn --chdir backend -c gunicorn.conf.py app:app" (1 worker, gthread, 8 threads, timeout 120). Free tier sleeps after 15 min
+     (about 50 s cold start). Sandbox is HTTP-only there. Needs env vars above.
+  Docker (new, built successfully once on the dev machine): docker build -t trustshield-backend .   (image python:3.11-slim + chromium + chromium-driver + libgomp1; user uid 10001;
+     CMD gunicorn --chdir backend -c backend/gunicorn.conf.py app:app ; PORT 8080 ; HEALTHCHECK /health ; MAX_CONCURRENT_ANALYSES=2)
+  Fly.io (prepared, not deployed): fly.toml app "trustshield-api", region sin, 1 GB RAM, min 1 machine running, health check /health, ENABLE_SCHEDULER=true.
+  ML workflow commands: see backend/ml/README.md (datasets --prepare; collect_dataset in Docker; train_lexical; train_page; evaluate_live).
+  Ports: 8000 (local), 10000 default in gunicorn.conf.py, 8080 in Docker/Fly.
+  Frontend/backend separation: portal is served BY the Flask app (/portal); the extension and Android call the API directly.
+  Known problems: single gunicorn worker + slow scans share 8 threads; rate limit state per process; Render cold starts; APK must be sideloaded (Play Protect pause);
+     hosted URL spelling "trust-sheild" is hardcoded in extension and Gradle defaults.
+
+
+================================================================================
+14. CURRENT STATE / REALITY CHECK
+================================================================================
+WORKING
+  - Android notification interception + Tier 1/2/3 flow; login/registration with tokens; history/dashboard; alerts.
+  - Server link pipeline (rules path), threat-DB auto-sync (OpenPhish), VirusTotal cache/limiter, SSRF-guarded sandbox, RDAP domain age.
+  - Email forensics: parse, SPF (RFC 7208 subset: ip4/ip6/a/mx/include/redirect/all/exists, 10-lookup limit, 6 s budget), DKIM per-signature verify with d= alignment,
+    DMARC alignment/policy, route geolocation, link analysis (top 12 deep, rest heuristic), WHOIS/RDAP, attachments, BEC text rules, graph/campaign, sealing, PDF.
+  - 144 automated tests passing (security, pipelines, forensics, ML plumbing).
+PARTIALLY WORKING
+  - Sandbox: real browser only outside Render. JS-built phishing forms are invisible to the HTTP fallback.
+  - VirusTotal on free key (quota). Geolocation free tiers. Chrome extension scraping. Graph/campaigns (volatile, global).
+  - ML: pipeline integration done and unit-tested with a toy model; no production model.
+MOCKED / TEMPLATED
+  - "AI explanation" text = fixed template (no LLM). Android demo seeds and some portal demo content (Attack Studio) are illustrative.
+  - Extension submissions use a SYNTHESISED email (no real headers), so SPF/DKIM/route results are not about the real message.
+HARDCODED
+  - Brand lists (Kotlin registry, Python TARGETED_BRANDS 11 brands, ml BRAND_DOMAINS 58, fast-path 64 domains), exfiltration host list, keyword lists,
+    hosted URL, dev IP default, scoring weights and thresholds (constants in final_decision_engine.py), Android trusted-domain list.
+BROKEN / RISKS
+  - users/link_scans DDL absent from repo (cannot rebuild DB from code alone).
+  - Procfile previously forced 2 workers (fixed to single-worker config) - in-process state (rate limits, graph) is NOT shared across workers.
+  - README still describes the removed demo; docs mention "BSA 2023 compliance" style claims in older UI text (portal strings) which are not technically backed.
+  - Android Tier-3 SandboxChecker previously lacked the bearer token (fixed this session); Android release build has minify disabled; no unit tests for Android logic.
+  - Legacy duplicate MainActivity (.MainActivity) and unused Compose theme.
+MISSING
+  - Link Gate, consumer portal, organization console, organization/tenant model, roles, password reset, refresh tokens, Play Store assets/privacy policy.
+  - Real ML artifacts. Per-user isolation of graph/campaigns. Screenshot capture of detonated pages. Visual brand matching.
+UNUSED
+  - ml_engine.py (MultiModalFusionEngine), meta_classifier.py + meta_model.pkl, sandbox_analyzer.py, advanced_sandbox.py, server.js, phishing_feed_sources table,
+    Firebase Auth dependency, Compose UI layer, LLM summary path, GROQ/OPENAI keys, `whois` package.
+TECHNICAL DEBT
+  - app.py is a ~1500-line monolith; psycopg + SQLAlchemy mixed; no migrations; Tailwind CDN in production; 2,500-line single JS file; many emoji print() logs.
+  - Deprecation warnings: tldextract registered_domain, datetime.utcnow.
+
+
+================================================================================
+15. SECURITY
+================================================================================
+Authentication: phone + PIN (4-8 digits, bcrypt cost default), signed bearer token (itsdangerous, 30 days, no revocation/refresh). Token stored in app-private
+  SharedPreferences (not EncryptedSharedPreferences). allowBackup=false.
+Authorization: ownership enforced for history, scans, explain, case evidence, case list. Forensic case READ by id is a capability URL (unguessable 64-bit id, rate-limited).
+  Graph/campaign endpoints require login but data is global across users (cross-tenant leakage) - documented limitation.
+Input validation: URL normaliser, email/phone/PIN validators, header-injection stripping for extension-submitted fields, upload cap 10 MB, list caps.
+SQL injection: all queries parameterised; one f-string SQL fragment uses a fixed two-value order clause.
+SSRF: url_safety guard blocks private/loopback/link-local/multicast/non-http. Residual: DNS-rebinding window (resolve then fetch are separate); Selenium path
+  cannot validate redirects/JS navigations after the first load (isolate Chromium in the container/network).
+XSS: portal builds HTML from API data in JS (innerHTML patterns likely present; full audit NOT performed). PDF text is escaped (reportlab Paragraph markup).
+CORS: restricted origin list + extension; no cookies are used (bearer tokens), so CSRF risk is low.
+Secrets: .env ignored by git; Green-API token remains in git history (rotate); no secret defaults remain in code; production fails fast without SECRET_KEY/DB vars.
+File upload: .eml parsed in memory; attachments are analysed, never executed or stored; HTML parsing hardened with lxml.
+Prompt injection / AI security: no LLM in the active path; BEC rules read untrusted text only for regex matching.
+Data exposure: notification text stays on device; only extracted URLs (plus source app package name) are sent. Server logs include URLs (PII-adjacent).
+Operational: sandbox opens attacker-controlled pages - run in Docker with no host mounts besides ml/data; data collection uses --security-opt no-new-privileges.
+Admin: X-Admin-Key header, constant-time compare; disabled when unset.
+
+
+================================================================================
+16. PERFORMANCE
+================================================================================
+  - Sandbox page load is the slowest step: HTTP fallback up to ~5 s; Selenium ~4-8 s; RDAP up to 3 s (cached). Concurrency capped (4, Docker 2) with 20 s wait.
+  - gunicorn: 1 worker x 8 threads; a burst of scans can queue. Render free tier cold start ~50 s; Android HttpURLConnection read timeout now 30 s.
+  - VirusTotal free tier: 4/min, 500/day (cache helps; popular domains hit fast path first).
+  - ML inference: LightGBM single-row predict is milliseconds; feature extraction for pages ~10-100 ms (BeautifulSoup/lxml). Collection ~1,000 pages/hour per 4 Chromium.
+  - Memory: Chromium ~300-400 MB each; Render 512 MB cannot host it; Docker image large (Chromium).
+  - Portal: single 2,500-line JS file, Tailwind CDN JIT at runtime (slow first paint), Leaflet tiles from third-party providers.
+  - Graph/campaign structures are bounded (LRU 2,000 nodes / 500 campaigns) but volatile.
+
+
+================================================================================
+17. ERROR HANDLING
+================================================================================
+  Backend: handlers wrapped in try/except returning server_error(): logs full exception with a 12-char reference id, returns a generic message. Validation errors 400,
+    auth 401, forbidden 403, lockout/rate-limit 429 (+Retry-After), busy 503. DB writes for forensic cases RAISE on failure (no id is handed out without durable storage).
+  Pipelines: each forensic module's failure is recorded in analysis_errors and sets analysis_complete=False (summary says "analysis incomplete", never silently clean).
+    DNS failures are "indeterminate", not pass/fail. Link pipeline: sandbox error -> HTTP fallback -> unreachable (score 40, analysis_complete False).
+  AI/ML: any ML error returns None and the rules verdict stands. Model/feature-version mismatch disables the artifact with a warning.
+  Android: network errors toast/log; Retrofit retry interceptor (3 tries, 8 s wait on 502/503 for Render cold starts); 401 clears the stored token (user returns to login on next screen);
+    Tier-3 failure returns verdict UNKNOWN (device verdict stands).
+  Logging: stdout via logging + many print statements; HTTP access logs from gunicorn. No central log aggregation, no metrics.
+
+
+================================================================================
+18. IMPORTANT ALGORITHMS / BUSINESS LOGIC
+================================================================================
+  Shannon entropy (url_heuristics.calculate_shannon_entropy; ml/features.shannon_entropy): H=-sum p log2 p; URL entropy >4.5 flags obfuscation/DGA.
+  Brand-in-subdomain: brand keyword appears in a subdomain label while the registrable domain is not that brand (heuristics + ml BRAND_DOMAINS mismatch).
+  SSRF host validation (url_safety): resolve all A/AAAA; reject any non-global address; handle IPv4-mapped IPv6; reject credentials and non-http schemes.
+  SPF evaluator (email_forensics.evaluate_spf): recursive mechanism evaluation with qualifiers, CIDR, macros(basic), 10 DNS lookup limit, depth cap, 6 s budget -> pass/fail/softfail/neutral/temperror/permerror.
+  DKIM alignment: each DKIM-Signature verified separately; aligned if verified d= domain is organisationally aligned with From (relaxed; strict if adkim=s).
+  DMARC: record at From domain (fallback organisational domain); pass if aligned SPF or aligned DKIM; indeterminate on DNS error.
+  Connecting IP vs origin IP: topmost Received with a public IP = connecting_ip (used for SPF); bottom-most public IP = claimed origin (geolocation/attribution; forgeable).
+  Email threat score (unified_email_pipeline Step D): base = max link score if >=70 else half of it; +30 if SPF and DMARC fail (or +15 DMARC only);
+    +35 Reply-To mismatch; +20 anonymised origin (Tor/proxy/hosting); then +BEC (<=20), +WHOIS (<=20), +attachments (<=25); verdict >=80 critical, >=50 suspicious.
+  Threat attribution (classify_threat_attribution): maps auth/origin/metadata/link score into actor types (e.g. spoofed identity, anonymised infrastructure).
+  Campaign fingerprint (campaign_manager): sha256 of origin IP (skipped for shared mail providers) + sender domain + first malicious URL registrable domain;
+    uuid4 ids; ingest only score >=40; LRU cap.
+  Graph correlation: nodes DOMAIN/IP/ASN/URL/EMAIL with edges; D3-format export; shared-infrastructure queries.
+  Evidence sealing (evidence_seal.py): signature = HMAC-SHA256(key, case_id \n evidence_hash \n sha256(canonical_json(dossier)) \n sealed_at).
+  VT rate limiter + TTL cache; threshold selection (ml/trainlib.choose_thresholds, prevalence-weighted precision); ML score mapping (ml_to_score).
+  Grouped deterministic split (md5 of site key % 100). Isotonic calibration. Per-site caps to stop one hosting platform dominating the data.
+
+
+================================================================================
+19. HIDDEN ASSUMPTIONS
+================================================================================
+  - Phishing links arrive in notifications as visible text/URLSpans; many apps hide URLs behind previews, so some links are never seen.
+  - Sideloaded app + user manually grants restricted settings and notification access.
+  - Hosted backend is reachable; cold starts of 50 s are tolerated by Retrofit retries (not by SandboxChecker's 8 s connect timeout on a sleeping server).
+  - A leading "www." and the HTTPS scheme carry no trust signal (stripped/excluded in ML).
+  - Benign = popular (Tranco) or PhiUSIIL legitimate; label 1 includes malware (URLhaus). Assumed real-world malicious prevalence 5% (threshold choice).
+  - "Brand fast path" domains are trusted forever; compromised subpages of those domains are not detected.
+  - Phone numbers are unique identities; PIN is the only secret (4-8 digits).
+  - One gunicorn worker (in-memory state). Single region, single DB.
+  - Email "origin" is the bottom-most public IP in Received headers (can be forged).
+  - Webmail scrape in the extension reflects the displayed message; extension text may be truncated to 50,000 chars; links capped at 50.
+  - Android notification listener runs in the app process; token loaded in TrustShieldApp.onCreate.
+
+
+================================================================================
+20. HACKATHON DEMO FLOW  (HACKERING 2.0, Round 2; staging advice)
+================================================================================
+  SAFEST TO SHOW
+   1. Forensics: open https://<host>/portal -> upload backend/LIVE_COIMBATORE_ATTACK.eml (or Linkdin.eml) -> show verdict, SPF/DKIM/DMARC, route map, IOC list,
+      then Evidence Vault: copy the case id, run verify-hash (shows seal VERIFIED), export PDF. Offline fallback: run backend locally.
+   2. App: install APK, grant permissions, send a link to the phone from another phone (WhatsApp/SMS) -> alert -> open app history shows verdict + source app.
+      (The built-in "Test Demo" button was removed; use a second phone or Telegram/SMS to self.)
+   3. Chrome extension: open a webmail message -> Analyze -> opens the portal case (needs backend reachable).
+  UNSTABLE: first request after Render sleep (50 s); public geolocation APIs (rate limits); VirusTotal free quota; sandbox on Render (HTTP only);
+            extension scraping on layouts it was not tuned for; Attack Studio modal (not verified).
+  DO NOT: rely on live phishing URLs from feeds (often already dead); click "Proceed" on real malicious links; demo Link Gate (does not exist);
+          show the Graph/Campaign tabs without logging in (they now need a token and the portal has no login screen yet).
+  CLAIMS WE CAN MAKE: layered pipeline; notification interception before the click; SSRF-safe analysis; tamper-evident sealed cases with re-verification;
+          SPF/DKIM/DMARC with alignment; no message text leaves the device (only URLs); Docker image with real Chromium sandbox exists; tests: 144 passing.
+  CLAIMS NOT TO MAKE (until done/measured): ML accuracy figures; "detects any new phishing link"; "blocks links when tapped"; Play Store availability;
+          "court-admissible"; real-time browser sandbox on the hosted free tier; multi-tenant organisation console.
+
+
+================================================================================
+21. JUDGE-QUESTION KNOWLEDGE  (answers reflect the actual implementation)
+================================================================================
+Q: Why intercept notifications instead of a browser/DNS filter?
+A: Zero-click: the link is judged when it arrives, before any app opens it, and works for any messaging app that shows the URL. Limit: apps that hide URLs, and
+   no blocking at tap time yet (planned Link Gate). A DNS/VPN filter would cover in-app browsers but cannot afford a multi-second sandbox per request.
+Q: How does detection work?
+A: Layered: URL heuristics, known-threat feeds (OpenPhish/URLhaus synced), VirusTotal domain reputation/popularity, a sandbox that loads the page and inspects forms/targets/brands,
+   then a fusion engine (hard security rules + weighted score). A LightGBM classifier is implemented as the final stage and will be trained on public feeds plus pages
+   we fetched; until trained, the rules decide.
+Q: What is the accuracy?
+A: Not yet measured on a trained model. Baseline measurement of the rules-only pipeline on 24 live phishing URLs flagged 2 and falsely flagged 2 of 12 legitimate sites
+   (small sample, no feeds, no VirusTotal, HTTP sandbox). We built ml/evaluate_live.py to report held-out numbers on fresh links.
+Q: Is it really machine learning?
+A: The ML stage is implemented (two gradient-boosted models, calibrated probabilities, honest grouped evaluation). We will state the metrics produced by the evaluation script.
+   The older "meta classifier" was a 9-row demo model and is not used.
+Q: How is the forensic evidence tamper-evident?
+A: SHA-256 of the original uploaded bytes + HMAC-SHA256 seal over case id, hash, canonical dossier and timestamp with a server key; rows are insert-only; the seal is re-verified on every read
+   and via verify-hash/verify-file. Limitation: symmetric key held by the server (not a third-party timestamp or a public-key signature).
+Q: Scalability?
+A: Currently one gunicorn worker, in-memory rate limits/graph, Postgres without pooling, concurrency-capped sandbox. Scaling path: stateless workers (move limits/graph to Redis/Postgres),
+   job queue for sandbox, pooled connections, per-tenant data.
+Q: Security of fetching attacker URLs?
+A: SSRF guard on every hop, manual redirect handling, size/time caps, safe HTML parsing, Docker isolation for the browser. Residual: DNS rebinding and browser-side redirects.
+Q: Privacy?
+A: Notification text never leaves the device; the server receives only the extracted URL, source app package, and the user's token. History is per user.
+Q: Cost?
+A: Free tiers today (Render, Neon, VirusTotal free key). Real sandbox needs ~1 GB RAM always-on (about $5-10/month on Fly/Railway).
+Q: Limitations?
+A: Cloaked phishing, URLs hidden in message previews, sideload-only install, in-app browsers bypass any tap-time gate, free-tier quotas, no multi-tenant model, ML not trained yet.
+Q: What is innovative?
+A: Pre-click interception combined with a forensic-grade evidence chain in one product; layered pipeline with explicit "analysis incomplete" handling instead of silently reporting clean.
+Q: Why Python/Flask, Kotlin, Postgres?
+A: Developer familiarity and rapid delivery; Python has the DNS/DKIM/PDF/ML ecosystem; Android notification access requires native code; Postgres gives durable relational storage.
+
+
+================================================================================
+22. REBUILD INSTRUCTIONS
+================================================================================
+  1. Tools: Python 3.11, Git, Docker Desktop, Android Studio (AGP 8.13.2, JDK 11+), a PostgreSQL instance, optional VirusTotal key.
+  2. Clone repo; checkout hackathon/backend-hardening.
+  3. Database: create Postgres DB; run backend/init_db.py (phishing_links, feed sources, official_brands). CREATE users and link_scans manually (schema section 8; they are NOT in repo);
+     app start adds forensic_cases and the extra link_scans columns. Optionally run seed_brands.py.
+  4. Backend env: copy .env.example to .env; set SECRET_KEY, EVIDENCE_SIGNING_KEY, ADMIN_API_KEY, DB_*, VIRUSTOTAL_API_KEY (optional), CORS_ORIGINS.
+     pip install -r backend/requirements.txt ; run python backend/app.py (dev) or docker build -t trustshield-backend . && docker run -p 8080:8080 --env-file .env trustshield-backend.
+  5. Tests: PYTHONPATH=backend python -m pytest backend/tests -q.
+  6. ML: pip install -r backend/ml/requirements-train.txt ; python -m ml.datasets --prepare ; docker run ... python -m ml.collect_dataset ... ; python -m ml.train_lexical ; python -m ml.train_page ;
+     python -m ml.evaluate_live (commands in backend/ml/README.md). Models land in backend/core_engine/trained_models/ and are loaded automatically.
+  7. Android: create a Firebase project (Realtime DB node phishing_domains), download google-services.json to app/; set BACKEND_ENV/HOSTED_BACKEND_URL in .env; ./gradlew assembleDebug; sideload APK;
+     enable notification access + restricted settings.
+  8. Portal: served automatically at /portal. Extension: chrome://extensions -> Load unpacked -> chrome_extension/.
+  9. Deploy: Render (Procfile) or Fly.io (fly deploy using fly.toml + Dockerfile; set secrets with fly secrets set ...).
+  Integration order: Postgres -> backend -> portal/extension -> Firebase/Android -> ML training -> deployment.
+
+
+================================================================================
+23. EXTENSION POINTS
+================================================================================
+  EASY: delete unused legacy files and the whois dependency; pin dependency versions; replace Tailwind CDN with a build; add README cleanup; screenshot capture in the Chromium sandbox;
+        add base DDL for users/link_scans; add EncryptedSharedPreferences; retire Clearbit dependency.
+  MEDIUM: Link Gate (http/https intent handler + default-browser role, scan screen, block/proceed-at-own-risk with logging); consumer portal (search/audit of detections, per-app breakdown);
+          organisation model (org code, roles) and per-tenant graph; Redis for rate limits; connection pooling; Alembic migrations; background job queue for sandbox; visual brand matching;
+          retrain loop on schedule; richer brand list.
+  MAJOR: split app.py into services; React/Next.js portals with design system; Play Store release (privacy policy, data safety form, closed testing); signed (asymmetric) evidence + trusted timestamping;
+         on-device ML scoring (TFLite/ONNX) for offline verdicts; Accessibility/VPN-based coverage of in-app browsers (policy risk).
+  STRONGER PROJECT: published evaluation (precision/recall on fresh links), reproducible dataset pipeline, org dashboards, incident export (STIX/MISP).
+
+
+================================================================================
+24. SINGLE SOURCE OF TRUTH
+================================================================================
+# PROJECT DNA
+
+PROJECT: TrustShield - phishing prevention (Android) + email forensics (web portal, Chrome extension)
+PURPOSE: Detect phishing links before the click and provide sealed forensic cases for phishing emails.
+USERS: Android consumers; organisations/IT; forensic investigators.
+FRONTEND: Android Kotlin XML app (AGP 8.13.2/Kotlin 2.0.21); vanilla JS + Tailwind CDN + Leaflet portal; MV3 Chrome extension.
+BACKEND: Python 3.11, Flask 2.3.2, gunicorn (1 worker, gthread); Docker image with Chromium; Render today, Fly.io prepared.
+DATABASE: PostgreSQL (hosted, psycopg 3) + SQLite caches (threat_intel.db, vt_cache.db) + Firebase RTDB (Android phishing_domains).
+AI/ML: Rules + reputation + sandbox fusion (live). LightGBM lexical + page classifiers (code complete, UNTRAINED). Legacy RF + LLM paths unused.
+KEY MODELS: ml/model_runtime lexical_model.joblib (28 host features) and page_model.joblib (28+44+lexical prob) - not yet present.
+KEY ALGORITHMS: URL heuristics, threat-DB lookup, VirusTotal rank/reputation, sandbox DOM inspection, fusion with hard overrides/floors, SPF/DKIM/DMARC evaluation,
+                Received-chain tracing, HMAC evidence sealing, calibrated probability bands.
+KEY FEATURES: notification interception, 3-tier link analysis, scan history, email forensic dossiers, route map, sealed evidence vault, PDF export, Chrome extension.
+IMPORTANT APIS: /api/auth/login, /api/links/scan, /api/sandbox-check, /api/forensics/analyze-eml, /api/forensics/verify-hash, /api/forensics/export-pdf, /api/extension/analyze.
+DEPLOYMENT: Render via Procfile (HTTP-only sandbox); Dockerfile+fly.toml ready (real Chromium); Android sideloaded APK; docs/ on GitHub Pages.
+AUTHENTICATION: phone+PIN -> bcrypt check -> signed bearer token (30 d); admin key for admin routes; anonymous but rate-limited public endpoints.
+CURRENT STATUS: backend hardened and tested (144 tests); ML stage built but untrained; Link Gate, consumer/org portals, Play release not started.
+BIGGEST LIMITATION: New/unknown phishing links are only weakly detected until the ML models are trained and the real browser sandbox is deployed.
+BIGGEST STRENGTH: End-to-end system (device interception + layered server analysis + sealed forensic trail) with an honest, test-covered, SSRF-hardened backend.
+MOST IMPORTANT FILES: app/.../NotificationListener.kt, app/.../LinkAnalyzer.kt, backend/app.py, backend/security.py, backend/evidence_seal.py,
+                      backend/core_engine/link_threat_pipeline.py, sandbox_engine.py, final_decision_engine.py, unified_email_pipeline.py, email_forensics.py,
+                      backend/ml/features.py, backend/ml/model_runtime.py, frontend/app.js.
+MOST IMPORTANT DATA FLOW: notification -> LinkAnalyzer -> Firebase -> /api/links/scan -> pipeline -> link_scans -> history/alerts;  .eml -> pipeline -> sealed forensic_cases -> portal/PDF.
+MOST IMPORTANT AI FLOW: URL -> heuristics -> threat DB -> fast path/VirusTotal -> sandbox (page HTML) -> ML (lexical then page model) -> fusion (rules can only raise) -> SAFE/SUSPICIOUS/DANGEROUS.
+KNOWN BUGS: users/link_scans DDL missing from repo; per-process rate-limit/graph state; extension uses synthetic headers; DNS-rebinding gap; portal lacks login so graph/campaign/case-list tabs fail;
+            README outdated; potential false positives (mozilla.org, news.ycombinator.com in baseline probe).
+KNOWN MOCKS: template "AI" explanations; synthesised extension emails; demo content in portal Attack Studio; legacy 9-row RandomForest.
+KNOWN HARDCODED LOGIC: brand lists, exfiltration hosts, scoring weights/thresholds/floors, hosted URL "trust-sheild.onrender.com", dev IP default.
+NEXT 5 PRIORITIES: (1) rotate the leaked Green-API token and set production secrets; (2) run collect -> train -> evaluate and record real metrics;
+                   (3) deploy the Chromium Docker backend on an always-on host; (4) build the Link Gate (tap-time scan screen with proceed-at-own-risk);
+                   (5) consumer portal + organisation console with login, then Play closed testing.
+================================================================================
+END OF DOCUMENT
+================================================================================

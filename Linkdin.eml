@@ -1,0 +1,139 @@
+Delivered-To: akhilash.sk@gmail.com
+Received: by 2002:a05:7326:e004:20b0:1fe:7f5d:b2bc with SMTP id du4-n2csp3413400rdc;
+        Sat, 19 Sep 2026 01:43:18 -0700 (PDT)
+X-Received: by 2002:a05:6a21:3117:b0:3dd:a196:53a6 with SMTP id adf61e73a8af0-3dda19654f8mr3010154637.72.1789807398635;
+        Sat, 19 Sep 2026 01:43:18 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1789807398; cv=pass;
+        d=google.com; s=arc-20260327;
+        b=gMAj+LaVTDXTVP1JufTe/wr2WZCbUEGbSQtZT7YalUr2re5emJ7KxwV7Rh+T9wVDGz
+         2Bg3PzOprzn+rvKmwlhoel+txeYcXCkcHwrb3mYymm3FP0Nzu9lSztUHhexSjc03YzsE
+         GxvHW+v2a9DGTu/Rl2vpXLcM/l0YYc2am4cQqSG5GjwnicISi60sS+7H/P4UGHlSlHZa
+         H09cyZgt5D/VCc9/MlQ9Jj7pgMleYnZzjRy5WxndvdpfG7i/mhcRFpdv7sBwP4wRe62i
+         rqDzlCHtlw6GwDAYuqby8aWFUy6tUEH4VFbBO7BBe8aHS1a7c/EutoeWe0C9PvjFa89D
+         yfUQ==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=to:subject:message-id:date:from:mime-version:dkim-signature;
+        bh=OWIyDsneA6hlanEXt2aR8qXek/pxztHtNxO29PLBlIo=;
+        fh=PH903fL4vHUZ2/QjvmA6zBLH/G/FQi300jUwfeNMAp0=;
+        b=ZiOGqfEZoNxmqSLAd0mztjG82GSvIo3hHmoPHUzqxXCf66Ps49J2hkLl3CupRN2w0g
+         7XySTU0Z1t+mopG0aiKWHOipoMysN8VXwdeIIALVZRgGTTu+CV46VKeoR67b1iMohwGt
+         4mNzm7ZF4zyVIVFxgXvcGEztPeBDMib47iiUXAOh5E3feg0qDKXoTH576qIL6gbbmPo2
+         tZ1XsePCYup8rm0yNhNwimYe1Jrhe/tgLwGXljf6dAY57dyN4k21yvrfvB9/jZoKjd0F
+         AEnd2x+iYFbGVYAwvuEka0JYgHj7yZVX7yrJLIGE7oHRx81gxOYgmJbYVuQcdBpZxcR/
+         VA/A==;
+        dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20251104 header.b=AwgI7NVw;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of jayavanthpalanisamy12@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=jayavanthpalanisamy12@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <jayavanthpalanisamy12@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 41be03b00d2f7-cc72aeaab93sor687739a12.3.2026.09.19.01.43.18
+        for <akhilash.sk@gmail.com>
+        (Google Transport Security);
+        Sat, 19 Sep 2026 01:43:18 -0700 (PDT)
+Received-SPF: pass (google.com: domain of jayavanthpalanisamy12@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20251104 header.b=AwgI7NVw;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of jayavanthpalanisamy12@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=jayavanthpalanisamy12@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+ARC-Seal: i=1; a=rsa-sha256; t=1789807398; cv=none;
+        d=google.com; s=arc-20260327;
+        b=WbW2Raoj2Q+ldVHyBpubFSmcjpi/+/NY2M6nEQB/LQ4TWX7D/QgdONPEw6/gCd5hDe
+         Vq/LRKvNxzdpe50mNkqX8EoIUwocqzgnjApPxtwLruHWZ0WMrrG6NBoEatst7EOrK2rH
+         ODCIZoF90NXe0wYP/9iM5Oq6orS3R7skiP0O3gkMmM7gfA9zxoD5LoIbX0MGO5cG9olD
+         9Axs//r5LPpOGbAXxebPgWw/ye+9uazXdSb4s8SY37jdVyzt94FBSWoljWF5WmVJiqAV
+         SjiSpwULdBbNxJ3LZqQZ9TAcF7goxuRYyVqboVIYLguUy8B8AwJ7OSA5KYpXiDQL3j8Q
+         8eCg==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=to:subject:message-id:date:from:mime-version:dkim-signature;
+        bh=OWIyDsneA6hlanEXt2aR8qXek/pxztHtNxO29PLBlIo=;
+        fh=PH903fL4vHUZ2/QjvmA6zBLH/G/FQi300jUwfeNMAp0=;
+        b=n8Mhy/MB42Uje0T1e4qKXlHKDLl/5S1k+/2RKiXXzkWsaZIUe0ewH9oU5PWQPZ1/TU
+         He4TqpC2GgKstVKp0p2/6QobS0gQFb1CYdGrMfUy1E7PldXPxZZA8duWp4EdQKXCNJnG
+         Y+NN9zZK+k0Uf7SJErQgM1oMKI3+RcvZa/nRq9ChlvaF6MCW2bWiAvlf7N5yHhBauOcr
+         XwVy5bEXySog4whzVBV2rHt71CMUAIOR6nS0TH/5qqaGOCfwzMHqlnkP434mK+pgQlvc
+         2n7vvz9UzLE2t98uBp1b+K1Dunz0dUspWh2dAgq43I8ruPTgRcyYnd/uKWEN1cPIMljR
+         IADw==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20251104; t=1789807398; x=1790412198; dara=google.com;
+        h=content-type:to:subject:message-id:date:from:mime-version:from:to
+         :cc:subject:date:message-id:reply-to:content-type;
+        bh=OWIyDsneA6hlanEXt2aR8qXek/pxztHtNxO29PLBlIo=;
+        b=AwgI7NVwaevn2ECt4WYhqbAI5dwED6QfEe6O7nvXlGIQPSoTV+x9n26zmEfJJzNk2S
+         HJVER3GOUz62Q0+llPh3wcNxPTIC7z5Q0I0lQS1b6fRQh1DaWYRT4iOIxxE6dP2Lnd8G
+         5JG6lcmcJOcRgIn0DIKwwuv2Cyd4wgH13hPPlLiRhElCVWZMhxD9OOhu2SZt8Rs5v9oL
+         1w45WT1sScRDyKAqWfJQGLIOd27ag4HUcBnF934dL/9hTgnzHIjtQbUzaNr8T8OS1WIn
+         wav/EXDS2C1Ip/LXYF1apsv2l4u9xzidhymYHy1YIO3G6/shjmhUAqKclYeekxncd2zh
+         jFAA==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20260707; t=1789807398; x=1790412198;
+        h=content-type:to:subject:message-id:date:from:mime-version:x-gm-gg
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to
+         :content-type;
+        bh=OWIyDsneA6hlanEXt2aR8qXek/pxztHtNxO29PLBlIo=;
+        b=sagWEFoFhj8bKHKst00uyABJ9kPErlroa2tByy+pESlq2gSOrSD7VYaq5tGY4XxhM2
+         HaMoLp8AaoO0/hRoFrauDfAePPpOBD5F43lmmb03MEDLIKOxPGWtpF7ar4sRkLm+WZam
+         lUwdbKaLmWeE2vAGcDwSnTf8GdFt9pb1tGBI0nj/XFR6ZNSFvfRxAk/U/BTtEI1jIeLc
+         i6KXwnH7A0Bla6RP7+GF62d07ZDNyc8Rg4lf6nKGxOtYtvPLXFUfOr80rgn17wR4BYeS
+         +a0fcuwyLqaoIuaL4PhBlMFeLnnm7W40WxTpVZptn0W2EvWNhfFlyk+k4Qi5dXvoYJI8
+         RR4w==
+X-Gm-Message-State: AFuF++kBp//5j0rz48BpIBN9EGTZmcIsmWmxgZIWuAxORrpR/QwuxYMY
+	onGTTLGun1l18mUaGkCc72VCByZxShOf6W6OIgSJBzQgZKhZ3AqadPnpxGsmC4pjP/a6cxrRKUK
+	8Bi++W+O+Zuc/sAv/y1Aohrs8nSwYr8uUqA==
+X-Gm-Gg: AYBFou3EnXlG5rDwHCI8N80+ymmuJnF9l0wKVgZ3LiN5ntFuRLVFm0TwKD38+WEbA/Z
+	SlwAsWNLjxyA1zglAG/PbOWasurBoxyieJn2Rim+uDl06kcV1NHRym3xsLcP9CIHLuNmDDvvTeu
+	BwYgNGhaAf+IsBuIL3RRPA0PRmsh7sFC+zsTMJrZPpp0X2wi/gZ1H/b7n5slqL2Zd0yPecbFn34
+	pI0U05V384v0MvaB6FhztMvvtocy7l1FgFreyQWIptM82ztW81oArHryklTmgIl6pfmacA/gsG2
+	LEMydBlX5p2r4E0BmfRWxU/3/dz7yLLEbUEY5SUz2IC9CE/9eBe2PqA=
+X-Received: by 2002:a05:6a20:438c:b0:3dd:85a8:cb80 with SMTP id
+ adf61e73a8af0-3dd8c4decdfmr10431375637.35.1789807397771; Sat, 19 Sep 2026
+ 01:43:17 -0700 (PDT)
+MIME-Version: 1.0
+From: Jayavanth P <jayavanthpalanisamy12@gmail.com>
+Date: Sat, 19 Sep 2026 14:13:06 +0530
+X-Gm-Features: AcwNN1Vws2r8mNaexWjPiFtPvFv9GWa7pH1I5zOLhKChG6aKIXJLP1yW1MEoH5w
+Message-ID: <CAGGxEZnLK50MCuaRyhEiX0j0QwvTFpsOjvtiZW7YxUcjOR9E1Q@mail.gmail.com>
+Subject: Linkdin
+To: AKHILASH S <akhilash.sk@gmail.com>
+Content-Type: multipart/alternative; boundary="000000000000291b37065bd20208"
+
+--000000000000291b37065bd20208
+Content-Type: text/plain; charset="UTF-8"
+
+Dear User,
+
+We have detected unauthorized access to your account from an unrecognized
+device. To prevent further unauthorized transactions, please verify your
+identity immediately using the secure link below:
+
+Verify My Account: https://linked1n.vercel.app/
+
+If you do not verify within 24 hours, your account access will be
+temporarily suspended for security purposes.
+
+Regards,
+Security Team
+
+--000000000000291b37065bd20208
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto">Dear User,<div dir=3D"auto"><br></div><div dir=3D"auto">W=
+e have detected unauthorized access to your account from an unrecognized de=
+vice. To prevent further unauthorized transactions, please verify your iden=
+tity immediately using the secure link below:</div><div dir=3D"auto"><br></=
+div><div dir=3D"auto">Verify My Account: <a href=3D"https://linked1n.vercel=
+.app/">https://linked1n.vercel.app/</a></div><div dir=3D"auto"><br></div><d=
+iv dir=3D"auto">If you do not verify within 24 hours, your account access w=
+ill be temporarily suspended for security purposes.</div><div dir=3D"auto">=
+<br></div><div dir=3D"auto">Regards,</div><div dir=3D"auto">Security Team</=
+div></div>
+
+--000000000000291b37065bd20208--
