@@ -24,7 +24,12 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("trustshield.llm_reviewer")
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")      # older fixed model names get retired by Google; override via GEMINI_MODEL
-TIMEOUT_SECONDS = float(os.getenv("LLM_REVIEW_TIMEOUT", "16"))
+# Every model has its own free daily quota, so when one is used up the next is tried (GEMINI_FALLBACK_MODELS, comma separated).
+FALLBACK_MODELS = [m.strip() for m in os.getenv(
+    "GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite").split(",") if m.strip()]
+MODEL_COOLDOWN_SECONDS = 1800
+_model_unavailable_until: Dict[str, float] = {}
+TIMEOUT_SECONDS = float(os.getenv("LLM_REVIEW_TIMEOUT", "24"))
 MIN_CONFIDENCE = 0.75
 MAX_TEXT_CHARS = 1500
 CACHE_TTL = 6 * 3600
@@ -131,15 +136,24 @@ def _call_gemini(prompt: str) -> Optional[str]:
     except Exception:
         pass
     last = None
-    for attempt in range(2):               # the service sometimes answers "high demand": one quick retry
-        try:
-            response = client.models.generate_content(model=MODEL, contents=prompt, config=types.GenerateContentConfig(**kwargs))
-            return response.text
-        except Exception as exc:
-            last = exc
-            if "503" not in str(exc) and "UNAVAILABLE" not in str(exc):
-                break               # quota (429) and other errors are not retried: the pause below handles quota
-            time.sleep(1.0)
+    for model in [MODEL] + [m for m in FALLBACK_MODELS if m != MODEL]:
+        if time.time() < _model_unavailable_until.get(model, 0.0):
+            continue
+        for attempt in range(2):           # the service sometimes answers "high demand": one quick retry
+            try:
+                response = client.models.generate_content(model=model, contents=prompt, config=types.GenerateContentConfig(**kwargs))
+                return response.text
+            except Exception as exc:
+                last = exc
+                text = str(exc)
+                if "503" in text or "UNAVAILABLE" in text:
+                    time.sleep(1.0)
+                    continue
+                if "429" in text or "RESOURCE_EXHAUSTED" in text or "404" in text or "NOT_FOUND" in text:
+                    _model_unavailable_until[model] = time.time() + MODEL_COOLDOWN_SECONDS      # try the next model
+                break
+    if last is None:
+        raise RuntimeError("429 RESOURCE_EXHAUSTED: every configured Gemini model is out of quota")
     raise last
 
 
