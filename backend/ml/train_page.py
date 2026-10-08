@@ -30,10 +30,10 @@ if BACKEND_DIR not in sys.path:
 
 from ml import datasets, trainlib  # noqa: E402
 from ml.collect_dataset import unpack_html  # noqa: E402
-from ml.features import (FEATURE_VERSION, PAGE_MODEL_LEXICAL_FEATURES, PAGE_MODEL_PAGE_FEATURES,  # noqa: E402
-                         group_key, lexical_features, page_features)
+from ml.features import (EVIDENCE_FEATURES, FEATURE_VERSION, PAGE_MODEL_LEXICAL_FEATURES,  # noqa: E402
+                         PAGE_MODEL_PAGE_FEATURES, evidence_features, group_key, lexical_features, page_features)
 
-PAGE_MODEL_FEATURES: List[str] = PAGE_MODEL_LEXICAL_FEATURES + PAGE_MODEL_PAGE_FEATURES + ["lexical_prob"]
+PAGE_MODEL_FEATURES: List[str] = (PAGE_MODEL_LEXICAL_FEATURES + PAGE_MODEL_PAGE_FEATURES + EVIDENCE_FEATURES + ["lexical_prob"])
 
 
 def main() -> None:
@@ -104,7 +104,14 @@ def main() -> None:
         pf = page_features(unpack_html(r["html_gz_b64"]), r.get("final_url") or r["url"], r["url"], r.get("sandbox") or {})
         page_rows.append([pf[n] for n in PAGE_MODEL_PAGE_FEATURES])
     page_X = np.array(page_rows, dtype=np.float32)
-    X = np.hstack([lex_X, page_X, lex_prob.reshape(-1, 1).astype(np.float32)])
+    ev_rows = []
+    for r in rows:
+        ef = evidence_features(r.get("evidence"))      # once per page, then read the columns
+        ev_rows.append([ef[n] for n in EVIDENCE_FEATURES])
+    ev_X = np.array(ev_rows, dtype=np.float32)
+    with_ev = int(sum(1 for r in rows if r.get("evidence")))
+    print(f"   {with_ev:,d} of {len(rows):,d} pages carry sandbox-v2 evidence", flush=True)
+    X = np.hstack([lex_X, page_X, ev_X, lex_prob.reshape(-1, 1).astype(np.float32)])
 
     split = np.array([trainlib.split_of(g) for g in groups])
     tr, va, te = split == "train", split == "val", split == "test"

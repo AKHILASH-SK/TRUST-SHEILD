@@ -83,6 +83,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--with-threat-db", action="store_true", help="also use the known-threat database (full product)")
     ap.add_argument("--with-virustotal", action="store_true", help="also use VirusTotal (needs VIRUSTOTAL_API_KEY; slow on the free tier)")
+    ap.add_argument("--no-llm", action="store_true", help="switch the Gemini second opinion off (measure the model + rules only)")
     ap.add_argument("--pages", default=os.path.join(datasets.DATA_DIR, "pages.jsonl"))
     ap.add_argument("--report", default=os.path.join(datasets.DATA_DIR, "eval_report.json"))
     args = ap.parse_args()
@@ -90,6 +91,8 @@ def main() -> None:
 
     if not args.with_virustotal:
         os.environ.pop("VIRUSTOTAL_API_KEY", None)
+    if args.no_llm:
+        os.environ["ENABLE_LLM_REVIEW"] = "false"
 
     exclude_hashes = trainlib.load_url_hashes("lexical")
     exclude_urls, exclude_groups = set(), set()
@@ -127,7 +130,11 @@ def main() -> None:
         try:
             res = pipeline.analyze_url(url)
             verdict = res["verdict"]
-            band = "DANGEROUS" if verdict.startswith("CRITICAL") else ("SUSPICIOUS" if verdict.startswith("SUSPICIOUS") else "SAFE")
+            shown = res.get("display_verdict")
+            if shown:      # the three words the app shows; "SUSPICIOUS" below means "Unverified - open with care"
+                band = {"Dangerous": "DANGEROUS", "Safe": "SAFE"}.get(shown, "SUSPICIOUS")
+            else:
+                band = "DANGEROUS" if verdict.startswith("CRITICAL") else ("SUSPICIOUS" if verdict.startswith("SUSPICIOUS") else "SAFE")
             tel = res.get("telemetry", {})
             return {"url": url, "label": label, "band": band, "score": res["threat_score"],
                     "complete": res.get("analysis_complete"), "ml_model": tel.get("ml_model"),
@@ -165,6 +172,8 @@ def main() -> None:
     total = len(mal_rows) + len(ben_rows)
     correct = sum((r["label"] == 1 and r["band"] == "DANGEROUS") or (r["label"] == 0 and r["band"] == "SAFE") for r in mal_rows + ben_rows)
     print(f"strict accuracy (DANGEROUS for phishing, SAFE for legitimate): {pct(correct, total)}")
+    decisive = sum(r["band"] in ("SAFE", "DANGEROUS") for r in mal_rows + ben_rows)
+    print(f"decisive verdicts (Safe or Dangerous, not 'Unverified - open with care'): {pct(decisive, total)}   (target 95%+)")
     secs = sorted(r["seconds"] for r in rows)
     print(f"verdict time: median {secs[len(secs)//2]}s, 90th percentile {secs[int(len(secs)*0.9)]}s, "
           f"errors {sum(r['band'] == 'ERROR' for r in rows)}")

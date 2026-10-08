@@ -151,3 +151,16 @@ def test_hard_rules_still_override_a_safe_ml_verdict():
 def test_engine_without_ml_is_unchanged():
     out = FinalDecisionEngine().evaluate(url="https://x.example/")
     assert out["telemetry"]["ml_used"] is False
+
+
+def test_evidence_features_from_sandbox_v2():
+    from ml.features import EVIDENCE_FEATURES, evidence_features
+    empty = evidence_features(None)
+    assert set(empty) == set(EVIDENCE_FEATURES) and all(math.isnan(v) for v in empty.values())
+    ev = {"credential_surface_found": True, "sensitive_field_types": ["password", "otp"], "probe_credentials_sent": True,
+          "submit_cross_domain": True, "wording": {"urgency": 2, "threat": 1}, "brand_owns_domain": False,
+          "tls_issuer": "Let's Encrypt", "domain_age_days": 4, "claimed_brand": "hdfc"}
+    f = evidence_features(ev)
+    assert f["ev_cred_found"] == 1 and f["ev_has_password"] == 1 and f["ev_has_otp"] == 1 and f["ev_submit_cross_domain"] == 1
+    assert f["ev_brand_owns_domain"] == 0.0 and f["ev_tls_free_ca"] == 1 and f["ev_domain_age_days"] == 4
+    assert math.isnan(evidence_features({**ev, "brand_owns_domain": None})["ev_brand_owns_domain"])      # unknown stays unknown

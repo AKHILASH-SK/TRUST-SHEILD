@@ -1,94 +1,54 @@
-# TrustShield ML: collect, train, evaluate
+# TrustShield ML: three steps (copy and paste)
 
-Two models, one final verdict.
-
-```
-link text ──► [1] lexical model ──┐
-                                  ├──► [2] page model ──► probability ──► SAFE / SUSPICIOUS / DANGEROUS
-sandbox sees the page ────────────┘
-```
-
-* **Lexical model** (`train_lexical.py`) uses the link's host/domain text only. Trained on ~300k public URLs. Used when the
-  sandbox cannot open the page, and as one input of the page model.
-* **Page model** (`train_page.py`) is the final ML stage. Input: link-text features + the lexical probability + what the
-  sandbox saw (login forms, where forms post, scripts, redirects, hidden frames, domain age, brand clues).
-* The hard security rules (known threat match, VirusTotal-flagged, password form posting to Telegram, ...) always stay on
-  top and can only **raise** the verdict.
-* If no model file exists the pipeline silently keeps using its rules.
-
-## Hardware notes (your laptop: 10-core i7, 15.6 GB RAM, RTX 4050)
-
-* Training uses LightGBM on the CPU. It fits in memory easily and the full lexical training takes a few minutes.
-  The GPU gives no speed-up for this kind of table data, so it is not used.
-* Collecting pages is the slow part: each page is opened in real Chromium. Measured speed with 4 browsers is about
-  1,000 pages/hour. Use `--workers 8` with `--memory=7g` for roughly double.
-
-## Step 0 - once
+You need: **Docker Desktop running** (only for steps 1 and 3) and a PowerShell window.
+Always start with:
 
 ```powershell
-cd backend
-pip install -r ml/requirements-train.txt
-python -m ml.datasets --prepare          # downloads ~100 MB of public feeds
+cd C:\Users\akhil\AndroidStudioProjects\TrustShield
 ```
 
-Make sure Docker Desktop is running, then from the repository root:
-
+## Step 1 - collect pages with the sandbox (Docker, about 2-4 hours, safe)
 ```powershell
-docker build -t trustshield-backend .
+powershell -ExecutionPolicy Bypass -File backend\ml\scripts\1_collect.ps1
 ```
+* It opens real phishing and real legitimate websites inside an isolated container and saves what the sandbox saw to
+  `backend\ml\data\pages.jsonl`.
+* Defaults: 3000 bad + 3000 good pages, 8 browsers. Change with `-Malicious 4000 -Benign 4000 -Workers 8`.
+* Press **Ctrl+C** whenever you like. Run the same command again later and it **continues** where it stopped.
+* Keep the laptop plugged in and awake. You can stop at roughly 1,500 usable pages and still train a first model.
+* Progress lines look like `[collect] 250 done (...)`. Many bad links are already offline: that is normal.
 
-## Step 1 - collect live pages (runs in Docker, resumable)
-
-Opens real phishing pages in an isolated container, never on your machine. Stop with Ctrl+C any time and run the same
-command again to continue. Aim for at least 3,000 malicious + 3,000 benign; more is better.
-
+## Step 2 - train the models (normal Python, about 5-15 minutes, no Docker)
 ```powershell
-docker run --rm --security-opt no-new-privileges --shm-size=1g --memory=7g -w /srv/backend `
-  -v "${PWD}/backend/ml/data:/srv/backend/ml/data" trustshield-backend `
-  python -m ml.collect_dataset --n-malicious 3500 --n-benign 3500 --workers 8
+powershell -ExecutionPolicy Bypass -File backend\ml\scripts\2_train.ps1
 ```
+At the end it prints a **TEST SET** report (measured on websites the model never saw). Send me that text.
+The trained models are saved in `backend\core_engine\trained_models\` and are used automatically.
 
-Output: `backend/ml/data/pages.jsonl` (what the sandbox saw, including compressed HTML).
-Pages that are already offline are recorded as unreachable and are not used by the page model.
-
-## Step 2 - train the lexical model (minutes)
-
+## Step 3 - measure on brand-new links (Docker, about 15-30 minutes)
 ```powershell
-cd backend
-python -m ml.train_lexical --max-rows 6000      # optional 1-minute dry run
-python -m ml.train_lexical
+powershell -ExecutionPolicy Bypass -File backend\ml\scripts\3_evaluate.ps1
 ```
+It prints how many phishing links are caught, how many real sites are wrongly flagged, and how many verdicts are
+decisive (Safe or Dangerous instead of "Unverified - open with care"). These are the numbers for the judges.
+Add `-NoLlm` to see the model without the Gemini second opinion.
 
-It holds out every URL in `pages.jsonl`, so the page model later receives honest scores.
-Read the TEST SET block at the end of the output: that is measured on websites the model never saw.
+## What the pieces are
+* **Link-text model** (`train_lexical.py`): learns from the link's domain text only, using hundreds of thousands of public URLs.
+* **Page model** (`train_page.py`): the final model. Inputs: link-text score + what the sandbox found (login forms, where
+  they send data, brand claims, wording, redirects, domain age, certificate...).
+* **Gemini reviewer** (`core_engine/llm_reviewer.py`): second opinion only for links the pipeline is unsure about. It can never
+  override a hard rule, and it acts only when it agrees with the pipeline's own lean.
+* If no model file exists the pipeline still works with its rules.
 
-## Step 3 - train the page model
-
-```powershell
-python -m ml.train_page --dry-run               # prints the report, saves nothing
-python -m ml.train_page
-```
-
-It prints the page model next to the lexical model on the same test pages, so you can see exactly what the sandbox
-evidence adds. Artifacts are written to `backend/core_engine/trained_models/` (`*.joblib` + a readable `*.json`).
-
-## Step 4 - measure the whole pipeline on fresh links
-
-```powershell
-docker build -t trustshield-backend .     # so the container contains the new models
-docker run --rm --shm-size=1g --memory=7g -w /srv/backend `
-  -v "${PWD}/backend/ml/data:/srv/backend/ml/data" trustshield-backend `
-  python -m ml.evaluate_live --n-malicious 150 --n-benign 150 --workers 6
-```
-
-This uses today's newest phishing links and legitimate sites no model trained on, runs the real pipeline, and prints how often
-the verdict is right, plus the list of misses and false alarms. By default the threat database and VirusTotal are off, so it
-measures the dynamic analysis only. Add `--with-threat-db --with-virustotal` for the full product.
+## Troubleshooting
+* "Docker Desktop is not running": open Docker Desktop, wait until it says *Engine running*, run the command again.
+* Script blocked by Windows: always use the `powershell -ExecutionPolicy Bypass -File ...` form shown above.
+* Out of memory: add `-Workers 4`.
+* Start over from nothing: delete `backend\ml\data\pages.jsonl`.
 
 ## Honest notes
-
 * Label 1 = malicious means phishing **or** malware (URLhaus), because the app blocks both.
-* The public benign sets are mostly bare home pages, so the lexical model uses host-level features only; using path
-  features there would teach the model the difference between datasets, not phishing.
-* Phishing pages that hide from scanners (cloaking) and brand-new sites will always be the hard cases.
-  Retrain regularly: `collect_dataset` then `train_page` is a repeatable loop.
+* The public "good" lists are mostly home pages, so the link-text model uses host-level signals only; path signals are used by the
+  page model where we collect real deep links from legitimate sites.
+* Cloaked phishing pages and brand-new sites will always be the hard cases. Re-run steps 1-2 regularly to keep learning.

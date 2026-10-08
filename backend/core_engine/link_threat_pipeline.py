@@ -193,7 +193,7 @@ class LinkThreatPipeline:
         is_known_malicious = self.threat_db.check_indicator(clean_url)
         if is_known_malicious:
             # Match Found in Local Threat DB: Instant Block and stop analysis
-            return self.decision_engine.evaluate(
+            known = self.decision_engine.evaluate(
                 url=clean_url,
                 nlp_score=nlp_score,
                 heuristic_risk=heuristic_risk,
@@ -202,6 +202,8 @@ class LinkThreatPipeline:
                 sandbox_threat=100.0,
                 vt_risk_score=100.0
             )
+            known["display_verdict"], known["decisive"] = DISPLAY_DANGEROUS, True
+            return known
 
         # ----------------------------------------------------
         # Stage 2.5: Brand fast path + VirusTotal reputation
@@ -239,6 +241,8 @@ class LinkThreatPipeline:
                 "url": clean_url,
                 "threat_score": 0.0,
                 "verdict": "LEGITIMATE / CLEAN",
+                "display_verdict": DISPLAY_SAFE,
+                "decisive": True,
                 "analysis_complete": True,
                 "summary": (
                     f"• Threat Summary: Domain '{reg_domain}' is an established, verified global service.\n"
@@ -285,6 +289,7 @@ class LinkThreatPipeline:
             ml_result = get_runtime().score(clean_url, sandbox_res, use_page=not skip_sandbox)
         except Exception as e:
             logger.debug(f"ML stage skipped: {e}")
+        page_text = sandbox_res.get("_text", "") or ""
         # raw page evidence was only needed for ML; never let it leave the pipeline
         sandbox_res.pop("_html", None)
         sandbox_res.pop("_final_url", None)
@@ -322,7 +327,72 @@ class LinkThreatPipeline:
             free_hosting=bool(user_content)
         )
 
-        return final_result
+        return finalize_verdict(final_result, url=clean_url, sandbox_res=sandbox_res, ml_result=ml_result,
+                                vt_detail=vt_detail, free_hosting=bool(user_content), page_text=page_text)
+
+
+DISPLAY_SAFE = "Safe"
+DISPLAY_DANGEROUS = "Dangerous"
+DISPLAY_UNVERIFIED = "Unverified - open with care"
+
+
+def display_for(result: Dict[str, Any]) -> str:
+    """The three words users see. 'Unverified' is meant to be rare."""
+    verdict = str(result.get("verdict", "")).upper()
+    score = float(result.get("threat_score", 0) or 0)
+    if verdict.startswith("CRITICAL"):
+        return DISPLAY_DANGEROUS
+    if verdict.startswith("SUSPICIOUS"):
+        return DISPLAY_UNVERIFIED
+    if verdict.endswith("UNVERIFIED") and score >= 35:
+        return DISPLAY_UNVERIFIED          # page could not be inspected AND something looks off
+    return DISPLAY_SAFE
+
+
+def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[Dict[str, Any]] = None,
+                     ml_result: Optional[Dict[str, Any]] = None, vt_detail: Optional[Dict[str, Any]] = None,
+                     free_hosting: bool = False, page_text: str = "", reviewer=None) -> Dict[str, Any]:
+    """
+    Turn the engine's result into a decisive answer wherever the evidence allows it:
+      * a dead domain has nothing to open -> Safe (page offline)
+      * a score stuck in the uncertain middle -> ask the AI reviewer; act only if it agrees with our own lean
+    Hard rules are never touched. Whatever stays uncertain is shown as 'Unverified - open with care'.
+    """
+    from . import llm_reviewer as default_reviewer
+    reviewer = reviewer or default_reviewer
+    tel = result.setdefault("telemetry", {})
+    sandbox_res = sandbox_res or {}
+    score = float(result.get("threat_score", 0) or 0)
+    hard = bool(tel.get("hard_override_triggered"))
+
+    if (not hard and tel.get("verification_state") == "unverified" and tel.get("unverified_reason") == "unreachable"
+            and score < 60 and str(result.get("verdict", "")).upper().startswith(("LEGITIMATE", "SUSPICIOUS"))):
+        result["verdict"] = "LEGITIMATE / OFFLINE"
+        result["threat_score"] = min(score, 25.0)
+        result["summary"] = (result.get("summary", "") + "\n- This page is offline right now (the address does not respond), "
+                             "so there is nothing to open.").strip()
+    elif not hard and str(result.get("verdict", "")).upper().startswith("SUSPICIOUS"):
+        lean = ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE")
+        try:
+            review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=ml_result,
+                                     domain_age_days=int(sandbox_res.get("domain_age_days", -1) or -1), free_hosting=free_hosting)
+        except Exception:
+            review = None
+        tel["llm_review"] = review
+        decision = reviewer.decide(lean, review)
+        if decision == "DANGEROUS":
+            result["verdict"] = "CRITICAL FRAUD / PHISHING"
+            result["threat_score"] = max(score, 85.0)
+        elif decision == "SAFE":
+            result["verdict"] = "LEGITIMATE / CLEAN" if result.get("analysis_complete", True) else "LEGITIMATE / UNVERIFIED"
+            result["threat_score"] = min(score, 30.0)
+        if review and review.get("reasons"):
+            result["summary"] = (result.get("summary", "") + "\n- AI review (" + review["verdict"].lower() + ", "
+                                 + str(int(review["confidence"] * 100)) + "% sure): " + "; ".join(review["reasons"])).strip()
+
+    result["display_verdict"] = display_for(result)
+    result["decisive"] = result["display_verdict"] != DISPLAY_UNVERIFIED
+    return result
 
 
 # Singleton convenience instance

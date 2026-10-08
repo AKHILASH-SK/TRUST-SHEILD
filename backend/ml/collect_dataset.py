@@ -41,7 +41,8 @@ KEEP_SANDBOX_KEYS = [
     "sandbox_blocked_unsafe_url",
 ]
 MAX_PER_GROUP = 4          # at most this many URLs per site, so one hosting platform cannot dominate
-MALICIOUS_MIX = {"phishtank": 0.40, "phishing_database": 0.25, "openphish": 0.20, "urlhaus": 0.15}
+MALICIOUS_MIX = {"phishtank": 0.45, "openphish": 0.25, "urlhaus": 0.20, "phishing_database": 0.10}
+FRESH_WINDOW = 6000        # newest entries considered from the newest-first feeds
 RANK_BUCKETS = [(1, 1_000), (1_001, 10_000), (10_001, 100_000), (100_001, 1_000_000)]
 
 
@@ -76,8 +77,12 @@ def pick_malicious(n: int, rng: random.Random, seen: set, refresh: bool) -> List
     chosen: List[Tuple[str, str]] = []
     for source, share in MALICIOUS_MIX.items():
         pool = [u for u in pools[source] if u not in seen]
-        # fresh feeds are most likely to still be online; archives are shuffled
-        if source != "openphish":
+        # Most phishing pages are taken down within hours, so prefer the NEWEST entries: PhishTank and URLhaus list
+        # newest first, OpenPhish is live. Only the huge archive is sampled at random (most of it is already dead).
+        if source in ("phishtank", "urlhaus"):
+            pool = pool[:FRESH_WINDOW]
+            rng.shuffle(pool)
+        elif source != "openphish":
             rng.shuffle(pool)
         want = int(n * share)
         taken = 0
@@ -122,16 +127,24 @@ def visit(sandbox, url: str, label: int, source: str) -> Dict:
         return {"url": url, "label": label, "source": source, "ts": int(started), "status": "error",
                 "error": str(exc)[:200], "sandbox": {}, "html_gz_b64": "", "final_url": url}
     html = feats.get("_html") or ""
+    state = feats.get("verification_state", "verified")
     status = "ok"
     if feats.get("sandbox_blocked_unsafe_url"):
         status = "blocked"
-    elif feats.get("sandbox_unreachable") or not html:
-        status = "unreachable"
+    elif state == "unverified" or feats.get("sandbox_unreachable") or not html:
+        # bot walls, timeouts, dead domains: kept for statistics, never used to train the page model
+        status = "unreachable" if feats.get("unverified_reason") in ("unreachable", "", None) else "unverified"
+    # everything the sandbox observed (without the bulky internal keys): the model learns from this
+    evidence = {k: v for k, v in feats.items() if not k.startswith("_")}
+    text = (feats.get("_text") or "")[:6000]
     return {
         "url": url, "label": label, "source": source, "ts": int(started),
         "elapsed": round(time.time() - started, 2), "status": status,
+        "unverified_reason": feats.get("unverified_reason", ""),
         "final_url": feats.get("_final_url") or url,
-        "sandbox": {k: feats.get(k) for k in KEEP_SANDBOX_KEYS},
+        "sandbox": {k: feats.get(k) for k in KEEP_SANDBOX_KEYS},      # legacy subset
+        "evidence": evidence,
+        "text_gz_b64": pack_html(text) if status == "ok" else "",
         "html_gz_b64": pack_html(html) if status == "ok" else "",
     }
 

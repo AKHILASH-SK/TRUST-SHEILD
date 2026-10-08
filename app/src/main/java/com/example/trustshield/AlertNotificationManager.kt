@@ -145,9 +145,9 @@ class AlertNotificationManager(private val context: Context) {
             }
         }
         
-        val title = "⚠️  SUSPICIOUS LINK"
+        val title = "⚠️  UNVERIFIED LINK – OPEN WITH CARE"
         val message = "From: $fromApp"
-        val bigText = "SUSPICIOUS LINK DETECTED!\n\nApp: $fromApp\n\nURL: $url\n\nWarnings:\n• ${reasons.take(3).joinToString("\n• ")}\n\nBe cautious!"
+        val bigText = "We could not fully verify this link.\n\nApp: $fromApp\n\nURL: $url\n\nWhy:\n• ${reasons.take(3).joinToString("\n• ")}\n\nOpen with care."
         
         // Use URL hash as unique ID
         val notificationId = Math.abs(url.hashCode() % 100000)

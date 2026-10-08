@@ -528,6 +528,9 @@ def normalize_input_url(raw):
 
 def to_client_verdict(pipeline_res):
     """Maps the pipeline result to the three levels the apps understand."""
+    display = str(pipeline_res.get('display_verdict', ''))
+    if display:
+        return {'Dangerous': 'DANGEROUS', 'Safe': 'SAFE'}.get(display, 'SUSPICIOUS')     # 'Unverified - open with care'
     verdict = str(pipeline_res.get('verdict', '')).upper()
     score = float(pipeline_res.get('threat_score', 0) or 0)
     if 'CRITICAL' in verdict or 'PHISHING' in verdict or 'DANGEROUS' in verdict or score >= 80:
@@ -682,6 +685,8 @@ def sandbox_check():
             "details": summary or f"TrustShield pipeline: {pipeline_res.get('verdict')} (Score: {threat_score}/100)",
             "summary": summary,
             "analysis_complete": bool(pipeline_res.get('analysis_complete', True)),
+            "display_verdict": pipeline_res.get('display_verdict'),
+            "decisive": pipeline_res.get('decisive'),
             "engines_count": 4,
             "malicious_count": 1 if android_verdict == 'DANGEROUS' else 0,
             "suspicious_count": 1 if android_verdict == 'SUSPICIOUS' else 0
@@ -720,6 +725,7 @@ def save_link_scan():
         tier_analyzed = 'CLIENT_ONLY'
         threat_score = None
         analysis_complete = False
+        display_verdict, decisive = None, None
 
         # ===== TIER 0: phishing database =====
         is_phishing, threat_type, db_source = phishing_importer.check_url_in_database(url)
@@ -730,6 +736,7 @@ def save_link_scan():
             tier_analyzed = 'TIER_0'
             threat_score = 100.0
             analysis_complete = True
+            display_verdict, decisive = "Dangerous", True
         else:
             try:
                 pipeline_res = run_link_pipeline(url)
@@ -738,6 +745,7 @@ def save_link_scan():
                     summary = pipeline_res.get('summary', '')
                     threat_score = float(pipeline_res.get('threat_score', 0) or 0)
                     analysis_complete = bool(pipeline_res.get('analysis_complete', True))
+                    display_verdict, decisive = pipeline_res.get('display_verdict'), pipeline_res.get('decisive')
                     reasons = summary or f"TrustShield V2 Engine: {verdict} (Score: {threat_score}/100)"
                     tier_analyzed = 'V2_LINK_PIPELINE'
             except Exception as e:
@@ -777,6 +785,8 @@ def save_link_scan():
             "analyzed_at": scan[6].isoformat(),
             "threat_score": threat_score,
             "analysis_complete": analysis_complete,
+            "display_verdict": display_verdict,
+            "decisive": decisive,
             "tier_0_match": bool(is_phishing),
             "tier_analyzed": tier_analyzed
         }), 201

@@ -47,6 +47,19 @@ SANDBOX V2 (latest; supersedes the sandbox descriptions below, which still menti
   - Live check (no threat DB, no VirusTotal): 12 of 16 fresh OpenPhish links flagged (1 DANGEROUS, rest SUSPICIOUS incl. unverified), 0 of 10 legitimate sites flagged;
     median 7 s per link, max 19 s. Rules-only before this work: 2 of 24 flagged, 2 of 12 false alarms.
   - Docker image now installs Playwright Chromium (PLAYWRIGHT_BROWSERS_PATH=/ms-playwright). Test count: 254 inside Docker.
+
+DECISIVE VERDICTS + AI REVIEWER (latest)
+  - Users see three words: Safe, Dangerous, or "Unverified - open with care" (meant to be rare; target: 95%+ of links decisive). The API adds display_verdict
+    and decisive to /api/sandbox-check and /api/links/scan; the app keeps its SAFE/SUSPICIOUS/DANGEROUS values internally (SUSPICIOUS is displayed as Unverified).
+  - core_engine/llm_reviewer.py (Gemini, default model gemini-3.8-flash via google-genai; override with GEMINI_MODEL): second opinion ONLY for links whose score sits
+    in the uncertain middle band with no hard rule. Strict JSON answer (SAFE/DANGEROUS/UNSURE + confidence + reasons); page text is passed as untrusted quoted data;
+    acts only when confidence >= 0.75 AND it agrees with the pipeline's own lean; never overrides hard rules; 16 s timeout, 1 retry, cache (6 h), 2 concurrent calls.
+    Live check: correct on a benign page and on a page containing a prompt-injection attack (it flagged the injection itself).
+  - finalize_verdict() in link_threat_pipeline.py: dead domain (does not resolve) => "LEGITIMATE / OFFLINE" (Safe, nothing to open); unverified-but-quiet pages => Safe;
+    unverified with risk >= 35 => Unverified.
+  - ML inputs now also include 59 sandbox-v2 evidence features (ml/features.evidence_features); FEATURE_VERSION = 2. Collector stores the full evidence plus page text and
+    prefers the freshest feed entries. Training/collection/evaluation are run with backend/ml/scripts/1_collect.ps1, 2_train.ps1, 3_evaluate.ps1.
+  - Test count: 257 on the host (plus 23 browser tests that run inside Docker).
 ================================================================================
 
 

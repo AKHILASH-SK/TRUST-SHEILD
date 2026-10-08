@@ -62,7 +62,7 @@ class LinkHistoryAdapter : ListAdapter<LinkScanHistoryItem, LinkHistoryAdapter.L
                     statusIndicator.setBackgroundColor(ContextCompat.getColor(context, android.R.color.holo_green_dark))
                 }
                 "SUSPICIOUS" -> {
-                    verdictText.text = "⚠ Suspicious"
+                    verdictText.text = "⚠ Unverified – open with care"
                     verdictText.setTextColor(ContextCompat.getColor(context, android.R.color.holo_orange_dark))
                     verdictIcon.setImageResource(android.R.drawable.ic_dialog_alert)
                     verdictIcon.setColorFilter(ContextCompat.getColor(context, android.R.color.holo_orange_dark))

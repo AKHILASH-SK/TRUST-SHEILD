@@ -23,7 +23,7 @@ import tldextract
 # Offline public-suffix snapshot: no network fetch, same result everywhere
 _EXTRACT = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
-FEATURE_VERSION = 1
+FEATURE_VERSION = 2          # 2: sandbox-v2 evidence features added
 
 # ---------------------------------------------------------------------------
 # Reference lists
@@ -492,3 +492,95 @@ def _age(sandbox: Dict[str, Any]) -> float:
 
 def vector(names: List[str], values: Dict[str, float]) -> List[float]:
     return [float(values.get(n, _NAN)) for n in names]
+
+
+# ---------------------------------------------------------------------------
+# Sandbox evidence features (what the browser sandbox v2 observed)
+# ---------------------------------------------------------------------------
+
+EVIDENCE_FEATURES: List[str] = [
+    "ev_cred_found", "ev_cred_depth", "ev_entry_clicks", "ev_opened_menu", "ev_n_sensitive_types", "ev_has_password",
+    "ev_has_otp", "ev_has_card", "ev_has_wallet_phrase", "ev_has_gov_id", "ev_form_cross_domain", "ev_form_action_exfil",
+    "ev_probe_ran", "ev_probe_creds_sent", "ev_submit_cross_domain", "ev_submit_to_messaging", "ev_submit_to_ip",
+    "ev_submit_insecure", "ev_login_other_domain", "ev_idp_login", "ev_brand_claimed", "ev_brand_owns_domain",
+    "ev_brand_in_domain_label", "ev_has_privacy", "ev_has_terms", "ev_has_contact", "ev_has_about", "ev_footer_links",
+    "ev_same_site_ratio", "ev_n_links", "ev_cookie_banner", "ev_json_ld", "ev_redirect_hops", "ev_redirect_cross",
+    "ev_redirects_to_popular", "ev_tls_age_days", "ev_tls_days_left", "ev_tls_free_ca", "ev_n_requests",
+    "ev_third_party_domains", "ev_exfil_hosts", "ev_download_exec", "ev_dialogs", "ev_popups", "ev_hidden_iframes",
+    "ev_right_click", "ev_obfuscated_js", "ev_clipboard_write", "ev_spa_shell", "ev_http_status", "ev_title_support_lure",
+    "ev_w_urgency", "ev_w_threat", "ev_w_credentials", "ev_w_payment", "ev_w_prize", "ev_w_lure", "ev_w_crypto",
+    "ev_domain_age_days",
+]
+
+
+def _b(v: Any) -> float:
+    return 1.0 if v else 0.0
+
+
+def evidence_features(ev: Optional[Dict[str, Any]]) -> Dict[str, float]:
+    """Numeric features from the sandbox v2 evidence dict. Missing evidence -> NaN (unknown), never 0."""
+    if not ev or "credential_surface_found" not in ev:
+        return {name: _NAN for name in EVIDENCE_FEATURES}
+    sens = set(ev.get("sensitive_field_types") or [])
+    w = ev.get("wording") or {}
+    owns = ev.get("brand_owns_domain")
+    issuer = (ev.get("tls_issuer") or "").lower()
+    age = ev.get("domain_age_days", -1)
+    out = {
+        "ev_cred_found": _b(ev.get("credential_surface_found")),
+        "ev_cred_depth": float(ev.get("credential_surface_depth", 0) or 0),
+        "ev_entry_clicks": float(ev.get("entry_clicks", 0) or 0),
+        "ev_opened_menu": _b(ev.get("opened_menu")),
+        "ev_n_sensitive_types": float(len(sens)),
+        "ev_has_password": _b("password" in sens),
+        "ev_has_otp": _b("otp" in sens),
+        "ev_has_card": _b("card" in sens or "cvv" in sens),
+        "ev_has_wallet_phrase": _b("wallet_phrase" in sens),
+        "ev_has_gov_id": _b("gov_id" in sens),
+        "ev_form_cross_domain": _b(ev.get("form_cross_domain")),
+        "ev_form_action_exfil": _b(ev.get("form_action_is_exfil_host")),
+        "ev_probe_ran": _b(ev.get("probe_ran")),
+        "ev_probe_creds_sent": _b(ev.get("probe_credentials_sent")),
+        "ev_submit_cross_domain": _b(ev.get("submit_cross_domain")),
+        "ev_submit_to_messaging": _b(ev.get("submit_to_messaging_api")),
+        "ev_submit_to_ip": _b(ev.get("submit_to_ip")),
+        "ev_submit_insecure": _b(ev.get("submit_insecure")),
+        "ev_login_other_domain": _b(ev.get("login_leads_to_other_domain")),
+        "ev_idp_login": _b(ev.get("idp_login")),
+        "ev_brand_claimed": _b(ev.get("claimed_brand")),
+        "ev_brand_owns_domain": _NAN if owns is None else _b(owns),
+        "ev_brand_in_domain_label": _b(ev.get("brand_in_domain_label")),
+        "ev_has_privacy": _b(ev.get("has_privacy_link")),
+        "ev_has_terms": _b(ev.get("has_terms_link")),
+        "ev_has_contact": _b(ev.get("has_contact_link")),
+        "ev_has_about": _b(ev.get("has_about_link")),
+        "ev_footer_links": float(ev.get("footer_links", 0) or 0),
+        "ev_same_site_ratio": float(ev.get("same_site_link_ratio", 0) or 0),
+        "ev_n_links": float(ev.get("n_links", 0) or 0),
+        "ev_cookie_banner": _b(ev.get("has_cookie_banner")),
+        "ev_json_ld": _b(ev.get("has_json_ld")),
+        "ev_redirect_hops": float(ev.get("redirect_hops", 0) or 0),
+        "ev_redirect_cross": _b(ev.get("redirect_cross_domain")),
+        "ev_redirects_to_popular": _b(ev.get("redirects_to_popular_site")),
+        "ev_tls_age_days": float(ev["tls_age_days"]) if ev.get("tls_age_days") is not None else _NAN,
+        "ev_tls_days_left": float(ev["tls_days_left"]) if ev.get("tls_days_left") is not None else _NAN,
+        "ev_tls_free_ca": _b(any(k in issuer for k in ("let's encrypt", "lets encrypt", "zerossl", "buypass", "r3", "e1", "e5", "e6"))),
+        "ev_n_requests": float(ev.get("n_requests", 0) or 0),
+        "ev_third_party_domains": float(ev.get("third_party_domains", 0) or 0),
+        "ev_exfil_hosts": float(len(ev.get("exfil_hosts_contacted") or [])),
+        "ev_download_exec": _b(ev.get("download_executable")),
+        "ev_dialogs": float(ev.get("dialogs", 0) or 0),
+        "ev_popups": float(ev.get("popups_opened", 0) or 0),
+        "ev_hidden_iframes": float(ev.get("hidden_iframes", 0) or 0),
+        "ev_right_click": _b(ev.get("right_click_blocked")),
+        "ev_obfuscated_js": float(ev.get("obfuscated_js", 0) or 0),
+        "ev_clipboard_write": _b(ev.get("clipboard_write")),
+        "ev_spa_shell": _b(ev.get("is_spa_shell")),
+        "ev_http_status": float(ev.get("http_status", 0) or 0),
+        "ev_title_support_lure": _b(ev.get("title_support_lure")),
+        "ev_w_urgency": float(w.get("urgency", 0)), "ev_w_threat": float(w.get("threat", 0)),
+        "ev_w_credentials": float(w.get("credentials", 0)), "ev_w_payment": float(w.get("payment", 0)),
+        "ev_w_prize": float(w.get("prize", 0)), "ev_w_lure": float(w.get("lure", 0)), "ev_w_crypto": float(w.get("crypto", 0)),
+        "ev_domain_age_days": _NAN if age is None or age < 0 else float(age),
+    }
+    return {name: out[name] for name in EVIDENCE_FEATURES}

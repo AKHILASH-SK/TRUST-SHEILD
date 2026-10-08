@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from ml.features import FEATURE_VERSION, lexical_features, page_features
+from ml.features import FEATURE_VERSION, evidence_features, lexical_features, page_features
 
 logger = logging.getLogger("trustshield.ml")
 
@@ -143,7 +143,7 @@ class ModelRuntime:
             if fetched and self.page is not None and p_lex is not None:
                 final_url = sandbox.get("_final_url") or url
                 pg = page_features(html, final_url, url, sandbox)
-                row = build_row(self.page, {**pg, "lexical_prob": p_lex})
+                row = build_row(self.page, {**pg, **evidence_features(sandbox), "lexical_prob": p_lex})
                 art, name = self.page, "page"
                 p = self._probability(art, row)
             elif self.lexical is not None:

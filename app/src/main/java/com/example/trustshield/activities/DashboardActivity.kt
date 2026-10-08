@@ -111,7 +111,7 @@ class DashboardActivity : AppCompatActivity() {
                 position = XAxis.XAxisPosition.BOTTOM
                 setDrawGridLines(false)
                 granularity = 1f
-                valueFormatter = IndexAxisValueFormatter(arrayOf("Safe", "Suspicious", "Dangerous"))
+                valueFormatter = IndexAxisValueFormatter(arrayOf("Safe", "Unverified", "Dangerous"))
                 textSize = 12f
             }
             
@@ -213,7 +213,7 @@ class DashboardActivity : AppCompatActivity() {
         }
         
         if (suspicious > 0) {
-            entries.add(PieEntry(suspicious.toFloat(), "Suspicious"))
+            entries.add(PieEntry(suspicious.toFloat(), "Unverified"))
             colors.add(Color.parseColor("#FFAB00")) // Bright Amber
         }
         
