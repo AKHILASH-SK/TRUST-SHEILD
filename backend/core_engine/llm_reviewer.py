@@ -163,8 +163,11 @@ def review(url: str, evidence: Dict[str, Any], page_text: str, lean: str, vt: Op
         return None
     try:
         prompt = build_prompt(url, facts, page_text, lean)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        try:
             raw = pool.submit(caller, prompt).result(timeout=TIMEOUT_SECONDS)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)      # never wait for a call that already timed out
         parsed = parse_response(raw)
     except Exception as exc:
         text = str(exc)

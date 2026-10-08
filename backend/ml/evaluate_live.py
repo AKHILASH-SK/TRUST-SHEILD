@@ -81,6 +81,7 @@ def main() -> None:
     ap.add_argument("--n-benign", type=int, default=150)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=21)
+    ap.add_argument("--max-minutes", type=int, default=60, help="stop and report after this many minutes")
     ap.add_argument("--with-threat-db", action="store_true", help="also use the known-threat database (full product)")
     ap.add_argument("--with-virustotal", action="store_true", help="also use VirusTotal (needs VIRUSTOTAL_API_KEY; slow on the free tier)")
     ap.add_argument("--no-llm", action="store_true", help="switch the Gemini second opinion off (measure the model + rules only)")
@@ -143,12 +144,25 @@ def main() -> None:
         except Exception as exc:
             return {"url": url, "label": label, "band": "ERROR", "score": 0, "reason": str(exc)[:100], "seconds": round(time.time() - t, 1)}
 
-    with cf.ThreadPoolExecutor(max_workers=args.workers) as pool:
-        rows = []
-        for i, row in enumerate(pool.map(run, jobs), 1):
-            rows.append(row)
-            if i % 25 == 0:
+    # Results are counted as they FINISH (not in submission order), every browser scan has a hard time limit, and
+    # Ctrl+C still prints the numbers for everything that completed.
+    rows: List[Dict] = []
+    pool = cf.ThreadPoolExecutor(max_workers=args.workers)
+    futures = [pool.submit(run, job) for job in jobs]
+    try:
+        for i, fut in enumerate(cf.as_completed(futures, timeout=args.max_minutes * 60), 1):
+            rows.append(fut.result())
+            if i % 10 == 0:
                 print(f"[eval] {i}/{len(jobs)} done", flush=True)
+    except KeyboardInterrupt:
+        print("\n[eval] stopped by you: reporting what finished so far", flush=True)
+    except cf.TimeoutError:
+        print(f"\n[eval] time limit of {args.max_minutes} minutes reached: reporting what finished", flush=True)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    if not rows:
+        print("[eval] nothing finished, no report")
+        return
 
     mal_rows = [r for r in rows if r["label"] == 1 and r["band"] != "ERROR"]
     ben_rows = [r for r in rows if r["label"] == 0 and r["band"] != "ERROR"]
@@ -189,7 +203,8 @@ def main() -> None:
     with open(args.report, "w", encoding="utf-8") as fh:
         json.dump({"when": time.strftime("%Y-%m-%d %H:%M"), "with_threat_db": args.with_threat_db,
                    "with_virustotal": args.with_virustotal, "rows": rows}, fh, indent=1)
-    print(f"\nfull report saved to {args.report}")
+    print(f"\nfull report saved to {args.report}", flush=True)
+    os._exit(0)          # do not wait for scans that were still running when we stopped
 
 
 if __name__ == "__main__":

@@ -107,7 +107,8 @@ def _train_tiny_artifacts(directory):
                  "thresholds": thr, "version": "test"}, os.path.join(directory, "lexical_model.joblib"))
 
 
-def test_runtime_scores_with_a_real_model(tmp_path):
+def test_runtime_scores_with_a_real_model(tmp_path, monkeypatch):
+    monkeypatch.setenv("ENABLE_ML", "true")
     _train_tiny_artifacts(str(tmp_path))
     rt = ModelRuntime(str(tmp_path))
     bad = rt.score("https://secure-login-123.xyz/verify.php?id=777")

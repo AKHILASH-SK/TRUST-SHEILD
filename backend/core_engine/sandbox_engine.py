@@ -13,7 +13,7 @@ import tldextract
 from .url_safety import assert_public_url, UnsafeUrlError
 from .htmlsafe import make_soup
 
-from .browser_sandbox import BrowserSandbox, browser_available
+from .browser_sandbox import BrowserSandbox, analyze_isolated, browser_available
 
 logger = logging.getLogger(__name__)
 
@@ -454,7 +454,12 @@ class VirtualSandboxAnalyzer:
         result: Dict[str, Any]
         if browser_available():
             print(f"[*] [BROWSER SANDBOX] Analysing {url}")
-            evidence = BrowserSandbox().analyze(url)
+            # Default: each scan runs in its own process with a hard time limit, so a page that hangs the browser
+            # can never block a worker. SANDBOX_ISOLATE=0 runs it in-process (used by unit tests).
+            if os.environ.get("SANDBOX_ISOLATE", "1") == "1":
+                evidence = analyze_isolated(url)
+            else:
+                evidence = BrowserSandbox().analyze(url)
             if evidence.get("verification_state") == "unverified" and evidence.get("unverified_reason") == "crashed":
                 print("[!] Browser crashed; falling back to the HTTP analyzer")
                 result = self._analyze_with_requests(url, features)

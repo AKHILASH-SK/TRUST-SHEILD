@@ -11,6 +11,9 @@ os.environ["DB_PORT"] = "1"
 os.environ["DB_PASSWORD"] = "test"
 os.environ["DB_CONNECT_TIMEOUT"] = "1"
 os.environ["ENABLE_THREAT_SYNC"] = "false"
+os.environ["ENABLE_LLM_REVIEW"] = "false"          # tests never call the real Gemini service
+os.environ["ENABLE_ML"] = "false"                # pipeline tests do not depend on the shipped models (test_ml.py enables ML itself)
+os.environ["SANDBOX_ISOLATE"] = "0"          # unit tests exercise the sandbox in-process (fakes); isolation has its own tests
 os.environ["SECRET_KEY"] = "test-secret-key-for-unit-tests-only"
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
 os.environ.pop("RENDER", None)

@@ -22,10 +22,15 @@ Evidence keys include the legacy ones the pipeline already uses (sandbox_has_pas
 """
 
 import base64
+import json
 import logging
 import os
 import re
 import secrets
+import signal
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -990,3 +995,76 @@ def evidence_score(ev: Dict[str, Any]) -> int:
     if ev.get("credential_surface_found") and not ev.get("form_cross_domain") and not ev.get("submit_cross_domain"):
         legit += 6
     return int(max(0, min(100, risk - legit)))
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Hard-timeout isolation
+# ---------------------------------------------------------------------------------------------------------------------
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HARD_TIMEOUT_EXTRA_SECONDS = 20
+
+
+def _kill_tree(proc) -> None:
+    """Kill the worker and everything it started (the browser runs in the same process group)."""
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, signal.SIGKILL)
+        else:
+            proc.kill()
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        pass
+
+
+def _unverified(reason: str) -> Dict[str, Any]:
+    ev = BrowserSandbox._empty_evidence()
+    ev.update(verification_state="unverified", unverified_reason=reason)
+    return BrowserSandbox()._finish(ev)
+
+
+def analyze_isolated(url: str, budget_seconds: float = TOTAL_BUDGET_SECONDS, hard_timeout: Optional[float] = None,
+                     worker_cmd: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Same result as BrowserSandbox().analyze(url) but executed in a separate process with a HARD time limit.
+    A page that hangs the browser (endless script, debugger trap, frozen renderer) can no longer block the caller:
+    after budget + HARD_TIMEOUT_EXTRA_SECONDS the worker and its Chromium are killed and the link is reported as
+    unverified ("timeout").
+    """
+    hard = float(hard_timeout or (budget_seconds + HARD_TIMEOUT_EXTRA_SECONDS))
+    fd, out_path = tempfile.mkstemp(suffix=".json", prefix="ts_scan_")
+    os.close(fd)
+    cmd = list(worker_cmd or [sys.executable, "-m", "core_engine.browser_worker"]) + [url, str(budget_seconds), out_path]
+    options: Dict[str, Any] = dict(cwd=BACKEND_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ.copy())
+    if os.name == "posix":
+        options["start_new_session"] = True
+    proc = None
+    try:
+        proc = subprocess.Popen(cmd, **options)
+        try:
+            proc.wait(timeout=hard)
+        except subprocess.TimeoutExpired:
+            logger.warning("browser scan exceeded %.0fs for %s: killed", hard, url[:80])
+            _kill_tree(proc)
+            return _unverified("timeout")
+        with open(out_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict) or "verification_state" not in data:
+            raise ValueError("worker returned no evidence")
+        return data
+    except Exception as exc:
+        logger.warning("browser worker failed for %s: %s", url[:80], type(exc).__name__)
+        if proc is not None and proc.poll() is None:
+            _kill_tree(proc)
+        return _unverified("crashed")
+    finally:
+        try:
+            os.remove(out_path)
+        except OSError:
+            pass
+
