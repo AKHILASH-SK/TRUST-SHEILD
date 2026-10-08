@@ -125,9 +125,28 @@ class NotificationListener : NotificationListenerService() {
                 }
             }
 
-            // Skip notifications we've already processed (exact identical content)
-            if (linkTracker.hasProcessedNotification(notificationKey, fullMessage)) {
-                return
+            // Decide which links are NEW. Chat apps re-post the whole conversation (old messages included) whenever a
+            // new message arrives, so each message is tracked by its own timestamp; links from messages we already
+            // handled are skipped, while a link sent again as a new message is scanned again.
+            val messageUnits = extractMessageUnits(extras)
+            val linksToScan: List<String>
+            if (messageUnits.isNotEmpty()) {
+                val fresh = linkedSetOf<String>()
+                for ((unitId, unitText) in messageUnits) {
+                    if (linkTracker.markMessageUnitIfNew(notificationKey, unitId)) {
+                        fresh.addAll(linkExtractor.extractLinks(unitText))
+                    }
+                }
+                linksToScan = linkTracker.dedupeLinks(fresh)
+                if (linksToScan.isEmpty()) {
+                    linkTracker.cleanupOldProcessedNotifications()
+                    return
+                }
+            } else {
+                if (linkTracker.hasProcessedNotification(notificationKey, fullMessage)) {
+                    return
+                }
+                linksToScan = linkTracker.dedupeLinks(discoveredLinks)
             }
 
             // Log the app and message
@@ -135,7 +154,7 @@ class NotificationListener : NotificationListenerService() {
             Log.d(TAG, "Message: $fullMessage")
             
             // ========== PHASE 1: LINK EXTRACTION & ANALYSIS ==========
-            performLinkSecurityAnalysis(discoveredLinks.toList(), packageName)
+            performLinkSecurityAnalysis(linksToScan, packageName)
 
             // Mark processed to avoid duplicate handling of the same notification
             linkTracker.markNotificationProcessed(notificationKey, fullMessage)
@@ -338,6 +357,29 @@ class NotificationListener : NotificationListenerService() {
     /**
      * Extract text lines from notification extras (for messaging apps)
      */
+    /**
+     * Messages of a conversation-style notification as (id, text); the id is built from the message's own
+     * timestamp, sender and text. Empty when the app does not provide individual messages.
+     */
+    private fun extractMessageUnits(extras: Bundle): List<Pair<String, String>> {
+        val units = mutableListOf<Pair<String, String>>()
+        try {
+            val array = extras.getParcelableArray("android.messages") ?: return units
+            for (item in array) {
+                if (item is Bundle) {
+                    val text = item.getCharSequence("text")?.toString() ?: continue
+                    if (text.isBlank()) continue
+                    val sender = item.getCharSequence("sender")?.toString() ?: ""
+                    val time = item.getLong("time", 0L)
+                    units.add("$time|$sender|${text.hashCode()}" to text)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Could not read message units: ${e.message}")
+        }
+        return units
+    }
+
     private fun extractNotificationLines(extras: Bundle): List<String> {
         val lines = mutableListOf<String>()
         

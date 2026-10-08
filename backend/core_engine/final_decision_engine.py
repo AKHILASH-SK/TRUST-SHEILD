@@ -326,7 +326,19 @@ class FinalDecisionEngine:
         rule_score = threat_score
         if ml and not hard_override_triggered:
             threat_score = float(ml["score"])
-            
+            # Verified-clean rule: the browser really opened the page and found nothing hostile (no login or payment
+            # form, no brand claim, no flags, no redirect trick, nothing from VirusTotal, not a fresh or free-host
+            # page). A merely moderate model score must not turn such a page into "Unverified".
+            if (_ev.get("verification_state") == "verified"
+                    and not _ev.get("credential_surface_found") and not _ev.get("sensitive_field_types")
+                    and not _ev.get("download_executable") and not _ev.get("redirects_to_popular_site")
+                    and not has_password and not brand_impersonation and not external_form_action
+                    and not suspicious_exfiltration and not title_mismatch and not hidden_iframes
+                    and not heuristic_flags and not typosquat_risk and not free_hosting
+                    and vt_risk_score < 40 and not (0 <= domain_age_days < 180)
+                    and float(ml.get("probability", 1.0)) < 0.85):
+                threat_score = min(threat_score, 25.0)
+
         # 2b. Heuristic hard floors: each of these is dangerous by itself
         floor_reasons: List[str] = []
 

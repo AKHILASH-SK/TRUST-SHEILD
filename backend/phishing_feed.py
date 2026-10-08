@@ -52,81 +52,115 @@ class PhishingFeedImporter:
     def __init__(self):
         self.phishtank_api_key = os.getenv('PHISHTANK_API_KEY', '')
     
-    def fetch_from_phishtank(self, limit=1000):
-        """
-        Fetch from PhishTank (requires API key)
-        Register at https://phishtank.com/api_info.php
-        """
-        try:
-            logger.info("📥 Fetching from PhishTank...")
-            
-            if not self.phishtank_api_key:
-                logger.warning("⚠️ PhishTank API key not set. Set PHISHTANK_API_KEY in .env")
-                return []
-            
-            url = f"https://data.phishtank.com/data/{self.phishtank_api_key}/online-valid.json"
-            response = requests.get(url, timeout=60, headers={"User-Agent": "trustshield-feed/1.0"})
-            response.raise_for_status()
+    # Public feeds that need no account. Each list is newest-first, so the head holds the freshest links.
+    PUBLIC_FEEDS = {
+        "openphish": ("https://openphish.com/feed.txt", 3000),
+        "phishtank": ("https://data.phishtank.com/data/online-valid.csv", 6000),
+        "urlhaus": ("https://urlhaus.abuse.ch/downloads/csv_online/", 4000),
+        "phishing_database": ("https://raw.githubusercontent.com/mitchellkrogza/Phishing.Database/master/phishing-links-ACTIVE.txt", 6000),
+    }
 
-            data = response.json()
-            items = data if isinstance(data, list) else data.get('results', [])
-            phishing_urls = [item['url'] for item in items[:limit] if isinstance(item, dict) and item.get('url')]
-            logger.info(f"✅ Retrieved {len(phishing_urls)} URLs from PhishTank")
-            return phishing_urls
-            
-        except Exception as e:
-            logger.error(f"❌ Error fetching from PhishTank: {e}")
-            return []
-    
-    def fetch_from_urlhaus(self, limit=1000):
-        """
-        Fetch from URLhaus (no API key needed)
-        Free hosting malware/phishing detection
-        """
+    @staticmethod
+    def _download_text(url, timeout=90):
+        response = requests.get(url, timeout=timeout, headers={"User-Agent": "phishtank/trustshield-feed"})
+        response.raise_for_status()
+        return response.text
+
+    @staticmethod
+    def _looks_like_url(text):
+        t = (text or "").strip()
+        return t.lower().startswith(("http://", "https://")) and " " not in t and len(t) <= 2048
+
+    def fetch_from_phishtank(self, limit=6000):
+        """PhishTank: the keyed JSON feed when PHISHTANK_API_KEY is set, otherwise the public CSV of verified-online phish."""
         try:
-            logger.info("📥 Fetching from URLhaus...")
-            
-            url = "https://urlhaus-api.abuse.ch/v1/urls/recent/"
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            malicious_urls = []
-            
-            for item in data.get('urls', [])[:limit]:
-                if item.get('threat_type') in ['phishing', 'malware', 'scam']:
-                    malicious_urls.append({
-                        'url': item.get('url'),
-                        'threat_type': item.get('threat_type')
-                    })
-            
-            logger.info(f"✅ Retrieved {len(malicious_urls)} URLs from URLhaus")
-            return malicious_urls
-            
-        except Exception as e:
-            logger.error(f"❌ Error fetching from URLhaus: {e}")
-            return []
-    
-    def fetch_from_openpfish(self, limit=1000):
-        """
-        Fetch from OpenPhish (no API key needed)
-        Real-time phishing detection feed
-        """
-        try:
-            logger.info("📥 Fetching from OpenPhish...")
-            
-            url = "https://openphish.com/feed.txt"
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            
-            urls = response.text.strip().split('\n')[:limit]
-            logger.info(f"✅ Retrieved {len(urls)} URLs from OpenPhish")
+            logger.info("Fetching from PhishTank...")
+            if self.phishtank_api_key:
+                data = requests.get(f"https://data.phishtank.com/data/{self.phishtank_api_key}/online-valid.json",
+                                    timeout=90, headers={"User-Agent": "phishtank/trustshield-feed"}).json()
+                items = data if isinstance(data, list) else data.get('results', [])
+                urls = [i['url'] for i in items[:limit] if isinstance(i, dict) and i.get('url')]
+            else:
+                import csv
+                import io
+                try:
+                    text = self._download_text(self.PUBLIC_FEEDS["phishtank"][0], timeout=180)
+                except Exception as exc:
+                    # PhishTank rate-limits keyless downloads (HTTP 429): fall back to the last copy saved on this machine
+                    cached = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ml", "data", "raw", "phishtank.bin")
+                    if not os.path.exists(cached):
+                        raise
+                    logger.warning(f"PhishTank download refused ({exc}); using the saved copy. Set PHISHTANK_API_KEY for live access.")
+                    with open(cached, encoding="utf-8", errors="replace") as fh:
+                        text = fh.read()
+                urls = []
+                for row in csv.DictReader(io.StringIO(text)):
+                    if self._looks_like_url(row.get("url")):
+                        urls.append(row["url"].strip())
+                    if len(urls) >= limit:
+                        break
+            logger.info(f"Retrieved {len(urls)} URLs from PhishTank")
             return urls
-            
         except Exception as e:
-            logger.error(f"❌ Error fetching from OpenPhish: {e}")
+            logger.error(f"Error fetching from PhishTank: {e}")
             return []
-    
+
+    def fetch_from_urlhaus(self, limit=4000):
+        """URLhaus: public CSV of currently online malware/phishing URLs."""
+        try:
+            logger.info("Fetching from URLhaus...")
+            import csv
+            text = self._download_text(self.PUBLIC_FEEDS["urlhaus"][0], timeout=120)
+            lines = [ln for ln in text.splitlines() if ln.strip() and not ln.startswith("#")]
+            out = []
+            for row in csv.reader(lines):      # id,dateadded,url,url_status,last_online,threat,tags,...
+                if len(row) >= 6 and self._looks_like_url(row[2]):
+                    out.append({"url": row[2].strip(), "threat_type": (row[5] or "malware_download").strip()[:50]})
+                if len(out) >= limit:
+                    break
+            logger.info(f"Retrieved {len(out)} URLs from URLhaus")
+            return out
+        except Exception as e:
+            logger.error(f"Error fetching from URLhaus: {e}")
+            return []
+
+    def fetch_from_openpfish(self, limit=3000):
+        """OpenPhish community feed (real time)."""
+        try:
+            logger.info("Fetching from OpenPhish...")
+            urls = [u.strip() for u in self._download_text(self.PUBLIC_FEEDS["openphish"][0], timeout=30).splitlines()
+                    if self._looks_like_url(u)][:limit]
+            logger.info(f"Retrieved {len(urls)} URLs from OpenPhish")
+            return urls
+        except Exception as e:
+            logger.error(f"Error fetching from OpenPhish: {e}")
+            return []
+
+    def fetch_from_phishing_database(self, limit=6000):
+        """Phishing.Database community list of active phishing links."""
+        try:
+            logger.info("Fetching from Phishing.Database...")
+            urls = [u.strip() for u in self._download_text(self.PUBLIC_FEEDS["phishing_database"][0], timeout=120).splitlines()
+                    if self._looks_like_url(u)][:limit]
+            logger.info(f"Retrieved {len(urls)} URLs from Phishing.Database")
+            return urls
+        except Exception as e:
+            logger.error(f"Error fetching from Phishing.Database: {e}")
+            return []
+
+    def record_source(self, name, url):
+        """Keep phishing_feed_sources up to date: when each feed was last fetched and when it is due next."""
+        try:
+            with psycopg.connect(**DB_CONFIG) as conn:
+                conn.execute("""
+                    INSERT INTO phishing_feed_sources (name, url, last_fetch, next_fetch, is_active)
+                    VALUES (%s, %s, NOW(), NOW() + INTERVAL '6 hours', TRUE)
+                    ON CONFLICT (name) DO UPDATE
+                        SET url = EXCLUDED.url, last_fetch = NOW(), next_fetch = EXCLUDED.next_fetch, is_active = TRUE
+                """, (name, url))
+        except Exception as e:
+            logger.warning(f"Could not record feed source {name}: {e}")
+
     def extract_domain(self, url):
         """Extract domain from URL and normalize it"""
         try:
@@ -141,90 +175,73 @@ class PhishingFeedImporter:
     
     def store_phishing_urls(self, urls, source='manual', threat_type='phishing'):
         """
-        Store phishing URLs in the database.
-
-        Each row is inserted inside its own savepoint, so one bad row never aborts the batch.
-        Returns (inserted, updated) where updated counts URLs that already existed.
-
-        Args:
-            urls: List of URLs or list of dicts with url/threat_type
-            source: Source name (phishtank, urlhaus, openphish, manual)
-            threat_type: Default threat type (phishing, malware, scam)
+        Store phishing URLs in the database in batches (fast even against a remote database).
+        If a batch is rejected, its rows are retried one by one so one bad row never loses the rest.
+        Returns (inserted, updated); updated counts URLs that already existed.
         """
-        inserted = 0
-        updated = 0
+        rows, seen = [], set()
+        for item in urls:
+            if isinstance(item, dict):
+                url, item_type = item.get('url'), item.get('threat_type') or threat_type
+            else:
+                url, item_type = item, threat_type
+            url = (url or "").strip()
+            if not url or len(url) > 2048 or not url.lower().startswith(("http://", "https://")) or url in seen:
+                continue
+            seen.add(url)
+            rows.append((url, self.extract_domain(url), str(item_type)[:50], source))
+
+        if not rows:
+            return 0, 0
+        sql = """INSERT INTO phishing_links (url, domain, threat_type, source, last_verified)
+                 VALUES (%s, %s, %s, %s, NOW())
+                 ON CONFLICT (url) DO UPDATE SET last_verified = NOW()"""
         failed = 0
-
         with psycopg.connect(**DB_CONFIG) as conn:
-            for item in urls:
-                if isinstance(item, dict):
-                    url = item.get('url')
-                    item_threat_type = item.get('threat_type') or threat_type
-                else:
-                    url = item
-                    item_threat_type = threat_type
-
-                url = (url or "").strip()
-                if not url or len(url) > 2048 or not url.lower().startswith(("http://", "https://")):
-                    continue
-
-                domain = self.extract_domain(url)
-
+            before = conn.execute("SELECT COUNT(*) FROM phishing_links").fetchone()[0]
+            for start in range(0, len(rows), 1000):
+                batch = rows[start:start + 1000]
                 try:
                     with conn.transaction():
-                        row = conn.execute("""
-                            INSERT INTO phishing_links
-                                (url, domain, threat_type, source, last_verified)
-                            VALUES (%s, %s, %s, %s, NOW())
-                            ON CONFLICT (url) DO UPDATE SET last_verified = NOW()
-                            RETURNING (xmax = 0) AS inserted
-                        """, (url, domain, item_threat_type, source)).fetchone()
-                    if row and row[0]:
-                        inserted += 1
-                    else:
-                        updated += 1
-                except psycopg.Error as e:
-                    failed += 1
-                    logger.debug(f"Skipped {url}: {e}")
-
+                        conn.cursor().executemany(sql, batch)
+                except psycopg.Error:
+                    for row in batch:
+                        try:
+                            with conn.transaction():
+                                conn.execute(sql, row)
+                        except psycopg.Error as e:
+                            failed += 1
+                            logger.debug(f"Skipped {row[0]}: {e}")
+            after = conn.execute("SELECT COUNT(*) FROM phishing_links").fetchone()[0]
+        inserted = max(0, after - before)
+        updated = max(0, len(rows) - failed - inserted)
         logger.info(f"Stored: {inserted} new, {updated} existing, {failed} failed from {source}")
         return inserted, updated
 
     def import_all_feeds(self):
-        """Import from all available sources"""
-        logger.info("🚀 Starting import from all feeds...")
-        
-        total_inserted = 0
-        total_updated = 0
-        
-        # Import from OpenPhish (no key needed)
-        logger.info("\n--- OpenPhish Feed ---")
-        openpfish_urls = self.fetch_from_openpfish(limit=500)
-        if openpfish_urls:
-            inserted, updated = self.store_phishing_urls(openpfish_urls, source='openpfish')
-            total_inserted += inserted
-            total_updated += updated
-        
-        # Import from URLhaus (no key needed)
-        logger.info("\n--- URLhaus Feed ---")
-        urlhaus_data = self.fetch_from_urlhaus(limit=500)
-        if urlhaus_data:
-            inserted, updated = self.store_phishing_urls(urlhaus_data, source='urlhaus')
-            total_inserted += inserted
-            total_updated += updated
-        
-        # Import from PhishTank (if API key available)
-        if self.phishtank_api_key:
-            logger.info("\n--- PhishTank Feed ---")
-            phishtank_urls = self.fetch_from_phishtank(limit=500)
-            if phishtank_urls:
-                inserted, updated = self.store_phishing_urls(phishtank_urls, source='phishtank')
+        """Import every public feed and record each in phishing_feed_sources. One failing feed never stops the others."""
+        logger.info("Starting import from all feeds...")
+        total_inserted = total_updated = 0
+        jobs = [
+            ("openphish", self.PUBLIC_FEEDS["openphish"][0], self.fetch_from_openpfish, "phishing"),
+            ("phishtank", self.PUBLIC_FEEDS["phishtank"][0], self.fetch_from_phishtank, "phishing"),
+            ("urlhaus", self.PUBLIC_FEEDS["urlhaus"][0], self.fetch_from_urlhaus, "malware"),
+            ("phishing_database", self.PUBLIC_FEEDS["phishing_database"][0], self.fetch_from_phishing_database, "phishing"),
+        ]
+        for name, feed_url, fetch, default_type in jobs:
+            try:
+                items = fetch()
+                if not items:
+                    continue
+                inserted, updated = self.store_phishing_urls(items, source=name, threat_type=default_type)
                 total_inserted += inserted
                 total_updated += updated
-        
-        logger.info(f"\n✅ Import complete: {total_inserted} inserted, {total_updated} updated")
+                self.record_source(name, feed_url)
+            except Exception as e:
+                logger.error(f"Feed {name} failed: {e}")
+        logger.info(f"Import complete: {total_inserted} inserted, {total_updated} updated")
         return total_inserted, total_updated
-    
+
     def check_url_in_database(self, url):
         """
         Check if a URL is in the phishing database.
@@ -234,8 +251,10 @@ class PhishingFeedImporter:
         """
         try:
             with psycopg.connect(**DB_CONFIG) as conn:
+                bare = url.rstrip("/")
                 result = conn.execute(
-                    "SELECT threat_type, source FROM phishing_links WHERE url = %s LIMIT 1", (url,)
+                    "SELECT threat_type, source FROM phishing_links WHERE url = ANY(%s) LIMIT 1",
+                    ([url, bare, bare + "/"],)
                 ).fetchone()
                 if result:
                     return True, result[0], result[1]
@@ -275,13 +294,13 @@ if __name__ == "__main__":
     importer = PhishingFeedImporter()
     
     # For testing - import from all feeds
-    print("\n🔄 Starting phishing feed import...\n")
+    print("\nStarting phishing feed import...\n")
     importer.import_all_feeds()
     
     # Show stats
     stats = importer.get_database_stats()
     if stats:
-        print("\n📊 Database Statistics:")
+        print("\nDatabase Statistics:")
         print(f"Total phishing URLs: {stats['total']}")
         print(f"By threat type: {stats['by_threat_type']}")
         print(f"By source: {stats['by_source']}")

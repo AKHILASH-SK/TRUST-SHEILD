@@ -29,6 +29,8 @@ import logging
 import re
 import secrets
 import threading
+import time
+import copy
 from contextlib import contextmanager
 
 # Load environment variables
@@ -94,11 +96,18 @@ scheduler.add_job(
     replace_existing=True
 )
 
-# Start scheduler only when explicitly enabled (prevents multi-thread fork deadlocks in Gunicorn)
-if os.environ.get("ENABLE_SCHEDULER", "false").lower() == "true":
+def start_feed_sync():
+    """Keep the phishing database fed: one import right now (background thread), then every 6 hours."""
     if not scheduler.running:
         scheduler.start()
         print("[+] Phishing feed scheduler started (runs every 6 hours)")
+    threading.Thread(target=schedule_phishing_import, daemon=True, name="phishing-first-import").start()
+
+
+# Gunicorn forks workers, so there the scheduler is opt-in (ENABLE_SCHEDULER=true); a plain `python app.py`
+# starts it by default (see the bottom of this file).
+if os.environ.get("ENABLE_SCHEDULER", "false").lower() == "true":
+    start_feed_sync()
 
 # Shut down the scheduler when exiting the app
 atexit.register(lambda: scheduler.shutdown(wait=False) if scheduler.running else None)
@@ -540,14 +549,70 @@ def to_client_verdict(pipeline_res):
     return 'SAFE'
 
 
+_verdict_cache = {}
+_verdict_cache_lock = threading.Lock()
+VERDICT_CACHE_SECONDS = int(os.getenv("VERDICT_CACHE_SECONDS", "600"))
+VERDICT_CACHE_MAX = 2000
+
+
+def _verdict_cache_key(url):
+    """'https://www.x.org/' and 'http://x.org' are the same link."""
+    k = url.strip().lower().split("#")[0]
+    for prefix in ("https://", "http://"):
+        if k.startswith(prefix):
+            k = k[len(prefix):]
+    if k.startswith("www."):
+        k = k[4:]
+    return k.rstrip("/")
+
+
 def run_link_pipeline(url):
-    """Run the link pipeline with a cap on concurrent analyses. Returns None if the server is busy."""
+    """
+    Run the link pipeline with a cap on concurrent analyses. Returns None if the server is busy.
+    A DECISIVE result is reused for the same link for a few minutes so repeated messages get an identical,
+    instant answer (and do not burn browser time or AI quota). Every receipt is still written to the history;
+    only the analysis is reused. Uncertain results are never cached, so they are re-checked next time.
+    """
+    key = _verdict_cache_key(url)
+    now = time.time()
+    with _verdict_cache_lock:
+        hit = _verdict_cache.get(key)
+        if hit and now - hit[0] < VERDICT_CACHE_SECONDS:
+            return copy.deepcopy(hit[1])
     if not _analysis_slots.acquire(timeout=20):
         return None
     try:
-        return get_link_pipeline().analyze_url(url)
+        result = get_link_pipeline().analyze_url(url)
     finally:
         _analysis_slots.release()
+    if result and result.get("decisive") is True:
+        with _verdict_cache_lock:
+            if len(_verdict_cache) >= VERDICT_CACHE_MAX:
+                _verdict_cache.pop(next(iter(_verdict_cache)))
+            _verdict_cache[key] = (now, copy.deepcopy(result))
+    return result
+
+
+def scan_feature_rows(pipeline_res, tier_analyzed, db_source=None):
+    """Flatten what the analysis found into (name, value) rows for the scan_features table."""
+    rows = [("tier_analyzed", tier_analyzed)]
+    if db_source:
+        rows.append(("phishing_feed_source", db_source))
+    if pipeline_res:
+        for name in ("verdict", "threat_score", "display_verdict", "decisive", "analysis_complete"):
+            if pipeline_res.get(name) is not None:
+                rows.append((name, pipeline_res[name]))
+        for name, value in (pipeline_res.get("telemetry") or {}).items():
+            if isinstance(value, dict):
+                for sub_name, sub_value in value.items():
+                    if isinstance(sub_value, (str, int, float, bool)):
+                        rows.append((f"{name}.{sub_name}", sub_value))
+            elif isinstance(value, (list, tuple)):
+                if value:
+                    rows.append((name, ", ".join(str(v) for v in value[:12])))
+            elif value is not None:
+                rows.append((name, value))
+    return [(str(n)[:255], str(v)[:500]) for n, v in rows][:120]
 
 
 def ensure_link_scan_columns():
@@ -726,6 +791,7 @@ def save_link_scan():
         threat_score = None
         analysis_complete = False
         display_verdict, decisive = None, None
+        pipeline_res = None
 
         # ===== TIER 0: phishing database =====
         is_phishing, threat_type, db_source = phishing_importer.check_url_in_database(url)
@@ -774,6 +840,15 @@ def save_link_scan():
                 (user_id, url, risk_level, reasons, verdict, source_app, threat_score, analysis_complete)
             )
             scan = cur.fetchone()
+
+        try:      # evidence for later learning and for the portal; never allowed to break the scan itself
+            feature_rows = scan_feature_rows(pipeline_res, tier_analyzed, db_source if is_phishing else None)
+            with db_cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO scan_features (scan_id, feature_name, feature_value) VALUES (%s, %s, %s)",
+                    [(scan[0], n, v) for n, v in feature_rows])
+        except Exception as e:
+            logging.getLogger("trustshield.scan").warning("could not store scan features: %s", e)
 
         return jsonify({
             "id": scan[0],
@@ -1532,6 +1607,8 @@ def attachment_check_endpoint():
 
 
 if __name__ == '__main__':
+    if os.environ.get("ENABLE_SCHEDULER", "true").lower() == "true" and not scheduler.running:
+        start_feed_sync()
     app.run(host='0.0.0.0', port=8000, debug=False)
 
 

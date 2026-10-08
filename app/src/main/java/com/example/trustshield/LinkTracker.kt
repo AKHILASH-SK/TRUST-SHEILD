@@ -25,6 +25,7 @@ class LinkTracker(context: Context) {
     // In-memory: Track notification keys we've already processed THIS SESSION
     // This prevents the same notification from being processed multiple times
     private val processedNotificationKeys = ConcurrentHashMap<String, Long>()
+    private val MAX_TRACKED = 3000
     
     // In-memory: Track which links we've alerted for THIS SESSION
     // Different from processedNotificationKeys - this is for deduplication across messages
@@ -68,26 +69,51 @@ class LinkTracker(context: Context) {
     }
     
     /**
-     * Clear old processed notifications (older than 5 minutes)
-     * Prevents memory from growing infinitely
+     * Keeps memory bounded. Entries are NOT expired by age: an old message that an app re-posts hours later
+     * (WhatsApp re-posts the whole chat when a new message arrives) must still be recognised as already handled.
      */
     fun cleanupOldProcessedNotifications() {
-        val currentTime = System.currentTimeMillis()
-        val fiveMinutesAgo = currentTime - (5 * 60 * 1000) // 5 minutes
-        
-        val toRemove = processedNotificationKeys.filter { (_, time) ->
-            time < fiveMinutesAgo
-        }
-        
-        toRemove.forEach { (key, _) ->
-            processedNotificationKeys.remove(key)
-        }
-        
-        if (toRemove.isNotEmpty()) {
-            Log.d(TAG, "Cleaned up ${toRemove.size} old processed notifications")
-        }
+        val overflow = processedNotificationKeys.size - MAX_TRACKED
+        if (overflow <= 0) return
+        processedNotificationKeys.entries
+            .sortedBy { it.value }
+            .take(overflow)
+            .forEach { processedNotificationKeys.remove(it.key) }
+        Log.d(TAG, "Trimmed $overflow oldest tracked entries")
     }
-    
+
+    /**
+     * One chat message = one unit, recognised by its own timestamp, sender and text.
+     * Returns true the first time a unit is seen; false when an app re-posts a message we already handled.
+     * The same link sent again as a NEW message has a new timestamp, so it is scanned again.
+     */
+    fun markMessageUnitIfNew(notificationKey: String, unitId: String): Boolean {
+        val id = "u:$notificationKey:$unitId"
+        return processedNotificationKeys.putIfAbsent(id, System.currentTimeMillis()) == null
+    }
+
+    /**
+     * Collapse the different spellings of one link inside a single notification
+     * ("www.x.org", "https://www.x.org/", "https://x.org") into one entry; the version with a scheme wins.
+     */
+    fun dedupeLinks(links: Collection<String>): List<String> {
+        val byKey = linkedMapOf<String, String>()
+        for (raw in links) {
+            val link = raw.trim()
+            if (link.isEmpty()) continue
+            val key = canonicalKey(link)
+            val current = byKey[key]
+            if (current == null || (!current.contains("://") && link.contains("://"))) byKey[key] = link
+        }
+        return byKey.values.toList()
+    }
+
+    private fun canonicalKey(link: String): String {
+        var k = link.lowercase().substringBefore('#')
+        k = k.removePrefix("https://").removePrefix("http://").removePrefix("www.")
+        return k.trimEnd('/')
+    }
+
     /**
      * Clear all tracked notifications and links
      * Use for testing or manual reset
