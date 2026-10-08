@@ -1,178 +1,271 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8F9FA">
+    android:background="#F8FAFC"
+    android:fillViewport="true"
+    android:overScrollMode="never">
 
-    <!-- Top Blue Wave/Header Background -->
-    <View
-        android:id="@+id/header_bg"
-        android:layout_width="match_parent"
-        android:layout_height="250dp"
-        android:background="#1E88E5"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <ImageView
-        android:id="@+id/logo_icon"
-        android:layout_width="72dp"
-        android:layout_height="72dp"
-        android:src="@drawable/ic_shield"
-        android:contentDescription="Logo"
-        app:tint="#FFFFFF"
-        android:layout_marginTop="32dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <TextView
-        android:id="@+id/app_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="TrustShield"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        android:letterSpacing="0.02"
-        android:layout_marginTop="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/logo_icon" />
-
-    <!-- Login Card -->
-    <com.google.android.material.card.MaterialCardView
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginTop="32dp"
-        app:cardCornerRadius="24dp"
-        app:cardElevation="8dp"
-        app:cardBackgroundColor="#FFFFFF"
-        app:layout_constraintTop_toBottomOf="@+id/app_title"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        android:paddingBottom="36dp">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="32dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Welcome Back"
-                android:textSize="24sp"
-                android:textStyle="bold"
-                android:textColor="#333333"
-                android:layout_marginBottom="8dp" />
-                
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Sign in to continue to your dashboard."
-                android:textSize="14sp"
-                android:textColor="#777777"
-                android:layout_marginBottom="32dp" />
-
-            <!-- Phone Input -->
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp"
-                android:hint="Phone Number"
-                app:startIconDrawable="@android:drawable/ic_menu_call"
-                app:startIconTint="#999999"
-                app:endIconMode="clear_text"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusBottomEnd="12dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/et_phone_number"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="phone"
-                    android:textColor="#333333"
-                    android:textSize="16sp" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- PIN Input -->
-            <com.google.android.material.textfield.TextInputLayout
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="32dp"
-                android:hint="PIN (4-6 digits)"
-                app:startIconDrawable="@android:drawable/ic_lock_idle_lock"
-                app:startIconTint="#999999"
-                app:endIconMode="password_toggle"
-                app:boxCornerRadiusTopStart="12dp"
-                app:boxCornerRadiusTopEnd="12dp"
-                app:boxCornerRadiusBottomStart="12dp"
-                app:boxCornerRadiusBottomEnd="12dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/et_pin"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="numberPassword"
-                    android:textColor="#333333"
-                    android:textSize="16sp" />
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Login Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_login"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="Sign In"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                app:cornerRadius="12dp"
-                app:backgroundTint="#1E88E5" />
-
-            <ProgressBar
-                android:id="@+id/progress_bar"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_gravity="center"
-                android:layout_marginTop="-48dp"
-                android:visibility="gone"
-                android:elevation="2dp"
-                android:indeterminateTint="#FFFFFF" />
-
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- Bottom Registration Link -->
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="32dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <TextView
+        <!-- Top Guidance Guideline -->
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/guide_top"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Don't have an account? "
-            android:textColor="#666666"
-            android:textSize="14sp" />
+            android:orientation="horizontal"
+            app:layout_constraintGuide_percent="0.14" />
 
+        <!-- TrustShield Logo Header -->
+        <ImageView
+            android:id="@+id/iv_logo"
+            android:layout_width="230dp"
+            android:layout_height="58dp"
+            android:src="@drawable/trustshield_logo"
+            android:scaleType="fitCenter"
+            android:adjustViewBounds="true"
+            android:contentDescription="TrustShield Logo"
+            app:layout_constraintBottom_toTopOf="@+id/card_login"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@+id/guide_top"
+            app:layout_constraintVertical_bias="0.4" />
+
+        <!-- Main Authentication Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_login"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="36dp"
+            app:cardBackgroundColor="#FFFFFF"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="3dp"
+            app:strokeColor="#EEF2F6"
+            app:strokeWidth="1dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/iv_logo">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="22dp"
+                android:paddingTop="26dp"
+                android:paddingBottom="26dp">
+
+                <!-- Phone Section Header Label -->
+                <TextView
+                    android:id="@+id/tv_label_phone"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ENTER  YOUR  PHONE  NUMBER"
+                    android:textColor="#64748B"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:textAllCaps="true"
+                    android:layout_marginBottom="9dp" />
+
+                <!-- Combined Phone Number Container -->
+                <LinearLayout
+                    android:id="@+id/ll_phone_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_input_box"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp">
+
+                    <!-- Country Code Selector Container -->
+                    <LinearLayout
+                        android:id="@+id/ll_country_code"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackground">
+
+                        <TextView
+                            android:id="@+id/tv_country_code"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="US +1"
+                            android:textColor="#0F172A"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:src="@drawable/ic_chevron_down"
+                            android:layout_marginStart="6dp"
+                            android:contentDescription="Select Country"
+                            app:tint="#64748B" />
+                    </LinearLayout>
+
+                    <!-- Vertical Separator Line -->
+                    <View
+                        android:layout_width="1dp"
+                        android:layout_height="26dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="#CBD5E1" />
+
+                    <!-- Phone Number Input Field -->
+                    <EditText
+                        android:id="@+id/et_phone_number"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="(555) 234-8900"
+                        android:textColorHint="#94A3B8"
+                        android:textColor="#0F172A"
+                        android:textSize="15sp"
+                        android:inputType="phone"
+                        android:singleLine="true"
+                        android:imeOptions="actionNext"
+                        tools:ignore="Autofill,TextFields" />
+                </LinearLayout>
+
+                <!-- PIN Section Header Label -->
+                <TextView
+                    android:id="@+id/tv_label_pin"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ENTER  YOUR  PIN"
+                    android:textColor="#64748B"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.05"
+                    android:textAllCaps="true"
+                    android:layout_marginTop="20dp"
+                    android:layout_marginBottom="9dp" />
+
+                <!-- PIN Input Container -->
+                <LinearLayout
+                    android:id="@+id/ll_pin_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:background="@drawable/bg_input_box"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp">
+
+                    <!-- Lock Icon -->
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_lock_outline"
+                        android:layout_marginEnd="10dp"
+                        android:contentDescription="PIN Lock"
+                        app:tint="#94A3B8" />
+
+                    <!-- PIN Input Field -->
+                    <EditText
+                        android:id="@+id/et_pin"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:background="@null"
+                        android:hint="Enter your pin"
+                        android:textColorHint="#94A3B8"
+                        android:textColor="#0F172A"
+                        android:textSize="15sp"
+                        android:inputType="numberPassword"
+                        android:singleLine="true"
+                        android:imeOptions="actionDone"
+                        tools:ignore="Autofill,TextFields" />
+
+                    <!-- Password Toggle Icon -->
+                    <ImageView
+                        android:id="@+id/iv_toggle_pin"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:src="@drawable/ic_visibility_off_eye"
+                        android:contentDescription="Toggle PIN Visibility"
+                        android:padding="2dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        app:tint="#94A3B8" />
+                </LinearLayout>
+
+                <!-- Authorize & Continue Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_login"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="24dp"
+                    android:text="Authorize &amp; Continue"
+                    android:textColor="#FFFFFF"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textAllCaps="false"
+                    app:backgroundTint="@null"
+                    android:background="@drawable/bg_button_navy"
+                    app:cornerRadius="10dp"
+                    app:icon="@drawable/ic_arrow_forward_white"
+                    app:iconGravity="textEnd"
+                    app:iconPadding="8dp"
+                    app:iconTint="#FFFFFF"
+                    app:elevation="0dp" />
+
+                <!-- Loading Indicator -->
+                <ProgressBar
+                    android:id="@+id/progress_bar"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="12dp"
+                    android:visibility="gone"
+                    android:indeterminateTint="#031C5E" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Security & Legal Footer -->
+        <TextView
+            android:id="@+id/tv_footer_security"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:layout_marginHorizontal="32dp"
+            android:text="Secured by TrustShield Neural Protocol. By verifying,\nyou agree to the Terms of Service &amp; Privacy Policy."
+            android:textColor="#64748B"
+            android:textSize="11.5sp"
+            android:gravity="center"
+            android:lineSpacingExtra="3dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/card_login" />
+
+        <!-- Register Link for Account Creation -->
         <TextView
             android:id="@+id/btn_register"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Register here"
-            android:textColor="#1E88E5"
+            android:layout_marginTop="16dp"
+            android:text="New to TrustShield? Create an Account"
+            android:textColor="#0066FF"
+            android:textSize="13sp"
             android:textStyle="bold"
-            android:textSize="14sp"
-            android:padding="8dp" />
-    </LinearLayout>
+            android:padding="8dp"
+            android:background="?attr/selectableItemBackground"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/tv_footer_security" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>

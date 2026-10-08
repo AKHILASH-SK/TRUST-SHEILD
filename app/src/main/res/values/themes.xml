@@ -15,11 +15,13 @@
         <item name="android:statusBarColor">@color/primary_navy_dark</item>
     </style>
 
-    <!-- Login Theme with custom styling -->
+    <!-- Login Theme with custom styling matching modern mockup -->
     <style name="Theme.TrustShield.Login" parent="Theme.TrustShield">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowFullscreen">false</item>
+        <item name="android:statusBarColor">#F8FAFC</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <!-- Activity themes -->
