@@ -1,0 +1,148 @@
+{
+  "features": [
+    "host_len",
+    "n_hyphens_host",
+    "n_digits_host",
+    "digit_ratio_host",
+    "entropy_host",
+    "n_subdomains",
+    "is_ip_host",
+    "has_port",
+    "nonstd_port",
+    "has_punycode",
+    "tld_id",
+    "tld_len",
+    "tld_abused",
+    "kw_host",
+    "brand_mismatch",
+    "free_hosting",
+    "is_shortener",
+    "longest_host_token",
+    "avg_host_token",
+    "vowel_ratio_label",
+    "consonant_run_label",
+    "label_digit_transitions",
+    "https_token_in_host",
+    "www_not_first",
+    "n_host_labels",
+    "domain_label_len",
+    "subdomain_len",
+    "has_userinfo"
+  ],
+  "feature_version": 2,
+  "thresholds": {
+    "t_low": 0.0891,
+    "t_high": 0.9851,
+    "assumed_prevalence": 0.05,
+    "target_precision": 0.99,
+    "max_miss_rate": 0.02
+  },
+  "metrics": {
+    "test": {
+      "n": 53604,
+      "n_malicious": 20753,
+      "n_benign": 32851,
+      "roc_auc": 0.87938,
+      "pr_auc": 0.87352,
+      "brier": 0.11365,
+      "malicious_called_safe_pct": 2.36,
+      "malicious_called_suspicious_pct": 51.19,
+      "malicious_called_dangerous_pct": 46.46,
+      "benign_called_safe_pct": 21.54,
+      "benign_called_suspicious_pct": 78.44,
+      "benign_called_dangerous_pct": 0.02,
+      "recall_flagged_pct": 97.64,
+      "false_alarm_pct": 78.46
+    }
+  },
+  "top_features": [
+    [
+      "n_subdomains",
+      43.54
+    ],
+    [
+      "subdomain_len",
+      12.71
+    ],
+    [
+      "tld_id",
+      11.55
+    ],
+    [
+      "n_digits_host",
+      4.44
+    ],
+    [
+      "tld_abused",
+      4.01
+    ],
+    [
+      "entropy_host",
+      2.72
+    ],
+    [
+      "n_host_labels",
+      2.13
+    ],
+    [
+      "host_len",
+      2.12
+    ],
+    [
+      "n_hyphens_host",
+      2.01
+    ],
+    [
+      "tld_len",
+      1.88
+    ],
+    [
+      "domain_label_len",
+      1.84
+    ],
+    [
+      "vowel_ratio_label",
+      1.79
+    ],
+    [
+      "avg_host_token",
+      1.7
+    ],
+    [
+      "digit_ratio_host",
+      1.67
+    ],
+    [
+      "brand_mismatch",
+      1.26
+    ],
+    [
+      "longest_host_token",
+      1.26
+    ],
+    [
+      "kw_host",
+      1.2
+    ],
+    [
+      "consonant_run_label",
+      1.11
+    ],
+    [
+      "label_digit_transitions",
+      0.75
+    ],
+    [
+      "is_ip_host",
+      0.22
+    ]
+  ],
+  "trained_rows": 356062,
+  "train_malicious": 96023,
+  "train_benign": 152730,
+  "excluded_page_urls": 3559,
+  "categorical": [
+    "tld_id"
+  ],
+  "version": "20261009-0000"
+}

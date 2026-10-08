@@ -1,0 +1,268 @@
+{
+  "features": [
+    "host_len",
+    "n_hyphens_host",
+    "n_digits_host",
+    "digit_ratio_host",
+    "entropy_host",
+    "n_subdomains",
+    "is_ip_host",
+    "has_port",
+    "nonstd_port",
+    "has_punycode",
+    "tld_id",
+    "tld_len",
+    "tld_abused",
+    "kw_host",
+    "brand_mismatch",
+    "free_hosting",
+    "is_shortener",
+    "longest_host_token",
+    "avg_host_token",
+    "vowel_ratio_label",
+    "consonant_run_label",
+    "label_digit_transitions",
+    "https_token_in_host",
+    "www_not_first",
+    "n_host_labels",
+    "domain_label_len",
+    "subdomain_len",
+    "has_userinfo",
+    "page_reachable",
+    "html_len",
+    "n_forms",
+    "n_inputs",
+    "n_password",
+    "n_text_inputs",
+    "n_hidden_inputs",
+    "form_action_empty",
+    "form_action_external",
+    "form_post_method",
+    "n_scripts",
+    "n_inline_scripts",
+    "n_external_scripts",
+    "n_links",
+    "ratio_external_links",
+    "n_null_links",
+    "n_iframes",
+    "n_hidden_iframes",
+    "n_images",
+    "ratio_external_imgs",
+    "has_meta_refresh",
+    "js_redirect",
+    "title_len",
+    "title_login_words",
+    "title_brand",
+    "title_brand_mismatch",
+    "body_text_len",
+    "body_login_words",
+    "favicon_external",
+    "right_click_blocked",
+    "obfuscation_calls",
+    "is_spa_shell",
+    "n_redirects",
+    "final_host_changed",
+    "domain_age_days",
+    "newly_registered",
+    "sandbox_has_password",
+    "sandbox_external_form",
+    "sandbox_exfiltration",
+    "sandbox_hidden_iframes",
+    "sandbox_title_mismatch",
+    "sandbox_brand_impersonation",
+    "copyright_brand_mismatch",
+    "n_unique_external_domains",
+    "ev_cred_found",
+    "ev_cred_depth",
+    "ev_entry_clicks",
+    "ev_opened_menu",
+    "ev_n_sensitive_types",
+    "ev_has_password",
+    "ev_has_otp",
+    "ev_has_card",
+    "ev_has_wallet_phrase",
+    "ev_has_gov_id",
+    "ev_form_cross_domain",
+    "ev_form_action_exfil",
+    "ev_probe_ran",
+    "ev_probe_creds_sent",
+    "ev_submit_cross_domain",
+    "ev_submit_to_messaging",
+    "ev_submit_to_ip",
+    "ev_submit_insecure",
+    "ev_login_other_domain",
+    "ev_idp_login",
+    "ev_brand_claimed",
+    "ev_brand_owns_domain",
+    "ev_brand_in_domain_label",
+    "ev_has_privacy",
+    "ev_has_terms",
+    "ev_has_contact",
+    "ev_has_about",
+    "ev_footer_links",
+    "ev_same_site_ratio",
+    "ev_n_links",
+    "ev_cookie_banner",
+    "ev_json_ld",
+    "ev_redirect_hops",
+    "ev_redirect_cross",
+    "ev_redirects_to_popular",
+    "ev_tls_age_days",
+    "ev_tls_days_left",
+    "ev_tls_free_ca",
+    "ev_n_requests",
+    "ev_third_party_domains",
+    "ev_exfil_hosts",
+    "ev_download_exec",
+    "ev_dialogs",
+    "ev_popups",
+    "ev_hidden_iframes",
+    "ev_right_click",
+    "ev_obfuscated_js",
+    "ev_clipboard_write",
+    "ev_spa_shell",
+    "ev_http_status",
+    "ev_title_support_lure",
+    "ev_w_urgency",
+    "ev_w_threat",
+    "ev_w_credentials",
+    "ev_w_payment",
+    "ev_w_prize",
+    "ev_w_lure",
+    "ev_w_crypto",
+    "ev_domain_age_days",
+    "lexical_prob"
+  ],
+  "feature_version": 2,
+  "thresholds": {
+    "t_low": 0.5,
+    "t_high": 0.9231,
+    "assumed_prevalence": 0.05,
+    "target_precision": 0.99,
+    "max_miss_rate": 0.02
+  },
+  "metrics": {
+    "test": {
+      "n": 218,
+      "n_malicious": 92,
+      "n_benign": 126,
+      "roc_auc": 0.97878,
+      "pr_auc": 0.97493,
+      "brier": 0.04312,
+      "malicious_called_safe_pct": 5.43,
+      "malicious_called_suspicious_pct": 22.83,
+      "malicious_called_dangerous_pct": 71.74,
+      "benign_called_safe_pct": 95.24,
+      "benign_called_suspicious_pct": 4.76,
+      "benign_called_dangerous_pct": 0.0,
+      "recall_flagged_pct": 94.57,
+      "false_alarm_pct": 4.76
+    },
+    "lexical_alone_on_same_pages": {
+      "n": 218,
+      "n_malicious": 92,
+      "n_benign": 126,
+      "roc_auc": 0.91994,
+      "pr_auc": 0.92089,
+      "brier": 0.09605,
+      "malicious_called_safe_pct": 0.0,
+      "malicious_called_suspicious_pct": 38.04,
+      "malicious_called_dangerous_pct": 61.96,
+      "benign_called_safe_pct": 26.98,
+      "benign_called_suspicious_pct": 73.02,
+      "benign_called_dangerous_pct": 0.0,
+      "recall_flagged_pct": 100.0,
+      "false_alarm_pct": 73.02
+    }
+  },
+  "top_features": [
+    [
+      "lexical_prob",
+      38.89
+    ],
+    [
+      "ev_n_links",
+      19.11
+    ],
+    [
+      "domain_age_days",
+      4.83
+    ],
+    [
+      "ev_tls_age_days",
+      4.31
+    ],
+    [
+      "ev_n_requests",
+      2.95
+    ],
+    [
+      "n_subdomains",
+      1.99
+    ],
+    [
+      "title_len",
+      1.94
+    ],
+    [
+      "n_host_labels",
+      1.71
+    ],
+    [
+      "host_len",
+      1.6
+    ],
+    [
+      "entropy_host",
+      1.54
+    ],
+    [
+      "n_scripts",
+      1.4
+    ],
+    [
+      "ev_same_site_ratio",
+      1.4
+    ],
+    [
+      "vowel_ratio_label",
+      1.35
+    ],
+    [
+      "body_text_len",
+      1.34
+    ],
+    [
+      "subdomain_len",
+      1.32
+    ],
+    [
+      "ev_tls_days_left",
+      1.13
+    ],
+    [
+      "ev_http_status",
+      1.01
+    ],
+    [
+      "n_images",
+      0.94
+    ],
+    [
+      "n_links",
+      0.75
+    ],
+    [
+      "ev_domain_age_days",
+      0.73
+    ]
+  ],
+  "trained_rows": 1493,
+  "train_malicious": 467,
+  "train_benign": 586,
+  "lexical_model_version": "20261009-0000",
+  "categorical": [
+    "tld_id"
+  ],
+  "version": "20261009-0000"
+}
