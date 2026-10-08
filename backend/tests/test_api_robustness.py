@@ -189,34 +189,50 @@ def _sandbox(monkeypatch):
     return se
 
 
-def test_no_browser_on_render_uses_http_fallback_without_starting_chrome(monkeypatch):
+def test_no_browser_on_render_uses_http_fallback_without_starting_one(monkeypatch):
     se = _sandbox(monkeypatch)
-    monkeypatch.setenv("FORCE_CLOUD_SANDBOX", "1")
+    monkeypatch.setattr(se, "browser_available", lambda: False)
 
-    def must_not_start(*a, **k):
-        raise AssertionError("Chrome must not be started in cloud mode")
-    monkeypatch.setattr(se.webdriver, "Chrome", must_not_start)
+    class MustNotStart:
+        def __init__(self, *a, **k):
+            raise AssertionError("the browser sandbox must not be created on a host without a browser")
+    monkeypatch.setattr(se, "BrowserSandbox", MustNotStart)
     out = se.VirtualSandboxAnalyzer().analyze_link_in_sandbox("https://login.example.test/")
-    assert out["sandbox_unreachable"] == 0 and out["sandbox_has_password_field"] == 1
+    assert out["engine"] == "http_fallback" and out["sandbox_unreachable"] == 0 and out["sandbox_has_password_field"] == 1
     assert "_html" in out and out["_final_url"].startswith("https://login.example.test")
 
 
-def test_chrome_crash_falls_back_to_http_analysis(monkeypatch):
+def test_browser_crash_falls_back_to_http_analysis(monkeypatch):
     se = _sandbox(monkeypatch)
-    monkeypatch.delenv("FORCE_CLOUD_SANDBOX", raising=False)
-    monkeypatch.setattr(se, "is_chrome_available", lambda: True)
+    monkeypatch.setattr(se, "browser_available", lambda: True)
 
-    def crash(*a, **k):
-        raise se.WebDriverException("chrome not reachable")
-    monkeypatch.setattr(se.webdriver, "Chrome", crash)
+    class Crashing:
+        def analyze(self, url, budget_seconds=30):
+            return {"verification_state": "unverified", "unverified_reason": "crashed", "sandbox_unreachable": 1}
+    monkeypatch.setattr(se, "BrowserSandbox", Crashing)
     out = se.VirtualSandboxAnalyzer().analyze_link_in_sandbox("https://login.example.test/")
-    assert out["sandbox_unreachable"] == 0 and out["sandbox_has_password_field"] == 1
+    assert out["engine"] == "http_fallback" and out["sandbox_has_password_field"] == 1
+
+
+def test_browser_result_is_used_when_the_browser_works(monkeypatch):
+    se = _sandbox(monkeypatch)
+    monkeypatch.setattr(se, "browser_available", lambda: True)
+
+    class Works:
+        def analyze(self, url, budget_seconds=30):
+            return {"engine": "browser_v2", "verification_state": "verified", "unverified_reason": "",
+                    "credential_surface_found": True, "sandbox_unreachable": 0, "sandbox_has_password_field": 1,
+                    "sandbox_threat_score": 12, "_html": "<html></html>"}
+    monkeypatch.setattr(se, "BrowserSandbox", Works)
+    out = se.VirtualSandboxAnalyzer().analyze_link_in_sandbox("https://login.example.test/")
+    assert out["engine"] == "browser_v2" and out["credential_surface_found"] and out["domain_age_days"] == -1
 
 
 def test_pipeline_never_leaks_raw_page_evidence(monkeypatch):
     from core_engine import link_threat_pipeline as ltp, sandbox_engine as se
     se_obj = _sandbox(monkeypatch)
     monkeypatch.setenv("FORCE_CLOUD_SANDBOX", "1")
+    monkeypatch.setattr(se, "browser_available", lambda: False)
     pipe = ltp.LinkThreatPipeline.__new__(ltp.LinkThreatPipeline)
 
     class EmptyDb:

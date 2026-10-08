@@ -79,6 +79,8 @@ USER_CONTENT_HOSTS = {
 # Free hosting / site-builder platforms: anyone gets a subdomain, so the platform's own popularity must never vouch for a
 # subdomain (a VirusTotal rank for vercel.app says nothing about evil.vercel.app).
 USER_CONTENT_HOSTS |= {
+    "amazonaws.com", "storage.googleapis.com", "blob.core.windows.net", "web.core.windows.net", "digitaloceanspaces.com",
+    "backblazeb2.com", "storage.yandexcloud.net", "wasabisys.com",
     "vercel.app", "pages.dev", "workers.dev", "netlify.app", "gitlab.io", "weebly.com", "wixsite.com",
     "herokuapp.com", "firebaseapp.com", "web.app", "glitch.me", "onrender.com", "repl.co", "replit.dev",
     "webflow.io", "framer.app", "framer.website", "carrd.co", "000webhostapp.com", "notion.site",
@@ -286,6 +288,9 @@ class LinkThreatPipeline:
         # raw page evidence was only needed for ML; never let it leave the pipeline
         sandbox_res.pop("_html", None)
         sandbox_res.pop("_final_url", None)
+        sandbox_res.pop("_text", None)
+        sandbox_res.pop("_screenshot_b64", None)
+        sandbox_res.pop("_credential_page_url", None)
 
         # ----------------------------------------------------
         # Stage 5: Final fusion (ML verdict + hard security rules)
@@ -312,7 +317,9 @@ class LinkThreatPipeline:
             sandbox_unreachable=int(sandbox_res.get("sandbox_unreachable", 0) or 0),
             sandbox_blocked=int(sandbox_res.get("sandbox_blocked_unsafe_url", 0) or 0),
             ml=ml_result,
-            vt_detail=vt_detail
+            vt_detail=vt_detail,
+            sandbox_evidence=sandbox_res,
+            free_hosting=bool(user_content)
         )
 
         return final_result

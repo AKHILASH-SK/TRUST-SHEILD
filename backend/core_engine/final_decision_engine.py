@@ -39,6 +39,27 @@ def generate_deterministic_summary(
     """
     evidence_items = []
 
+    sb = telemetry.get("sandbox") or {}
+    if telemetry.get("verification_state") == "unverified":
+        why = {"bot_protection": "the site blocks automated browsers", "timeout": "the page did not finish loading in time",
+               "unreachable": "the page could not be reached", "blocked_url": "the address is not allowed",
+               "crashed": "the analysis browser failed"}.get(telemetry.get("unverified_reason"), "it could not be opened")
+        evidence_items.append(f"Page could not be verified in the sandbox ({why}); verdict is based on the other checks")
+    if sb.get("credential_surface_found"):
+        where = ("on the page" if not sb.get("entry_clicks") else
+                 f"after {sb['entry_clicks']} click(s) on its sign-in/sign-up buttons")
+        evidence_items.append(f"Sandbox found a login/credential form {where}")
+    if sb.get("probe_credentials_sent"):
+        dest = sb.get("submit_domain") or "its own site"
+        evidence_items.append("Sandbox typed fake credentials and saw them being sent to " +
+                              ("a messaging/webhook service" if sb.get("submit_to_messaging_api") else dest))
+    if sb.get("claimed_brand") and sb.get("brand_owns_domain") is False:
+        evidence_items.append(f"Page presents itself as '{sb['claimed_brand']}' but the domain does not belong to that brand")
+    if sb.get("login_leads_to_other_domain") and not sb.get("idp_login"):
+        evidence_items.append(f"Its login leads to a different site ({sb.get('login_target_domain')})")
+    if sb.get("download_executable"):
+        evidence_items.append("Page tries to download an app/installer file")
+
     flagged = telemetry.get("vt_detections")
     if flagged and telemetry.get("vt_engines"):
         strength = ("consensus of engines" if (telemetry.get("vt_risk_score") or 0) >= 90
@@ -68,8 +89,11 @@ def generate_deterministic_summary(
     if telemetry.get("domain_age_days", -1) >= 0 and telemetry.get("domain_age_days") < 14:
         evidence_items.append(f"Zero-day throwaway domain registered only {telemetry.get('domain_age_days')} days ago (< 14d)")
         
-    if telemetry.get("sandbox_has_password"):
-        evidence_items.append("Interactive credential harvesting password input detected")
+    if telemetry.get("sandbox_has_password") and (
+            telemetry.get("brand_impersonation") or telemetry.get("external_form_action")
+            or telemetry.get("suspicious_exfiltration") or (telemetry.get("domain_age_risk") or 0) >= 60
+            or telemetry.get("title_mismatch")):
+        evidence_items.append("Password form combined with other deceptive signals (possible credential harvesting)")
         
     if telemetry.get("heuristic_flags"):
         for flag in telemetry.get("heuristic_flags", []):
@@ -101,7 +125,7 @@ def generate_deterministic_summary(
         threat_summary = f"Domain verified legitimate. No malicious evasion techniques or threat signatures detected."
         action = "No action required. Traffic permitted to proceed normally."
 
-    formatted_evidence = "; ".join(evidence_items[:4])
+    formatted_evidence = "; ".join(evidence_items[:7])
     
     return (
         f"• Threat Summary: {threat_summary}\n"
@@ -203,12 +227,15 @@ class FinalDecisionEngine:
         sandbox_blocked: int = 0,
         known_good: bool = False,
         ml: Optional[Dict[str, Any]] = None,
-        vt_detail: Optional[Dict[str, Any]] = None
+        vt_detail: Optional[Dict[str, Any]] = None,
+        sandbox_evidence: Optional[Dict[str, Any]] = None,
+        free_hosting: bool = False
     ) -> Dict[str, Any]:
         """
         Fuses all 12+ telemetry features with deterministic guardrails.
         """
         heuristic_flags = heuristic_flags or []
+        _ev = sandbox_evidence or {}
         
         # 1. Deterministic Hard Overrides (Defense-in-Depth)
         hard_override_triggered = False
@@ -219,6 +246,21 @@ class FinalDecisionEngine:
             threat_score = 100.0
             hard_override_triggered = True
             override_reason = "Known Malicious Threat DB Match"
+        elif _ev.get("probe_credentials_sent") and _ev.get("submit_to_messaging_api"):
+            threat_score = 100.0
+            hard_override_triggered = True
+            override_reason = "Login form sends the typed credentials to a messaging/webhook service (e.g. Telegram)"
+        elif _ev.get("probe_credentials_sent") and _ev.get("submit_cross_domain") and not _ev.get("idp_login") and (
+                brand_impersonation == 1 or free_hosting or 0 <= domain_age_days < 180 or bool(heuristic_flags)
+                or bool(set(_ev.get("sensitive_field_types") or []) & {"wallet_phrase", "card", "cvv", "gov_id", "pin"})):
+            threat_score = 95.0
+            hard_override_triggered = True
+            override_reason = (f"Login form sends the typed credentials to a different site "
+                               f"({_ev.get('submit_domain') or 'unknown'})")
+        elif _ev.get("download_executable") and not _ev.get("idp_login"):
+            threat_score = 80.0
+            hard_override_triggered = True
+            override_reason = "Page forces a download of an app or installer file"
         elif suspicious_exfiltration == 1 and has_password == 1:
             threat_score = 100.0
             hard_override_triggered = True
@@ -316,6 +358,13 @@ class FinalDecisionEngine:
             _floor(AT_SPOOF_FLOOR, "'@' userinfo used to spoof destination host")
         if vt_risk_score >= VT_MALICIOUS_FLOOR:
             threat_score = max(threat_score, VT_MALICIOUS_FLOOR)
+        if free_hosting or (0 <= domain_age_days < 90):
+            if _ev.get("redirects_to_popular_site"):
+                _floor(60.0, "Page on a free host / brand-new domain bounces visitors to a famous site (cloaking)")
+            if (_ev.get("wording") or {}).get("lure", 0):
+                _floor(55.0, "Document-sharing lure wording on a free host / brand-new domain")
+            if _ev.get("is_spa_shell") and _ev.get("title_support_lure"):
+                _floor(55.0, "Empty page shell titled like a help/appeal centre on a free host / brand-new domain")
 
         # 2c. Incomplete analysis: never report plain clean for an uninspected page
         analysis_complete = True
@@ -334,6 +383,8 @@ class FinalDecisionEngine:
             verdict = "CRITICAL FRAUD / PHISHING"
         elif threat_score >= SUSPICIOUS_THRESHOLD:
             verdict = "SUSPICIOUS"
+        elif not analysis_complete:
+            verdict = "LEGITIMATE / UNVERIFIED"       # nothing bad found, but the page could not be inspected
         else:
             verdict = "LEGITIMATE / CLEAN"
 
@@ -363,6 +414,16 @@ class FinalDecisionEngine:
             "sandbox_blocked_unsafe_url": sandbox_blocked,
             "analysis_complete": analysis_complete,
             "rule_score": rule_score,
+            "verification_state": _ev.get("verification_state", "verified"),
+            "unverified_reason": _ev.get("unverified_reason", ""),
+            "sandbox_engine": _ev.get("engine"),
+            "sandbox": {k: _ev.get(k) for k in (
+                "credential_surface_found", "credential_via", "credential_surface_depth", "entry_clicks", "opened_menu",
+                "credential_field_types", "form_cross_domain", "form_action_domain", "probe_ran", "probe_credentials_sent",
+                "submit_domain", "submit_cross_domain", "submit_to_messaging_api", "login_leads_to_other_domain",
+                "login_target_domain", "idp_login", "claimed_brand", "brand_owns_domain", "download_executable",
+                "challenge_page", "redirect_domains", "third_party_domains", "has_privacy_link", "has_terms_link",
+                "wording", "http_status", "page_title", "redirects_to_popular_site", "title_support_lure") if k in _ev},
             "vt_detections": (vt_detail or {}).get("malicious"),
             "vt_suspicious": (vt_detail or {}).get("suspicious"),
             "vt_engines": (vt_detail or {}).get("engines"),
@@ -382,6 +443,7 @@ class FinalDecisionEngine:
             "url": url,
             "threat_score": threat_score,
             "verdict": verdict,
+            "verification_state": telemetry.get("verification_state", "verified") if analysis_complete else "unverified",
             "analysis_complete": analysis_complete,
             "summary": summary,
             "telemetry": telemetry

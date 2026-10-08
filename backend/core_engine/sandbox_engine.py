@@ -13,12 +13,7 @@ import tldextract
 from .url_safety import assert_public_url, UnsafeUrlError
 from .htmlsafe import make_soup
 
-# Using Selenium for the custom headless browser sandbox
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium_stealth import stealth
+from .browser_sandbox import BrowserSandbox, browser_available
 
 logger = logging.getLogger(__name__)
 
@@ -87,29 +82,9 @@ TARGETED_BRANDS = {
 }
 
 def is_chrome_available() -> bool:
-    """Checks if a working Chrome/Chromium binary exists on the system and is safe to run."""
-    import shutil
-    import platform
-    import os
-    # In cloud containers (Render, Heroku, etc.) memory is strictly limited (512MB).
-    # Always use the lightweight Cloud DOM Sandbox in Render to guarantee 0-crash, sub-second analysis.
-    if os.environ.get("RENDER") or os.environ.get("FORCE_CLOUD_SANDBOX") or os.environ.get("DYNO"):
-        return False
+    """Kept for older callers: True when the Playwright browser sandbox can run on this host."""
+    return browser_available()
 
-    if platform.system() == 'Windows':
-        paths = [
-            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
-            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
-            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe")
-        ]
-        if any(os.path.exists(p) for p in paths):
-            return True
-    if os.environ.get("CHROME_BIN") and os.path.exists(os.environ["CHROME_BIN"]):
-        return True
-    for name in ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'chrome']:
-        if shutil.which(name):
-            return True
-    return False
 
 _KW_REGEX_CACHE: Dict[str, "re.Pattern"] = {}
 
@@ -148,58 +123,6 @@ def _title_brand_mismatch(page_title: str, final_url: str, has_credential_form: 
     return False
 
 
-def detect_brand_impersonation(driver, current_url: str) -> dict:
-    """
-    Detects if an unknown domain claims the identity of a known high-value brand
-    in its DOM metadata while running on unauthorized infrastructure.
-    """
-    result = {
-        "brand_impersonation": 0,
-        "impersonated_brand": None,
-        "confidence": 0
-    }
-    
-    try:
-        # Extract the registered domain of the current live URL
-        extracted = tldextract.extract(current_url)
-        current_registered_domain = f"{extracted.domain}.{extracted.suffix}".lower()
-        
-        # Collect page textual identity clues
-        page_title = (driver.title or "").lower()
-        
-        # Collect meta tags
-        meta_tags_text = ""
-        metas = driver.find_elements(By.XPATH, "//meta[@property='og:title' or @property='og:site_name' or @name='application-name']")
-        for m in metas:
-            content = m.get_attribute("content")
-            if content:
-                meta_tags_text += " " + content.lower()
-                
-        combined_identity_text = f"{page_title} {meta_tags_text}"
-        
-        # Compare against targeted brands
-        for brand, data in TARGETED_BRANDS.items():
-            for keyword in data["keywords"]:
-                if _keyword_in_text(keyword, combined_identity_text):
-                    # Brand claimed in DOM. Check if current domain is authorized:
-                    is_authorized = any(
-                        current_registered_domain == allowed or current_registered_domain.endswith("." + allowed)
-                        for allowed in data["allowed_domains"]
-                    )
-                    
-                    if not is_authorized:
-                        result["brand_impersonation"] = 1
-                        result["impersonated_brand"] = brand
-                        result["confidence"] = 95
-                        print(f"   [!] Brand Impersonation Detected! Claiming '{brand}' on unauthorized domain '{current_registered_domain}'")
-                        return result
-                        
-    except Exception as e:
-        # Graceful fallback: do not crash if DOM extraction fails
-        print(f"[!] Warning during brand impersonation check: {e}")
-        
-    return result
-
 class VirtualSandboxAnalyzer:
     """
     Tier 3: Custom Zero-Day Virtual Sandbox (Headless Browser).
@@ -207,27 +130,9 @@ class VirtualSandboxAnalyzer:
     and inspects DOM, Network, Form destinations, and WHOIS lifecycle.
     """
     def __init__(self):
-        # Configure Headless Chrome with anti-bot stealth and silent/fast execution options
-        self.chrome_options = Options()
-        # Containers install Chromium at a fixed path (see backend/Dockerfile)
-        if os.environ.get("CHROME_BIN"):
-            self.chrome_options.binary_location = os.environ["CHROME_BIN"]
-        self.chrome_options.add_argument("--headless=new")
-        self.chrome_options.add_argument("--disable-gpu")
-        self.chrome_options.add_argument("--disable-software-rasterizer")
-        self.chrome_options.add_argument("--no-sandbox")
-        self.chrome_options.add_argument("--disable-dev-shm-usage")
-        self.chrome_options.add_argument("--disable-extensions")
-        self.chrome_options.add_argument("--disable-logging")
-        self.chrome_options.add_argument("--log-level=3")
-        self.chrome_options.add_argument("--silent")
-        self.chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-        # Strip automation blink features
-        self.chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        
-        # Real-world Windows 11 Chrome User-Agent header
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        self.chrome_options.add_argument(f"user-agent={self.user_agent}")
+        # Desktop user agent used only by the HTTP fallback (hosts that cannot run a real browser)
+        self.user_agent = ("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) "
+                           "Chrome/124.0.0.0 Mobile Safari/537.36")
 
     DYNAMIC_HOSTING_PROVIDERS = {
         'vercel.app', 'github.io', 'pages.dev', 'netlify.app', 'herokuapp.com',
@@ -259,6 +164,8 @@ class VirtualSandboxAnalyzer:
         Returns: (domain_age_days, newly_registered_domain_flag, domain_risk_score)
         """
         unknown = (-1, 0, 0)
+        if os.environ.get("TRUSTSHIELD_LAB_MODE") == "1":      # test lab: fake domains must not be looked up on the internet
+            return -1, 0, 0
         try:
             ext = tldextract.extract(url)
             reg_domain = ext.registered_domain.lower() if ext.registered_domain else ""
@@ -522,207 +429,41 @@ class VirtualSandboxAnalyzer:
 
     def analyze_link_in_sandbox(self, url: str) -> Dict[str, Any]:
         """
-        Detonates the URL in the local headless sandbox and extracts behavioral features.
+        Collect evidence about a link. With a real browser available this is the full dynamic analysis
+        (core_engine/browser_sandbox.py); otherwise a page-source-only HTTP fallback is used (e.g. on Render).
         """
-        print(f"[*] [CUSTOM SANDBOX] Detonating URL: {url}")
-        
-        features = {
-            "sandbox_has_password_field": 0,
-            "external_form_action": 0,
-            "suspicious_exfiltration": 0,
-            "domain_age_days": -1,
-            "newly_registered_domain": 0,
-            "domain_risk_score": 0,
-            "brand_impersonation": 0,
-            "impersonated_brand": None,
-            "sandbox_brand_impersonation": 0,
-            "sandbox_impersonated_brand": None,
-            "detected_target_brand": "",
-            "sandbox_num_redirects": 0,
-            "sandbox_hidden_iframes": 0,
-            "sandbox_title_mismatch": 0,
-            "sandbox_unreachable": 0,
-            "sandbox_threat_score": 0
+        features: Dict[str, Any] = {
+            "engine": "http_fallback", "verification_state": "verified", "unverified_reason": "",
+            "sandbox_has_password_field": 0, "external_form_action": 0, "suspicious_exfiltration": 0,
+            "domain_age_days": -1, "newly_registered_domain": 0, "domain_risk_score": 0,
+            "brand_impersonation": 0, "impersonated_brand": None, "sandbox_brand_impersonation": 0,
+            "sandbox_impersonated_brand": None, "detected_target_brand": "", "sandbox_num_redirects": 0,
+            "sandbox_hidden_iframes": 0, "sandbox_title_mismatch": 0, "sandbox_unreachable": 0,
+            "sandbox_blocked_unsafe_url": 0, "sandbox_threat_score": 0,
         }
-        
-        # 1. Feature 3: Domain Age & Lifecycle Check (WHOIS)
-        age_days, new_domain_flag, domain_risk = self._query_domain_age(url)
-        features['domain_age_days'] = age_days
-        features['newly_registered_domain'] = new_domain_flag
-        features['domain_risk_score'] = domain_risk
 
-        # In cloud environments without Chrome GUI (like Render Free Tier with 512MB RAM),
-        # use the fast Cloud DOM Sandbox to prevent OOM crashes and 502 Bad Gateway timeouts.
-        if not is_chrome_available():
-            print("[*] [CLOUD SANDBOX] Chrome binary not available in container. Using Cloud DOM Sandbox...")
-            return self._analyze_with_requests(url, features)
-        
-        driver = None
-        try:
-            # 2. Initialize the Stealth Sandbox Browser
-            driver_path = os.environ.get("CHROMEDRIVER_PATH")
-            if driver_path:
-                from selenium.webdriver.chrome.service import Service
-                driver = webdriver.Chrome(service=Service(driver_path), options=self.chrome_options)
+        # Domain age (RDAP) runs in parallel with the browser so the two waits overlap
+        age: Dict[str, Tuple[int, int, int]] = {}
+        age_thread = threading.Thread(target=lambda: age.update(v=self._query_domain_age(url)), daemon=True)
+        age_thread.start()
+
+        result: Dict[str, Any]
+        if browser_available():
+            print(f"[*] [BROWSER SANDBOX] Analysing {url}")
+            evidence = BrowserSandbox().analyze(url)
+            if evidence.get("verification_state") == "unverified" and evidence.get("unverified_reason") == "crashed":
+                print("[!] Browser crashed; falling back to the HTTP analyzer")
+                result = self._analyze_with_requests(url, features)
             else:
-                driver = webdriver.Chrome(options=self.chrome_options)
-            driver.set_page_load_timeout(4)
-            driver.set_script_timeout(3)
-            
-            # Feature 1: Strip navigator.webdriver via CDP script before any page script executes
-            driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument",
-                {
-                    "source": """
-                        Object.defineProperty(navigator, 'webdriver', {
-                            get: () => undefined
-                        });
-                        window.chrome = {
-                            runtime: {}
-                        };
-                        Object.defineProperty(navigator, 'plugins', {
-                            get: () => [1, 2, 3, 4, 5]
-                        });
-                        Object.defineProperty(navigator, 'languages', {
-                            get: () => ['en-US', 'en']
-                        });
-                    """
-                }
-            )
-            
-            # Apply selenium-stealth parameters
-            try:
-                stealth(
-                    driver,
-                    languages=["en-US", "en"],
-                    vendor="Google Inc.",
-                    platform="Win32",
-                    webgl_vendor="Intel Inc.",
-                    renderer="Intel Iris OpenGL Engine",
-                    fix_hairline=True,
-                )
-            except Exception as e:
-                logger.debug(f"selenium-stealth warning: {e}")
-            
-            # 3. Record initial state and navigate
-            initial_url = url
-            try:
-                assert_public_url(url)
-            except UnsafeUrlError:
-                return self._analyze_with_requests(url, features)  # re-blocks with the same guard
-            driver.get(url)
-            time.sleep(0.5) # Fast wait for JS dynamic SPAs / payloads to execute
-            
-            final_url = driver.current_url
-            try:
-                features['_html'] = (driver.page_source or "")[:400000]
-            except Exception:
-                features['_html'] = ""
-            features['_final_url'] = final_url
-            current_ext = tldextract.extract(final_url)
-            current_reg_domain = current_ext.registered_domain.lower()
-            initial_ext = tldextract.extract(initial_url)
-            initial_reg_domain = initial_ext.registered_domain.lower()
-            
-            # Check if live page or source belongs to verified global tech ecosystems
-            is_trusted_auth_domain = _is_trusted_url(final_url)
-            
-            # 4. Feature Extraction: Redirects (Ignore standard OAuth/SSO login redirects)
-            if initial_url.lower().strip('/') != final_url.lower().strip('/'):
-                if _is_trusted_url(initial_url) and is_trusted_auth_domain:
-                    print(f"   [*] Legitimate SSO / OAuth redirect: {initial_reg_domain} -> {current_reg_domain}")
-                    features['sandbox_num_redirects'] = 0
-                else:
-                    print(f"   [!] Redirect detected: {initial_url} -> {final_url}")
-                    features['sandbox_num_redirects'] = 1
-                
-            # 5. Feature Extraction: Password Harvesting Detection
-            password_inputs = driver.find_elements(By.XPATH, "//input[@type='password']")
-            has_credential_form = len(password_inputs) > 0
-            if len(password_inputs) > 0:
-                if is_trusted_auth_domain:
-                    print(f"   [*] Verified Official SSO Login Form on {current_reg_domain} (Legitimate Authentication)")
-                    features['sandbox_has_password_field'] = 0
-                else:
-                    print("   [!] Credential Harvesting Form Detected!")
-                    features['sandbox_has_password_field'] = 1
-                
-            # 6. Feature 2: Form Exfiltration Destination Inspection
-            forms = driver.find_elements(By.TAG_NAME, "form")
-            for form in forms:
-                form_has_sensitive_fields = False
-                try:
-                    # Check if this form contains password, email, or user credentials
-                    pwds = form.find_elements(By.XPATH, ".//input[@type='password']")
-                    emails = form.find_elements(By.XPATH, ".//input[@type='email' or contains(@name, 'user') or contains(@name, 'login') or contains(@name, 'pass')]")
-                    if len(pwds) > 0 or len(emails) > 0:
-                        form_has_sensitive_fields = True
-                except Exception:
-                    pass
-                
-                action_attr = form.get_attribute("action") or ""
-                if action_attr.strip():
-                    resolved_action = urljoin(final_url, action_attr).strip()
-                    action_ext = tldextract.extract(resolved_action)
-                    action_reg_domain = action_ext.registered_domain.lower()
-                    
-                    # Check 1: Action submits to a different registered domain
-                    if action_reg_domain and current_reg_domain and action_reg_domain != current_reg_domain:
-                        # Allow internal ecosystem cross-submissions (e.g. forms.gle -> google.com)
-                        if is_trusted_auth_domain and _is_trusted_url(resolved_action):
-                            print(f"   [*] Internal ecosystem form routing: {current_reg_domain} -> {action_reg_domain}")
-                        else:
-                            print(f"   [!] External Form Action Detected! Current: {current_reg_domain} -> Submits to: {action_reg_domain}")
-                            features['external_form_action'] = 1
-                    
-                    # Check 2: Action targets known exfiltration channels or raw IPs
-                    is_suspicious_endpoint = any(host in resolved_action.lower() for host in SUSPICIOUS_EXFILTRATION_HOSTS)
-                    is_raw_ip = bool(re.search(r'https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', resolved_action))
-                    is_insecure_http = final_url.startswith("https://") and resolved_action.startswith("http://")
-                    
-                    if is_suspicious_endpoint or is_raw_ip or is_insecure_http:
-                        print(f"   [!] Malicious Form Exfiltration Endpoint Detected: {resolved_action}")
-                        features['suspicious_exfiltration'] = 1
-                        
-            # 7. Feature Extraction: Hidden Iframes (Clickjacking / silent downloads)
-            iframes = driver.find_elements(By.TAG_NAME, "iframe")
-            hidden_iframes = 0
-            for iframe in iframes:
-                try:
-                    size = iframe.size
-                    if size['width'] <= 1 and size['height'] <= 1:
-                        hidden_iframes += 1
-                except Exception:
-                    pass
-            features['sandbox_hidden_iframes'] = hidden_iframes
-            if hidden_iframes > 0:
-                print(f"   [!] Hidden iframes detected: {hidden_iframes}")
-                
-            # 8. Feature Extraction: Title & Brand Mismatch
-            page_title = (driver.title or "").lower()
-            if _title_brand_mismatch(page_title, final_url, has_credential_form):
-                features['sandbox_title_mismatch'] = 1
+                features.update(evidence)
+                result = features
+        else:
+            print("[*] [HTTP SANDBOX] No browser on this host; using the page-source analyzer")
+            result = self._analyze_with_requests(url, features)
 
-            # Feature 4: Brand Impersonation Check (Metadata Cross-Verification)
-            brand_info = detect_brand_impersonation(driver, final_url)
-            features['brand_impersonation'] = brand_info.get("brand_impersonation", 0)
-            features['impersonated_brand'] = brand_info.get("impersonated_brand")
-            features['sandbox_brand_impersonation'] = brand_info.get("brand_impersonation", 0)
-            features['sandbox_impersonated_brand'] = brand_info.get("impersonated_brand")
-            features['detected_target_brand'] = brand_info.get("impersonated_brand") or ""
-                    
-            # 9. Calculate internal Sandbox Threat Score
-            features['sandbox_threat_score'] = self._score(features, is_trusted_auth_domain)
-
-            print(f"[+] [CUSTOM SANDBOX] Analysis Complete. Sandbox Score: {features['sandbox_threat_score']}")
-            return features
-            
-        except Exception as e:
-            print(f"[!] [SANDBOX FALLBACK] Browser error ({e}). Seamlessly switching to Cloud DOM Sandbox...")
-            return self._analyze_with_requests(url, features)
-        finally:
-            if driver:
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
+        age_thread.join(timeout=4)
+        age_days, new_flag, risk = age.get("v", (-1, 0, 0))
+        result["domain_age_days"], result["newly_registered_domain"], result["domain_risk_score"] = age_days, new_flag, risk
+        if result.get("sandbox_unreachable") and result.get("verification_state") == "verified":
+            result["verification_state"], result["unverified_reason"] = "unverified", result.get("unverified_reason") or "unreachable"
+        return result

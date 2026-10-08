@@ -9,6 +9,7 @@ reserved or otherwise non-global address.
 """
 
 import ipaddress
+import os
 import socket
 from typing import List
 from urllib.parse import urlparse
@@ -56,6 +57,10 @@ def assert_public_url(url: str) -> str:
     host = (parsed.hostname or "").strip().lower().rstrip(".")
     if not host:
         raise UnsafeUrlError("URL has no host")
+
+    # Test lab only: lets the sandbox visit fake sites served from this machine. Ignored in production.
+    if os.getenv("TRUSTSHIELD_LAB_MODE") == "1" and os.getenv("TRUSTSHIELD_ENV", "").lower() != "production":
+        return url
     if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
         raise UnsafeUrlError("Local hostnames are not allowed")
 

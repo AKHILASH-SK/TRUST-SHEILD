@@ -1,23 +1,27 @@
-# TrustShield backend with a real headless-Chromium sandbox.
+# TrustShield backend with a real mobile-Chromium sandbox (Playwright).
 # Build from the repository root:  docker build -t trustshield-backend .
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     TRUSTSHIELD_ENV=production \
-    CHROME_BIN=/usr/bin/chromium \
-    CHROMEDRIVER_PATH=/usr/bin/chromedriver \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     MAX_CONCURRENT_ANALYSES=2 \
     PORT=8080
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium chromium-driver fonts-liberation ca-certificates libgomp1 \
+    && apt-get install -y --no-install-recommends fonts-liberation ca-certificates libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
 
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install -r backend/requirements.txt
+
+# Chromium plus the system libraries it needs; readable by the unprivileged runtime user
+RUN playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY backend backend
 COPY frontend frontend

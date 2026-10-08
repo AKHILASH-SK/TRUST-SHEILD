@@ -23,6 +23,30 @@ UPDATE (later on 2026-10-08, supersedes any conflicting line below)
   - backend/sql/schema.sql now holds the full base schema (users, link_scans, ...). Real-PostgreSQL integration tests exist (they skip when no test DB is up).
   - backend/tools/demo_smoke_test.py walks the demo flow (28 steps) and passed 28/28 against a local server + real PostgreSQL.
   - Test count is now 197 (193 offline + 4 that need a test PostgreSQL).
+
+SANDBOX V2 (latest; supersedes the sandbox descriptions below, which still mention Selenium)
+  - core_engine/browser_sandbox.py: Playwright + Chromium (mobile "Pixel 7" profile). Selenium and selenium-stealth are REMOVED. On hosts without a browser
+    (Render) the HTTP page-source analyzer remains the fallback (engine = "http_fallback").
+  - Dynamic exploration for ANY site (no site-specific rules): load page, close cookie banners, look for a credential surface (password / OTP / card / wallet
+    phrase / Aadhaar-PAN / two-step identifier fields; JavaScript-built forms, modals, embedded frames, shadow DOM). If none, score every visible clickable element
+    for login/sign-up intent (text, aria-label, title, icon, href, position, multilingual terms), open a hamburger menu if needed, click up to 3 candidates, up to
+    2 levels deep, and examine whatever appears (new page, popup, modal). Known sign-in providers (Google, Microsoft, Apple...) are treated as normal.
+  - Credential probe (unknown sites only, inside Docker): types FAKE values into the form, submits once, and CAPTURES the outgoing request before it leaves the
+    sandbox, recording where the data would go (own site / other domain / Telegram-Discord-webhook / raw IP / insecure http).
+  - Every browser request passes the SSRF guard (closes the old "redirects inside Chromium" gap). Downloads are cancelled and flagged; dialogs dismissed; popups counted.
+  - Evidence includes: redirect chain, TLS issuer/age, claimed brand vs domain ownership (58 brands + aliases), legitimacy signals (privacy/terms/contact links,
+    same-site link ratio), wording categories (urgency, threat, credentials, payment, prize, lure, crypto), cloaking (redirect to a famous site), bot-protection pages,
+    APK/installer downloads, page HTML/text/screenshot (internal only, removed before results leave the pipeline).
+  - Unverified handling: bot protection, timeout, unreachable (incl. dead DNS), crash => verification_state "unverified", analysis_complete False, verdict
+    "LEGITIMATE / UNVERIFIED" unless other evidence raises it; failing to open a page never makes a link dangerous by itself.
+  - Decision engine uses the evidence: credentials sent to a messaging service = 100; credentials sent to another domain (with brand mismatch / free host /
+    young domain / flags / sensitive data) = 95; forced APK/installer download = 80; cloaking, document-share lure, empty help-centre shell on a free host = 55-60.
+  - Test lab: backend/tests/lab/lab_server.py serves 16 fake sites (login behind a button, modal, iframe, JS-built, hamburger menu, bot wall, Telegram theft,
+    wallet phrase, APK push, slow site, cloaking, lure ...). tests/test_browser_sandbox_lab.py (23 tests) must pass inside Docker; tests/test_browser_sandbox_logic.py
+    (29 tests) needs no browser. Lab mode (TRUSTSHIELD_LAB_MODE=1) relaxes the SSRF guard and is ignored when TRUSTSHIELD_ENV=production.
+  - Live check (no threat DB, no VirusTotal): 12 of 16 fresh OpenPhish links flagged (1 DANGEROUS, rest SUSPICIOUS incl. unverified), 0 of 10 legitimate sites flagged;
+    median 7 s per link, max 19 s. Rules-only before this work: 2 of 24 flagged, 2 of 12 false alarms.
+  - Docker image now installs Playwright Chromium (PLAYWRIGHT_BROWSERS_PATH=/ms-playwright). Test count: 254 inside Docker.
 ================================================================================
 
 
