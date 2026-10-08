@@ -2,13 +2,8 @@ package com.example.trustshield.activities
 
 import android.content.Intent
 import android.os.Bundle
-import android.text.SpannableString
-import android.text.Spanned
-import android.text.method.LinkMovementMethod
+import android.text.Html
 import android.text.method.PasswordTransformationMethod
-import android.text.style.ClickableSpan
-import android.text.style.ForegroundColorSpan
-import android.text.style.UnderlineSpan
 import android.util.Log
 import android.view.View
 import android.widget.EditText
@@ -29,8 +24,7 @@ import kotlinx.coroutines.launch
 /**
  * LoginActivity
  * User authentication with phone number and PIN
- * 
- * Styled according to the TrustShield modern neural authentication design system.
+ *
  * Calls backend API: POST /api/auth/login
  * Request: {phone_number, pin}
  * Response: {id, name, email, phone_number, message}
@@ -40,32 +34,29 @@ class LoginActivity : AppCompatActivity() {
     private var phoneInput: EditText? = null
     private var pinInput: EditText? = null
     private var loginButton: MaterialButton? = null
-    private var registerButton: TextView? = null
+    private var registerButton: MaterialButton? = null
     private var progressBar: ProgressBar? = null
-    private var tvCountryCode: TextView? = null
-    private var llCountryCode: View? = null
-    private var ivTogglePin: ImageView? = null
-    private var tvFooterSecurity: TextView? = null
+    private var togglePinButton: ImageView? = null
+    private var countryCodeButton: View? = null
+    private var countryCodeText: TextView? = null
+    private var footerTermsText: TextView? = null
 
     private var isPinVisible = false
+    private var selectedCountryCode = "+91"
     private var isLoading = false
     private val TAG = "LoginActivity"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         try {
             setContentView(R.layout.activity_login)
             Log.d(TAG, "Layout set successfully")
 
             initializeViews()
             setupListeners()
-            setupFooterSpannable()
             Log.d(TAG, "LoginActivity initialized successfully")
-
         } catch (e: Exception) {
             Log.e(TAG, "onCreate error: ${e.message}", e)
-            e.printStackTrace()
             Toast.makeText(this, "Initialization error: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
@@ -77,10 +68,14 @@ class LoginActivity : AppCompatActivity() {
             loginButton = findViewById(R.id.btn_login)
             registerButton = findViewById(R.id.btn_register)
             progressBar = findViewById(R.id.progress_bar)
-            tvCountryCode = findViewById(R.id.tv_country_code)
-            llCountryCode = findViewById(R.id.ll_country_code)
-            ivTogglePin = findViewById(R.id.iv_toggle_pin)
-            tvFooterSecurity = findViewById(R.id.tv_footer_security)
+            togglePinButton = findViewById(R.id.iv_toggle_pin)
+            countryCodeButton = findViewById(R.id.btn_country_code)
+            countryCodeText = findViewById(R.id.tv_country_code)
+            footerTermsText = findViewById(R.id.tv_footer_terms)
+
+            // Format footer with HTML underline for Terms and Privacy
+            val footerHtml = "Secured by TrustShield Neural Protocol. By verifying,<br>you agree to the <u>Terms of Service</u> &amp; <u>Privacy Policy</u>."
+            footerTermsText?.text = Html.fromHtml(footerHtml, Html.FROM_HTML_MODE_LEGACY)
 
             Log.d(TAG, "Views initialized successfully")
         } catch (e: Exception) {
@@ -90,37 +85,36 @@ class LoginActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         try {
-            // Country Code Picker Dialog
-            llCountryCode?.setOnClickListener {
+            // Password visibility toggle
+            togglePinButton?.setOnClickListener {
+                isPinVisible = !isPinVisible
+                if (isPinVisible) {
+                    pinInput?.transformationMethod = null
+                    togglePinButton?.setImageResource(R.drawable.ic_visibility)
+                } else {
+                    pinInput?.transformationMethod = PasswordTransformationMethod.getInstance()
+                    togglePinButton?.setImageResource(R.drawable.ic_visibility_off)
+                }
+                pinInput?.setSelection(pinInput?.text?.length ?: 0)
+            }
+
+            // Country code selector dialog
+            countryCodeButton?.setOnClickListener {
                 showCountryCodePicker()
             }
 
-            // PIN Visibility Toggle
-            ivTogglePin?.setOnClickListener {
-                togglePinVisibility()
-            }
-
-            // Authorize & Continue Action
+            // Login / Authorize button
             loginButton?.setOnClickListener {
                 val rawPhone = phoneInput?.text?.toString()?.trim() ?: ""
                 val pin = pinInput?.text?.toString()?.trim() ?: ""
 
-                // Validate phone number
                 if (rawPhone.isEmpty()) {
-                    Toast.makeText(this, "Please enter your phone number", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Please enter phone number", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
 
-                // Clean phone number (strip spaces, hyphens, parentheses)
-                val sanitizedPhone = rawPhone.replace(Regex("[^0-9+]"), "")
-                if (sanitizedPhone.isEmpty()) {
-                    Toast.makeText(this, "Please enter a valid phone number", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
-                // Validate PIN
                 if (pin.isEmpty()) {
-                    Toast.makeText(this, "Please enter your PIN", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Please enter PIN", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
 
@@ -129,14 +123,19 @@ class LoginActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                Log.d(TAG, "Login attempt for phone: $sanitizedPhone")
-                loginUser(sanitizedPhone, pin)
+                Log.d(TAG, "Login attempt for phone: $rawPhone")
+                loginUser(rawPhone, pin)
             }
 
-            // Account Registration Navigation
+            // Create Account / Register button
             registerButton?.setOnClickListener {
                 Log.d(TAG, "Navigate to registration")
                 navigateToRegistration()
+            }
+
+            // Footer terms click
+            footerTermsText?.setOnClickListener {
+                Toast.makeText(this, "TrustShield Neural Protocol v2.4 • Active", Toast.LENGTH_SHORT).show()
             }
 
             Log.d(TAG, "Click listeners setup complete")
@@ -146,71 +145,25 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun showCountryCodePicker() {
-        val countryOptions = arrayOf(
-            "US +1 (United States)",
-            "IN +91 (India)",
-            "UK +44 (United Kingdom)",
-            "CA +1 (Canada)",
-            "AU +61 (Australia)",
-            "SG +65 (Singapore)",
-            "AE +971 (UAE)",
-            "DE +49 (Germany)"
+        val items = arrayOf(
+            "United States (US +1)",
+            "India (IN +91)",
+            "United Kingdom (UK +44)",
+            "Canada (CA +1)",
+            "Australia (AU +61)",
+            "Singapore (SG +65)",
+            "UAE (AE +971)"
         )
-        val shortCodes = arrayOf("US +1", "IN +91", "UK +44", "CA +1", "AU +61", "SG +65", "AE +971", "DE +49")
+        val codes = arrayOf("US +1", "IN +91", "UK +44", "CA +1", "AU +61", "SG +65", "AE +971")
 
         AlertDialog.Builder(this)
             .setTitle("Select Country Code")
-            .setItems(countryOptions) { _, which ->
-                tvCountryCode?.text = shortCodes[which]
+            .setItems(items) { _, which ->
+                val display = codes[which]
+                countryCodeText?.text = display
+                selectedCountryCode = display.substringAfter("+").let { "+$it" }
             }
-            .setNegativeButton("Cancel", null)
             .show()
-    }
-
-    private fun togglePinVisibility() {
-        isPinVisible = !isPinVisible
-        if (isPinVisible) {
-            pinInput?.transformationMethod = null
-            ivTogglePin?.setImageResource(R.drawable.ic_visibility_eye)
-            ivTogglePin?.setColorFilter(0xFF0066FF.toInt())
-        } else {
-            pinInput?.transformationMethod = PasswordTransformationMethod.getInstance()
-            ivTogglePin?.setImageResource(R.drawable.ic_visibility_off_eye)
-            ivTogglePin?.setColorFilter(0xFF94A3B8.toInt())
-        }
-        pinInput?.text?.let { pinInput?.setSelection(it.length) }
-    }
-
-    private fun setupFooterSpannable() {
-        val fullText = "Secured by TrustShield Neural Protocol. By verifying,\nyou agree to the Terms of Service & Privacy Policy."
-        val spannable = SpannableString(fullText)
-
-        val termsStart = fullText.indexOf("Terms of Service")
-        if (termsStart != -1) {
-            val termsEnd = termsStart + "Terms of Service".length
-            spannable.setSpan(UnderlineSpan(), termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            spannable.setSpan(ForegroundColorSpan(0xFF0066FF.toInt()), termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            spannable.setSpan(object : ClickableSpan() {
-                override fun onClick(widget: View) {
-                    Toast.makeText(this@LoginActivity, "TrustShield Terms of Service: Neural Threat Protection Protocol", Toast.LENGTH_SHORT).show()
-                }
-            }, termsStart, termsEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-
-        val privacyStart = fullText.indexOf("Privacy Policy")
-        if (privacyStart != -1) {
-            val privacyEnd = privacyStart + "Privacy Policy".length
-            spannable.setSpan(UnderlineSpan(), privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            spannable.setSpan(ForegroundColorSpan(0xFF0066FF.toInt()), privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            spannable.setSpan(object : ClickableSpan() {
-                override fun onClick(widget: View) {
-                    Toast.makeText(this@LoginActivity, "TrustShield Privacy Policy: Zero Data Retention & On-Device Forensics", Toast.LENGTH_SHORT).show()
-                }
-            }, privacyStart, privacyEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        }
-
-        tvFooterSecurity?.text = spannable
-        tvFooterSecurity?.movementMethod = LinkMovementMethod.getInstance()
     }
 
     private fun loginUser(phoneNumber: String, pin: String) {
@@ -218,7 +171,7 @@ class LoginActivity : AppCompatActivity() {
 
         isLoading = true
         loginButton?.isEnabled = false
-        loginButton?.alpha = 0.7f
+        loginButton?.text = ""
         progressBar?.visibility = View.VISIBLE
 
         lifecycleScope.launch {
@@ -231,7 +184,20 @@ class LoginActivity : AppCompatActivity() {
                 )
 
                 val apiService = RetrofitClient.getInstance().getApiService()
-                val response = apiService.login(loginRequest)
+                var response = apiService.login(loginRequest)
+
+                // If user registered with country code prefix and raw entry fails, attempt with selected code prefix
+                if (!response.isSuccessful && !phoneNumber.startsWith("+")) {
+                    val altPhone = "$selectedCountryCode$phoneNumber"
+                    try {
+                        val altResponse = apiService.login(LoginRequest(phone_number = altPhone, pin = pin))
+                        if (altResponse.isSuccessful) {
+                            response = altResponse
+                        }
+                    } catch (_: Exception) {
+                        // Keep primary response error
+                    }
+                }
 
                 if (response.isSuccessful && response.body() != null) {
                     val loginResponse = response.body()!!
@@ -240,15 +206,14 @@ class LoginActivity : AppCompatActivity() {
                     saveUserData(loginResponse.id, loginResponse.name, loginResponse.email, loginResponse.phone_number)
                     AuthStore.saveToken(this@LoginActivity, loginResponse.token)
 
-                    Toast.makeText(this@LoginActivity, "Welcome back, ${loginResponse.name}!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@LoginActivity, "Login successful! Welcome ${loginResponse.name}", Toast.LENGTH_SHORT).show()
                     navigateToHome()
-
                 } else {
                     val errorMessage = when (response.code()) {
                         401 -> "Invalid phone number or PIN"
                         429 -> "Too many attempts. Try again in a few minutes"
                         400 -> "Missing required fields"
-                        404 -> "User not found. Please register first."
+                        404 -> "User not found"
                         500 -> "Server error. Please try again later"
                         else -> "Login failed: ${response.code()} ${response.message()}"
                     }
@@ -259,11 +224,10 @@ class LoginActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Login error: ${e.message}", e)
                 Toast.makeText(this@LoginActivity, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
-
             } finally {
                 isLoading = false
                 loginButton?.isEnabled = true
-                loginButton?.alpha = 1.0f
+                loginButton?.text = "AUTHORIZE & CONTINUE"
                 progressBar?.visibility = View.GONE
             }
         }

@@ -15,7 +15,7 @@
         <item name="android:statusBarColor">@color/primary_navy_dark</item>
     </style>
 
-    <!-- Login Theme with custom styling matching modern mockup -->
+    <!-- Login Theme with custom styling -->
     <style name="Theme.TrustShield.Login" parent="Theme.TrustShield">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>

@@ -43,7 +43,7 @@
             android:name=".activities.RegistrationActivity"
             android:exported="false"
             android:label="Register"
-            android:theme="@style/Theme.TrustShield" />
+            android:theme="@style/Theme.TrustShield.Login" />
 
         <!-- Home Activity - Main dashboard after login -->
         <activity
