@@ -16,8 +16,9 @@ class Resp:
         return self._payload
 
 
-def vt_payload(malicious=0, rank=None):
-    attrs = {"last_analysis_stats": {"malicious": malicious}}
+def vt_payload(malicious=0, rank=None, suspicious=0, total=70):
+    attrs = {"last_analysis_stats": {"malicious": malicious, "suspicious": suspicious,
+                                     "harmless": max(0, total - malicious - suspicious - 4), "undetected": 4}}
     if rank is not None:
         attrs["popularity_ranks"] = {"Tranco": {"rank": rank}}
     return {"data": {"attributes": attrs}}
@@ -48,7 +49,7 @@ def test_whitelisted_result_is_cached(tmp_path, monkeypatch):
 
 
 def test_malicious_result_is_cached(tmp_path, monkeypatch):
-    calls = patch_get(monkeypatch, lambda u: Resp(200, vt_payload(5)))
+    calls = patch_get(monkeypatch, lambda u: Resp(200, vt_payload(30)))
     c = make(tmp_path)
     assert c.get_vt_reputation("https://bad.example.net")["vt_risk_score"] == 95.0
     c.get_vt_reputation("https://bad.example.net")
@@ -128,7 +129,37 @@ def test_vt_malicious_two_engines_reaches_suspicious_or_higher():
     assert r["verdict"] != "LEGITIMATE / CLEAN" and r["threat_score"] >= SUSPICIOUS_THRESHOLD
 
 
-# ---- popular sites must not be condemned by a couple of misfiring engines (google.com really shows 2 flags) ----
+# ---- proportional scoring: "N of ~70 engines" becomes a score; only a consensus blocks by itself ----
+
+def test_score_scales_with_the_share_of_engines():
+    r = gdc.risk_from_detections
+    assert r(0, 0, 70) == 20.0
+    assert r(0, 0, 5) == gdc.NEUTRAL_RISK                     # little VirusTotal data: stay neutral
+    two_of_70 = r(2, 0, 70)
+    assert 40 <= two_of_70 < 50                                # weak signal, nowhere near a verdict
+    assert 50 <= r(5, 0, 70) < 70
+    assert 70 <= r(14, 0, 70) < 90
+    assert r(25, 0, 70) == 95.0 and r(15, 0, 200) == 95.0      # majority/consensus or 15+ engines
+    values = [r(m, 0, 70) for m in range(0, 30)]
+    assert values == sorted(values)                            # more detections never lowers the score
+
+
+def test_suspicious_engines_count_half(tmp_path):
+    assert gdc.risk_from_detections(0, 4, 70) == gdc.risk_from_detections(2, 0, 70)
+
+
+def test_two_of_seventy_is_a_weak_signal_not_a_verdict(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, total=70)))
+    rep = make(tmp_path).get_vt_reputation("https://odd-new-site.example/")
+    assert 40 <= rep["vt_risk_score"] < 50 and not rep["is_whitelisted"]
+    assert (rep["malicious_count"], rep["total_engines"]) == (2, 70)
+    assert rep["vt_risk_score"] < 90                           # the pipeline sends this to the sandbox
+
+
+def test_majority_of_engines_is_a_block_level_score(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(30, total=70)))
+    assert make(tmp_path).get_vt_reputation("https://bad-site.example/")["vt_risk_score"] == 95.0
+
 
 def test_popular_domain_with_two_flags_is_still_trusted(tmp_path, monkeypatch):
     patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, rank=1)))
@@ -136,24 +167,21 @@ def test_popular_domain_with_two_flags_is_still_trusted(tmp_path, monkeypatch):
     assert rep["is_whitelisted"] and rep["vt_risk_score"] <= 10.0 and rep["malicious_count"] == 2
 
 
-def test_popular_domain_needs_many_engines_to_be_malicious(tmp_path, monkeypatch):
-    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(16, rank=1)))
+def test_popular_domain_is_not_whitelisted_when_many_engines_flag_it(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(10, rank=5000)))      # 14% of engines
     rep = make(tmp_path).get_vt_reputation("https://hijacked-giant.example/")
-    assert not rep["is_whitelisted"] and rep["vt_risk_score"] == 95.0
+    assert not rep["is_whitelisted"] and rep["vt_risk_score"] >= 70
 
 
-def test_unranked_domain_needs_three_engines(tmp_path, monkeypatch):
-    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2)))
-    two = make(tmp_path).get_vt_reputation("https://odd-new-site.example/")
-    assert two["vt_risk_score"] == 50.0 and not two["is_whitelisted"]          # weak signal only
-    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(3)))
-    three = make(tmp_path).get_vt_reputation("https://another-new-site.example/")
-    assert three["vt_risk_score"] == 95.0
+def test_moderately_popular_domain_with_flags_goes_to_the_sandbox(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, rank=300000)))
+    rep = make(tmp_path).get_vt_reputation("https://mid-site.example/")
+    assert not rep["is_whitelisted"] and rep["vt_risk_score"] < 90
 
 
-def test_old_cache_entries_from_the_two_engine_rule_are_ignored(tmp_path, monkeypatch):
+def test_old_cache_entries_from_earlier_rules_are_ignored(tmp_path, monkeypatch):
     c = make(tmp_path)
     c._cache.put("google.com", {"is_whitelisted": False, "malicious_count": 2, "popularity_rank": 99999999,
-                                "vt_risk_score": 95.0, "provider": ""}, 3600)   # a v1 entry (no version field)
+                                "vt_risk_score": 95.0, "provider": ""}, 3600)   # an old entry (no version field)
     patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, rank=1)))
     assert c.get_vt_reputation("https://www.google.com/")["is_whitelisted"]

@@ -210,6 +210,7 @@ class LinkThreatPipeline:
         is_brand = is_brand_fast_path(clean_url)
         vt_malicious = False
         vt_whitelisted = False
+        vt_detail = None
 
         if self.good_domain_checker:
             try:
@@ -218,7 +219,9 @@ class LinkThreatPipeline:
                 logger.debug(f"VT reputation lookup failed: {e}")
                 vt_rep = {}
             vt_risk_score = vt_rep.get("vt_risk_score", 35.0)
-            if vt_rep.get("malicious_count", 0) >= vt_rep.get("required_engines", 3) or vt_risk_score >= 90.0:
+            vt_detail = {"malicious": vt_rep.get("malicious_count", 0), "suspicious": vt_rep.get("suspicious_count", 0),
+                         "engines": vt_rep.get("total_engines", 0), "ratio": vt_rep.get("detection_ratio", 0.0)}
+            if vt_risk_score >= 90.0:   # only a clear consensus of engines blocks by itself; weaker signals go to the sandbox
                 vt_malicious = True
                 vt_risk_score = max(vt_risk_score, 95.0)
             elif vt_rep.get("is_whitelisted") and not user_content:
@@ -308,7 +311,8 @@ class LinkThreatPipeline:
             vt_risk_score=vt_risk_score,
             sandbox_unreachable=int(sandbox_res.get("sandbox_unreachable", 0) or 0),
             sandbox_blocked=int(sandbox_res.get("sandbox_blocked_unsafe_url", 0) or 0),
-            ml=ml_result
+            ml=ml_result,
+            vt_detail=vt_detail
         )
 
         return final_result

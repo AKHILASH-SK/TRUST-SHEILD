@@ -15,8 +15,11 @@ UPDATE (later on 2026-10-08, supersedes any conflicting line below)
   - HTTP errors are now clean JSON with the right status (413 upload too large, 400 malformed JSON, 404, 405) instead of 500.
   - A failed link/heuristic analysis inside an email is now "ANALYSIS UNAVAILABLE" with score 0 (it used to be shown as score 50 / SUSPICIOUS).
   - URL validation rejects javascript:, data:, mailto:, tel:, file:, ftp: forms.
-  - VirusTotal rule corrected: engines needed to call a domain malicious now depends on popularity (>=15 for top-10k, >=10 for top-100k, >=5 for top-1M,
-    >=3 otherwise). The earlier ">=2 engines" rule wrongly marked google.com as phishing (VirusTotal shows ~2 misfiring engines on it). Cache version 2.
+  - VirusTotal is now PROPORTIONAL (good_domain_checker.risk_from_detections): the score follows the share of engines that flag a domain
+    (live example: google.com is flagged by 2 of 92 engines -> risk 10, trusted). No detections 20; under 3% of engines 40-50; 3-10% 50-70;
+    10-30% 70-90; 30%+ or 15+ engines 95 (consensus). Only a consensus (score >= 90) blocks by itself; weaker signals go to the sandbox, which decides.
+    Popular domains (VT rank < 100k) stay trusted unless >= 10% of engines flag them. Suspicious engines count half. Cache version 3. The earlier
+    ">= 2 engines = malicious" rule wrongly marked google.com as phishing and was removed.
   - backend/sql/schema.sql now holds the full base schema (users, link_scans, ...). Real-PostgreSQL integration tests exist (they skip when no test DB is up).
   - backend/tools/demo_smoke_test.py walks the demo flow (28 steps) and passed 28/28 against a local server + real PostgreSQL.
   - Test count is now 197 (193 offline + 4 that need a test PostgreSQL).

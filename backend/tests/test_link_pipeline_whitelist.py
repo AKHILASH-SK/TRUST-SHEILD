@@ -144,3 +144,55 @@ def test_brand_domain_stays_clean_when_virustotal_shows_a_few_flags(monkeypatch)
     pipe.sandbox = None            # must not even be needed: brand fast path
     out = pipe.analyze_url("https://www.google.com/")
     assert out["verdict"].startswith("LEGITIMATE") and out["threat_score"] == 0.0
+
+
+# ---- VirusTotal gives a proportional score; the sandbox decides unless the engines are in consensus ----
+
+def _pipeline_with(vt_dict, sandbox_features):
+    from core_engine import link_threat_pipeline as ltp
+    from core_engine.final_decision_engine import FinalDecisionEngine
+
+    class FakeVT:
+        def get_vt_reputation(self, url):
+            return vt_dict
+
+    class FakeSandbox:
+        def analyze_link_in_sandbox(self, url):
+            return dict(sandbox_features)
+
+    class NoDb:
+        def check_indicator(self, u):
+            return False
+    pipe = ltp.LinkThreatPipeline.__new__(ltp.LinkThreatPipeline)
+    pipe.threat_db, pipe.good_domain_checker = NoDb(), FakeVT()
+    pipe.decision_engine, pipe.sandbox = FinalDecisionEngine(), FakeSandbox()
+    return pipe
+
+
+CLEAN_PAGE = {"sandbox_has_password_field": 0, "external_form_action": 0, "suspicious_exfiltration": 0,
+              "domain_age_days": 900, "domain_risk_score": 0, "sandbox_threat_score": 0, "sandbox_unreachable": 0}
+
+
+def test_two_of_seventy_goes_to_the_sandbox_and_a_clean_page_clears_it():
+    vt = {"is_whitelisted": False, "malicious_count": 2, "suspicious_count": 0, "total_engines": 70,
+          "detection_ratio": 0.0286, "vt_risk_score": 45.7, "popularity_rank": 99999999}
+    out = _pipeline_with(vt, CLEAN_PAGE).analyze_url("https://small-business.example/contact")
+    assert out["verdict"].startswith("LEGITIMATE")
+    assert out["telemetry"]["vt_detections"] == 2 and out["telemetry"]["vt_engines"] == 70
+    assert "VirusTotal: 2 of 70 engines" in out["summary"]
+
+
+def test_two_of_seventy_plus_a_credential_trap_in_the_sandbox_is_dangerous():
+    vt = {"is_whitelisted": False, "malicious_count": 2, "suspicious_count": 0, "total_engines": 70,
+          "detection_ratio": 0.0286, "vt_risk_score": 45.7, "popularity_rank": 99999999}
+    page = {**CLEAN_PAGE, "sandbox_has_password_field": 1, "suspicious_exfiltration": 1, "sandbox_threat_score": 100,
+            "domain_age_days": 3, "domain_risk_score": 90}
+    out = _pipeline_with(vt, page).analyze_url("https://secure-bank-login.example/verify")
+    assert out["verdict"].startswith("CRITICAL")
+
+
+def test_consensus_of_engines_blocks_without_needing_the_sandbox():
+    vt = {"is_whitelisted": False, "malicious_count": 35, "suspicious_count": 0, "total_engines": 70,
+          "detection_ratio": 0.5, "vt_risk_score": 95.0, "popularity_rank": 99999999}
+    out = _pipeline_with(vt, CLEAN_PAGE).analyze_url("https://known-bad.example/")
+    assert out["threat_score"] >= 90 and "VirusTotal" in out["summary"]

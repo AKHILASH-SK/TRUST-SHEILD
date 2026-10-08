@@ -18,19 +18,38 @@ DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data
 DEFINITIVE_TTL = 24 * 3600     # 200 / 404 verdicts
 ERROR_TTL = 5 * 60             # transient errors
 NEUTRAL_RISK = 35.0
-CACHE_VERSION = 2          # bump when the meaning of a cached result changes (v1 treated 2 flags as malicious everywhere)
-
-
-def required_engines(best_rank: int) -> int:
-    """How many VirusTotal engines must flag a domain before it counts as malicious. Popular domains need far more."""
-    if best_rank < 10_000:
-        return 15
-    if best_rank < 100_000:
-        return 10
-    if best_rank < 1_000_000:
-        return 5
-    return 3
 RATE_LIMITED_PROVIDER = "rate_limited"
+CACHE_VERSION = 3          # bump when the meaning of a cached result changes
+
+CONSENSUS_RATIO = 0.30     # this share of engines (or CONSENSUS_ENGINES of them) agreeing counts as a verdict by itself
+CONSENSUS_ENGINES = 15
+
+
+def risk_from_detections(malicious: int, suspicious: int, total: int) -> float:
+    """
+    Turn "N of M engines flag this domain" into a 0-100 risk score.
+    Only a clear majority/consensus produces a block-level score (>= 90); a handful of detections out of ~70 engines
+    (e.g. 2/70, which VirusTotal shows even for google.com) is a weak signal that the sandbox must confirm or clear.
+
+        no detections ............. 20 (35 when VirusTotal has little data)
+        under 3% of engines ....... 40-50   (1-2 of 70)
+        3% - 10% .................. 50-70
+        10% - 30% ................. 70-90
+        30%+ or 15+ engines ....... 95     (consensus)
+    """
+    weighted = malicious + 0.5 * suspicious
+    if malicious >= CONSENSUS_ENGINES:
+        return 95.0
+    ratio = weighted / total if total > 0 else (1.0 if malicious >= 3 else 0.0)
+    if ratio >= CONSENSUS_RATIO:
+        return 95.0
+    if ratio >= 0.10:
+        return round(70.0 + (ratio - 0.10) / 0.20 * 20.0, 1)
+    if ratio >= 0.03:
+        return round(50.0 + (ratio - 0.03) / 0.07 * 20.0, 1)
+    if weighted > 0:
+        return round(40.0 + ratio / 0.03 * 10.0, 1)
+    return 20.0 if total >= 30 else NEUTRAL_RISK
 
 
 class _RateLimiter:
@@ -172,7 +191,9 @@ class GoodDomainChecker:
             "v": CACHE_VERSION,
             "is_whitelisted": False,
             "malicious_count": 0,
-            "required_engines": 3,
+            "suspicious_count": 0,
+            "total_engines": 0,
+            "detection_ratio": 0.0,
             "popularity_rank": 99999999,
             "vt_risk_score": NEUTRAL_RISK,
             "provider": provider,
@@ -228,32 +249,32 @@ class GoodDomainChecker:
             result["provider"] = "error"
             return result, ERROR_TTL
 
-        malicious_count = (data.get("last_analysis_stats") or {}).get("malicious", 0)
+        stats = data.get("last_analysis_stats") or {}
+        malicious_count = int(stats.get("malicious", 0) or 0)
+        suspicious_count = int(stats.get("suspicious", 0) or 0)
+        total = sum(int(stats.get(k, 0) or 0) for k in ("harmless", "malicious", "suspicious", "undetected"))
         best_rank, winner = 99999999, ""
         for provider, rank_data in (data.get("popularity_ranks") or {}).items():
             rank = (rank_data or {}).get("rank", 99999999)
             if rank < best_rank:
                 best_rank, winner = rank, provider
-        required = required_engines(best_rank)
-        result.update(malicious_count=malicious_count, popularity_rank=best_rank, provider=winner,
-                      required_engines=required)
+        risk = risk_from_detections(malicious_count, suspicious_count, total)
+        ratio = round((malicious_count + 0.5 * suspicious_count) / total, 4) if total else 0.0
+        result.update(malicious_count=malicious_count, suspicious_count=suspicious_count, total_engines=total,
+                      detection_ratio=ratio, popularity_rank=best_rank, provider=winner, vt_risk_score=risk)
 
-        if malicious_count >= required:
-            result["vt_risk_score"] = 95.0
-            logger.warning(f"[Tier 2.5] Domain '{domain}' is flagged malicious by {malicious_count} VT engines "
-                           f"(needs {required} at rank {best_rank})!")
+        if risk >= 90.0:
+            logger.warning(f"[Tier 2.5] Domain '{domain}': {malicious_count}/{total} engines flag it (consensus)")
             return result, DEFINITIVE_TTL
 
-        # A few vendors misfire on huge, well-known domains (google.com shows 1-2 flags), so popularity wins over a
-        # small number of detections; an unranked domain with 1-2 flags stays a weak signal only.
-        if best_rank < 100000:
+        # Popular domains: a few misfiring vendors do not matter. Anything less popular is handed to the sandbox
+        # with the proportional score above instead of being whitelisted.
+        if best_rank < 100000 and ratio < 0.10:
             result["is_whitelisted"] = True
             result["vt_risk_score"] = 0.0 if malicious_count == 0 else 10.0
-        elif best_rank < 500000 and malicious_count <= 1:
+        elif best_rank < 500000 and malicious_count == 0:
             result["is_whitelisted"] = True
             result["vt_risk_score"] = 10.0
-        elif malicious_count > 0:
-            result["vt_risk_score"] = 50.0
         return result, DEFINITIVE_TTL
 
     def _lookup(self, domain: str) -> dict:
@@ -283,11 +304,11 @@ class GoodDomainChecker:
 
         result = self._lookup(reg)
         if (host and host != reg and not result.get("is_whitelisted")
-                and result.get("malicious_count", 0) < result.get("required_engines", 3)
+                and result.get("vt_risk_score", 0) < 90.0
                 and result.get("provider") != RATE_LIMITED_PROVIDER
                 and (self._cache.get(host) is not None or self._limiter.remaining_minute() >= 2)):
             host_result = self._lookup(host)
-            if host_result.get("malicious_count", 0) >= host_result.get("required_engines", 3):
+            if host_result.get("vt_risk_score", 0) > result.get("vt_risk_score", 0) and host_result.get("vt_risk_score", 0) >= 50.0:
                 return host_result
         return result
 

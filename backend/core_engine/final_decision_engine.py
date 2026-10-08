@@ -39,6 +39,12 @@ def generate_deterministic_summary(
     """
     evidence_items = []
 
+    flagged = telemetry.get("vt_detections")
+    if flagged and telemetry.get("vt_engines"):
+        strength = ("consensus of engines" if (telemetry.get("vt_risk_score") or 0) >= 90
+                    else "weak signal, confirmed or cleared by page analysis")
+        evidence_items.append(f"VirusTotal: {flagged} of {telemetry['vt_engines']} engines flag this domain ({strength})")
+
     if telemetry.get("ml_used") and telemetry.get("ml_probability") is not None:
         ml_line = (f"ML classifier ({telemetry.get('ml_model')} model) rates this link "
                    f"{telemetry['ml_probability'] * 100:.0f}% likely malicious")
@@ -196,7 +202,8 @@ class FinalDecisionEngine:
         sandbox_unreachable: int = 0,
         sandbox_blocked: int = 0,
         known_good: bool = False,
-        ml: Optional[Dict[str, Any]] = None
+        ml: Optional[Dict[str, Any]] = None,
+        vt_detail: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Fuses all 12+ telemetry features with deterministic guardrails.
@@ -356,6 +363,9 @@ class FinalDecisionEngine:
             "sandbox_blocked_unsafe_url": sandbox_blocked,
             "analysis_complete": analysis_complete,
             "rule_score": rule_score,
+            "vt_detections": (vt_detail or {}).get("malicious"),
+            "vt_suspicious": (vt_detail or {}).get("suspicious"),
+            "vt_engines": (vt_detail or {}).get("engines"),
             "ml_used": bool(ml),
             "ml_probability": ml["probability"] if ml else None,
             "ml_band": ml["band"] if ml else None,
