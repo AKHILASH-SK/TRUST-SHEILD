@@ -190,12 +190,31 @@ def test_end_to_end_orchestrator():
         </body>
         </html>
         """
-        with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as f:
-            f.write(mock_html)
-            temp_path = f.name
+        # The SSRF guard (correctly) refuses file:// and private addresses, so the fake phishing page is served from a
+        # tiny local HTTP server and the guard is relaxed through the test-only lab switch for the duration of this test.
+        import http.server
+        import threading
+
+        class _PhishPage(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = mock_html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _PhishPage)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        saved_env = {k: os.environ.get(k) for k in ("TRUSTSHIELD_LAB_MODE", "TRUSTSHIELD_ENV")}
+        os.environ["TRUSTSHIELD_LAB_MODE"] = "1"
+        os.environ["TRUSTSHIELD_ENV"] = "development"
 
         try:
-            mock_url = f"file:///{temp_path.replace(os.sep, '/')}"
+            mock_url = f"http://127.0.0.1:{server.server_port}/verify"
             detonation_res = pipeline.analyze_url(mock_url)
             print(f"   Verdict: {detonation_res['verdict']}")
             print(f"   Final Threat Score: {detonation_res['threat_score']}")
@@ -209,8 +228,12 @@ def test_end_to_end_orchestrator():
             assert detonation_res['telemetry']['sandbox_has_password'] == 1
             print("   ✅ Dynamic Sandbox Detonation correctly convicted zero-day link!")
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            server.shutdown()
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
 
 if __name__ == "__main__":

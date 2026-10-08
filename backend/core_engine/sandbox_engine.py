@@ -228,6 +228,10 @@ class VirtualSandboxAnalyzer:
                 headers={"User-Agent": self.user_agent},
                 timeout=self.REQUEST_BUDGET_SECONDS,
                 allow_redirects=False,
+                # Deliberately NOT verifying certificates: this fetch exists to inspect untrusted, often broken or
+                # self-signed phishing sites, and nothing trusted is sent over it (no cookies, no credentials). With
+                # verification on, exactly the suspicious sites we need to analyse would fail to load. The browser
+                # sandbox does the same (ignore_https_errors) and records the certificate details as evidence.
                 verify=False,
                 stream=True,
             )
