@@ -54,6 +54,8 @@ RESPONSE_SCHEMA = {
 
 _cache: Dict[str, Any] = {}
 _cache_lock = threading.Lock()
+_paused_until = 0.0              # circuit breaker: after a quota error stop calling the service for a while
+QUOTA_PAUSE_SECONDS = 300
 _slots = threading.BoundedSemaphore(2)
 
 
@@ -135,8 +137,8 @@ def _call_gemini(prompt: str) -> Optional[str]:
             return response.text
         except Exception as exc:
             last = exc
-            if "503" not in str(exc) and "UNAVAILABLE" not in str(exc) and "429" not in str(exc):
-                break
+            if "503" not in str(exc) and "UNAVAILABLE" not in str(exc):
+                break               # quota (429) and other errors are not retried: the pause below handles quota
             time.sleep(1.0)
     raise last
 
@@ -145,7 +147,10 @@ def review(url: str, evidence: Dict[str, Any], page_text: str, lean: str, vt: Op
            ml: Optional[Dict[str, Any]] = None, domain_age_days: int = -1, free_hosting: bool = False,
            caller=_call_gemini) -> Optional[Dict[str, Any]]:
     """Returns {verdict, confidence, reasons, impersonated_brand, cached} or None when unavailable/failed."""
+    global _paused_until
     if not is_enabled():
+        return None
+    if time.time() < _paused_until:                 # quota recently exhausted: do not wait on a service that said no
         return None
     facts = _facts(evidence, vt, ml, domain_age_days, free_hosting)
     key = hashlib.sha256((url.split("?")[0] + "|" + clean_text(page_text)[:400]).encode("utf-8", errors="replace")).hexdigest()
@@ -162,7 +167,12 @@ def review(url: str, evidence: Dict[str, Any], page_text: str, lean: str, vt: Op
             raw = pool.submit(caller, prompt).result(timeout=TIMEOUT_SECONDS)
         parsed = parse_response(raw)
     except Exception as exc:
-        logger.warning("LLM review unavailable: %s %s", type(exc).__name__, str(exc)[:160].replace(os.environ.get("GEMINI_API_KEY", "-"), "<key>"))
+        text = str(exc)
+        if "429" in text or "RESOURCE_EXHAUSTED" in text:
+            _paused_until = time.time() + QUOTA_PAUSE_SECONDS
+            logger.warning("Gemini quota exhausted: AI review paused for %d minutes (links stay 'Unverified')", QUOTA_PAUSE_SECONDS // 60)
+        else:
+            logger.warning("LLM review unavailable: %s %s", type(exc).__name__, text[:120].replace(os.environ.get("GEMINI_API_KEY", "-"), "<key>"))
         return None
     finally:
         _slots.release()

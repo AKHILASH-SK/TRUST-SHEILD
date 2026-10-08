@@ -161,3 +161,17 @@ def test_api_maps_display_words_to_the_three_app_levels():
     assert f({"display_verdict": "Dangerous"}) == "DANGEROUS" and f({"display_verdict": "Safe"}) == "SAFE"
     assert f({"display_verdict": DISPLAY_UNVERIFIED}) == "SUSPICIOUS"
     assert f({"verdict": "CRITICAL FRAUD / PHISHING", "threat_score": 90}) == "DANGEROUS"       # older results without the new field
+
+
+def test_quota_error_pauses_the_reviewer_instead_of_hammering_the_service(monkeypatch):
+    calls = []
+
+    def exhausted(prompt):
+        calls.append(1)
+        raise RuntimeError("429 RESOURCE_EXHAUSTED. You exceeded your current quota")
+    monkeypatch.setattr(lr, "_paused_until", 0.0)
+    assert lr.review("http://a.example/", {}, "t", "SAFE", caller=exhausted) is None
+    assert lr.review("http://b.example/", {}, "t2", "SAFE", caller=exhausted) is None      # paused: not even attempted
+    assert len(calls) == 1
+    monkeypatch.setattr(lr, "_paused_until", 0.0)                                           # pause over: works again
+    assert lr.review("http://c.example/", {}, "t3", "SAFE", caller=lambda p: answer("SAFE", 0.9, ["ok"], "")) is not None
