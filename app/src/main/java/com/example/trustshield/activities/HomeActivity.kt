@@ -7,8 +7,10 @@ import android.util.Log
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import com.example.trustshield.gate.GateSetup
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -40,7 +42,22 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var bottomNav: BottomNavigationView
     
     private val linkHistoryAdapter = LinkHistoryAdapter()
-    
+
+    // Link Gate: asks Android to make TrustShield the default browser, then refreshes the banner
+    private lateinit var gateBanner: TextView
+    private val gateLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        refreshGateBanner()
+    }
+
+    private fun refreshGateBanner() {
+        gateBanner.visibility = if (GateSetup.isEnabled(this)) View.GONE else View.VISIBLE
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::gateBanner.isInitialized) refreshGateBanner()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
@@ -87,6 +104,9 @@ class HomeActivity : AppCompatActivity() {
         swipeRefresh = findViewById(R.id.swipe_refresh_layout)
         scanFab = findViewById(R.id.fab_scan)
         bottomNav = findViewById(R.id.bottom_navigation)
+        gateBanner = findViewById(R.id.gate_banner)
+        gateBanner.setOnClickListener { gateLauncher.launch(GateSetup.enableIntent(this)) }
+        refreshGateBanner()
     }
     
     private fun setupToolbar() {
