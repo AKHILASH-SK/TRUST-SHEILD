@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const targetSubject = document.getElementById('target-subject');
   const openPortalBtn = document.getElementById('open-portal-btn');
 
+  // The hosted copy is out of date; only fall back to it when this is deliberately switched on.
+  const ALLOW_CLOUD_FALLBACK = false;
   const LOCAL_API_URL = "http://127.0.0.1:8000/api/extension/analyze";
   const CLOUD_API_URL = "https://trust-sheild.onrender.com/api/extension/analyze";
   const PORTAL_LOCAL_URL = "http://127.0.0.1:8000/portal/";
@@ -72,6 +74,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             activePortalUrl = PORTAL_LOCAL_URL;
           } catch (localErr) {
+            if (!ALLOW_CLOUD_FALLBACK) throw localErr;
             console.warn("Local backend unreachable, trying cloud endpoint...", localErr);
             response = await fetch(CLOUD_API_URL, {
               method: 'POST',

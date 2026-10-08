@@ -3,6 +3,8 @@
  * Automatically extracts email context and injects a floating shield HUD into Gmail / Outlook.
  */
 
+// The hosted copy is out of date; only fall back to it when this is deliberately switched on.
+const ALLOW_CLOUD_FALLBACK = false;
 const BACKEND_LOCAL_URL = "http://127.0.0.1:8000/api/extension/analyze";
 const BACKEND_CLOUD_URL = "https://trust-sheild.onrender.com/api/extension/analyze";
 const PORTAL_LOCAL_URL = "http://127.0.0.1:8000/portal/";
@@ -495,6 +497,7 @@ function initFloatingGuardWidget() {
         });
         activePortalBase = PORTAL_LOCAL_URL;
       } catch (_) {
+        if (!ALLOW_CLOUD_FALLBACK) throw _;
         response = await fetch(BACKEND_CLOUD_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
