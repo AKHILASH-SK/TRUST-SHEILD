@@ -117,3 +117,10 @@ def test_unreachable_passes_through_to_decision(pipeline):
     r = pipeline.analyze_url("https://unknown-site.example.net/")
     assert r["analysis_complete"] is False
     assert r["telemetry"]["analysis_complete"] is False
+
+
+def test_free_hosting_subdomains_are_never_vouched_for_by_the_platform_rank():
+    from core_engine.link_threat_pipeline import is_user_content_host, is_brand_fast_path
+    for url in ("https://evil-login.vercel.app/", "http://x.pages.dev/a", "https://a.b.netlify.app/", "https://z.onrender.com/"):
+        assert is_user_content_host(url)
+        assert not is_brand_fast_path(url)

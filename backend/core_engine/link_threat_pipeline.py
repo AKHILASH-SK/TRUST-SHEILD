@@ -76,6 +76,17 @@ USER_CONTENT_HOSTS = {
     "shorturl.at", "rb.gy", "amzn.to", "spoti.fi", "apple.co",
 }
 
+# Free hosting / site-builder platforms: anyone gets a subdomain, so the platform's own popularity must never vouch for a
+# subdomain (a VirusTotal rank for vercel.app says nothing about evil.vercel.app).
+USER_CONTENT_HOSTS |= {
+    "vercel.app", "pages.dev", "workers.dev", "netlify.app", "gitlab.io", "weebly.com", "wixsite.com",
+    "herokuapp.com", "firebaseapp.com", "web.app", "glitch.me", "onrender.com", "repl.co", "replit.dev",
+    "webflow.io", "framer.app", "framer.website", "carrd.co", "000webhostapp.com", "notion.site",
+    "godaddysites.com", "myshopify.com", "square.site", "strikingly.com", "surge.sh", "fly.dev",
+    "railway.app", "ngrok.io", "ngrok-free.app", "trycloudflare.com", "azurewebsites.net", "cloudfront.net",
+    "r2.dev", "my.canva.site", "github.dev", "codesandbox.io", "stackblitz.io", "pythonanywhere.com",
+}
+
 # Domains whose own login forms / redirects are trusted: brand domains only.
 GLOBAL_CLEAN_DOMAINS = BRAND_FAST_PATH_DOMAINS
 
