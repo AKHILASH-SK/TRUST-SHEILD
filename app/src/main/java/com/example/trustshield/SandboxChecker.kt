@@ -22,7 +22,8 @@ class SandboxChecker(
     
     companion object {
         private const val TAG = "SandboxChecker"
-        private const val TIMEOUT_MS = 5000  // 5 second timeout
+        private const val CONNECT_TIMEOUT_MS = 8000
+        private const val READ_TIMEOUT_MS = 30000  // a real sandbox scan can take 5-20 seconds
     }
     
     /**
@@ -65,8 +66,12 @@ class SandboxChecker(
             // Configure connection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = TIMEOUT_MS
-            conn.readTimeout = TIMEOUT_MS
+            // The endpoint requires the signed-in user's bearer token
+            com.example.trustshield.network.AuthStore.token?.takeIf { it.isNotBlank() }?.let {
+                conn.setRequestProperty("Authorization", "Bearer $it")
+            }
+            conn.connectTimeout = CONNECT_TIMEOUT_MS
+            conn.readTimeout = READ_TIMEOUT_MS
             
             // Send request body
             val requestBody = JSONObject().apply {
