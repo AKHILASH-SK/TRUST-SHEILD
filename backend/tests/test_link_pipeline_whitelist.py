@@ -124,3 +124,23 @@ def test_free_hosting_subdomains_are_never_vouched_for_by_the_platform_rank():
     for url in ("https://evil-login.vercel.app/", "http://x.pages.dev/a", "https://a.b.netlify.app/", "https://z.onrender.com/"):
         assert is_user_content_host(url)
         assert not is_brand_fast_path(url)
+
+
+def test_brand_domain_stays_clean_when_virustotal_shows_a_few_flags(monkeypatch):
+    """Regression: VirusTotal lists ~2 engines against google.com; the pipeline once turned that into 'phishing'."""
+    from core_engine import link_threat_pipeline as ltp
+    from core_engine.final_decision_engine import FinalDecisionEngine
+
+    class FakeVT:
+        def get_vt_reputation(self, url):
+            return {"is_whitelisted": True, "malicious_count": 2, "required_engines": 15,
+                    "popularity_rank": 1, "vt_risk_score": 10.0}
+
+    class NoDb:
+        def check_indicator(self, u):
+            return False
+    pipe = ltp.LinkThreatPipeline.__new__(ltp.LinkThreatPipeline)
+    pipe.threat_db, pipe.good_domain_checker, pipe.decision_engine = NoDb(), FakeVT(), FinalDecisionEngine()
+    pipe.sandbox = None            # must not even be needed: brand fast path
+    out = pipe.analyze_url("https://www.google.com/")
+    assert out["verdict"].startswith("LEGITIMATE") and out["threat_score"] == 0.0

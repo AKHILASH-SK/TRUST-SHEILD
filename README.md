@@ -83,33 +83,18 @@ Because TrustShield intercepts notifications to protect against zero-day phishin
 
 ---
 
-## 🧪 How to Test (Live Threat Simulation)
+## 🧪 How to Test
 
-For users and evaluators who want to test the app independently without needing a third person to send messages, TrustShield includes a **built-in Live Threat Simulation** engine:
+The earlier built-in WhatsApp "Test Demo" button was removed (it relied on a third-party messaging account). Test the real flow instead:
 
-### Step 1: Launch the Threat Simulation
-Open the TrustShield app (ensure you have registered/logged in with your phone number). On the **Recent Scans** Home screen, tap the **Test Demo** button on the **⚡ Live Threat Simulation** card.
-<br><img src="images/test_01.png" width="300" /><br><br>
-
-### Step 2: Receive & Intercept Phishing Attack (WhatsApp)
-A real WhatsApp notification containing a simulated urgent phishing link will arrive on your phone. TrustShield's background engine immediately intercepts the link before you even click it and issues a high-priority warning: **🔴 DANGEROUS LINK - From: com.whatsapp**.
-<br><img src="images/test_02.png" width="300" /><br><br>
-
-### Step 3: View Real-Time Threat Telemetry
-Open the TrustShield app to view the **Recent Scans** history. The intercepted link is flagged in red with complete classification details: **✕ Dangerous • Risk: DANGEROUS**.
-<br><img src="images/test_03.png" width="300" /><br><br>
-
-### Step 4: Automated 15-Second Safe Link Delivery
-Exactly **15 seconds** after the first message, a second WhatsApp message automatically arrives containing a legitimate safe link.
-<br><img src="images/test_04.png" width="300" /><br><br>
-
-### Step 5: Verified Safe Link Classification
-TrustShield intercepts the notification, verifies that the domain is legitimate and safe, and records it as **✔ Safe • Risk: Safe** with zero false alarms!
-<br><img src="images/test_05.png" width="300" /><br><br>
+1. Install the app, register or log in with your phone number, and grant notification access (see the installation steps above).
+2. From **another phone** (or another app on the same phone, e.g. Telegram "Saved Messages"), send yourself a message containing a link.
+   * Try a legitimate link such as `https://www.amazon.in/` -> recorded as **Safe**.
+   * Try a link from a public phishing feed such as OpenPhish (do **not** open it) -> flagged **Suspicious/Dangerous** with the reasons shown.
+3. Open the app's **Recent Scans** to see the verdict, the reasons and the source app (WhatsApp, SMS, Telegram ...).
 
 > [!TIP]
-> **Custom Link Testing:**
-> You can also send any custom SMS, WhatsApp, or Telegram message containing any URL from another phone to test TrustShield's real-time interception on your device!
+> You can also paste any link into the manual scan box on the Home screen.
 
 ---
 
@@ -126,7 +111,7 @@ Our threat-detection pipeline consists of 4 main stages:
 1. **Notification Interception**: The app securely extracts URLs from incoming notifications (WhatsApp, SMS, etc.).
 2. **Rule-Based Fast Check**: The link is instantly analyzed on-device for obvious red flags like typosquatting or homograph attacks.
 3. **Phishing Domain DB Check**: The URL is cross-referenced against our **Firebase Realtime Database** (`phishing_db`), which contains a hardcoded list of known scam and phishing links.
-4. **Sandbox Analysis & VirusTotal API**: If a link is unknown, it requires deeper analysis. While our custom ML classification model and automated DB updaters are currently in development, we have integrated the **VirusTotal API** as our final classification layer. This ensures that the app can still catch sophisticated, zero-day attacks in real-time and deliver an accurate final verdict to the user.
+4. **Sandbox Analysis & VirusTotal API**: If a link is unknown, it requires deeper analysis. The server combines URL heuristics, a continuously synced threat feed, VirusTotal reputation, page analysis in a sandbox, and a rule-based decision engine. A trained machine-learning stage is implemented but is **not enabled until a model has been trained and evaluated**; no accuracy figure is claimed until then.
 
 ```mermaid
 graph TD

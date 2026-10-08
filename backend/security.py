@@ -199,10 +199,25 @@ def clear_login_failures(identity: str) -> None:
 # ---------------------------------------------------------------------------
 
 def server_error(exc: Exception, public_message: str = "Internal server error"):
-    """Log the real exception with a reference id and return a generic message."""
+    """
+    Log the real exception with a reference id and return a generic message.
+    Client errors raised by Flask/Werkzeug (bad JSON 400, upload too large 413, ...) keep their own status.
+    """
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException) and exc.code and exc.code < 500:
+        return jsonify({"error": _CLIENT_ERROR_TEXT.get(exc.code, exc.name)}), exc.code
     reference = uuid.uuid4().hex[:12]
     logger.exception("Unhandled error [%s]: %s", reference, exc)
     return jsonify({"error": public_message, "reference": reference}), 500
+
+
+_CLIENT_ERROR_TEXT = {
+    400: "Malformed request",
+    404: "Not found",
+    405: "Method not allowed",
+    413: "Upload too large",
+    415: "Unsupported content type",
+}
 
 
 def sanitize_header_value(value: str, max_length: int = 300) -> str:

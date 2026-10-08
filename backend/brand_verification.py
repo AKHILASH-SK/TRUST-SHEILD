@@ -1,4 +1,5 @@
 import requests
+from urllib.parse import quote
 import json
 from database import SessionLocal
 from sqlalchemy import text
@@ -11,7 +12,7 @@ def verify_and_add_brand(brand_name, domain_to_check):
     we query Clearbit using the domain itself to see its official registered name.
     """
     try:
-        url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={domain_to_check}"
+        url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={quote(domain_to_check, safe='')}"
         response = requests.get(url, timeout=5)
         
         if response.status_code == 200:
@@ -28,7 +29,7 @@ def verify_and_add_brand(brand_name, domain_to_check):
                     return True
                     
         # Fallback: Query by brand name and see if domain matches
-        url2 = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={brand_name}"
+        url2 = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={quote(brand_name, safe='')}"
         response2 = requests.get(url2, timeout=5)
         if response2.status_code == 200:
             results2 = response2.json()
@@ -51,7 +52,7 @@ def discover_and_add_brand(domain):
     Returns the brand name if found, otherwise None.
     """
     try:
-        url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={domain}"
+        url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={quote(domain, safe='')}"
         response = requests.get(url, timeout=5)
         
         if response.status_code == 200:
@@ -62,7 +63,7 @@ def discover_and_add_brand(domain):
                 parts = domain.split('.')
                 # Simplistic root domain extraction (last two parts)
                 root_domain = parts[-2] + '.' + parts[-1]
-                url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={root_domain}"
+                url = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={quote(root_domain, safe='')}"
                 response = requests.get(url, timeout=5)
                 if response.status_code == 200:
                     results = response.json()

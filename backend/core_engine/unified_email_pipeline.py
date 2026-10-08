@@ -317,7 +317,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         try:
             heuristics[link] = parse_url_heuristics(link)
         except Exception as e:
-            heuristics[link] = {"heuristic_risk_score": 50.0, "heuristic_flags": [f"HEURISTIC_ERROR: {e}"]}
+            # a failed check is "unavailable", never threat evidence
+            heuristics[link] = {"heuristic_risk_score": 0.0, "heuristic_flags": [f"HEURISTIC_ERROR: {e}"],
+                                "analysis_unavailable": True}
             analysis_errors.append(f"Link heuristics failed for {link[:80]}: {type(e).__name__}")
     ranked = sorted(unique_links, key=lambda u: float(heuristics[u].get("heuristic_risk_score", 0.0)), reverse=True)
     to_analyze = set(ranked[:MAX_LINKS_ANALYZED])
@@ -353,10 +355,12 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             analysis_errors.append(f"Link analysis failed for {link[:80]}: {type(e).__name__}: {e}")
             link_investigation.append({
                 "url": link,
-                "threat_score": 50.0,
-                "verdict": "SUSPICIOUS / ANALYSIS_ERROR",
-                "summary": f"Sandbox analysis encountered an error: {str(e)}",
-                "telemetry": {},
+                "threat_score": 0.0,
+                "verdict": "ANALYSIS UNAVAILABLE",
+                "summary": ("This link could not be analysed (the analysis service failed). "
+                            "This is NOT evidence that the link is malicious or safe."),
+                "telemetry": {"analysis_unavailable": True, "analysis_complete": False},
+                "analysis_unavailable": True,
                 "analysis_depth": "error"
             })
 

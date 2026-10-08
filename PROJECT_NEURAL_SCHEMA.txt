@@ -7,6 +7,19 @@ Secrets policy: every secret value is shown as [SECRET PRESENT - VALUE REDACTED]
 Anything that could not be confirmed from the repository is marked
 "UNKNOWN - NOT DETERMINABLE FROM AVAILABLE PROJECT FILES."
 Status legend: REAL (works as claimed) | PARTIAL | MOCKED | HARDCODED | PLANNED | BROKEN | UNUSED
+
+UPDATE (later on 2026-10-08, supersedes any conflicting line below)
+  - Deleted as dead/legacy code: core_engine/ml_engine.py, meta_classifier.py (+ trained_models/meta_model.pkl, the 9-row mock RandomForest),
+    sandbox_analyzer.py, advanced_sandbox.py (both fetched URLs without the SSRF guard), server.js, two legacy tests. The `whois` and `Levenshtein`
+    packages were dropped from requirements. There is NO mock ML left in the repository; the only ML is the new, still-untrained LightGBM stage.
+  - HTTP errors are now clean JSON with the right status (413 upload too large, 400 malformed JSON, 404, 405) instead of 500.
+  - A failed link/heuristic analysis inside an email is now "ANALYSIS UNAVAILABLE" with score 0 (it used to be shown as score 50 / SUSPICIOUS).
+  - URL validation rejects javascript:, data:, mailto:, tel:, file:, ftp: forms.
+  - VirusTotal rule corrected: engines needed to call a domain malicious now depends on popularity (>=15 for top-10k, >=10 for top-100k, >=5 for top-1M,
+    >=3 otherwise). The earlier ">=2 engines" rule wrongly marked google.com as phishing (VirusTotal shows ~2 misfiring engines on it). Cache version 2.
+  - backend/sql/schema.sql now holds the full base schema (users, link_scans, ...). Real-PostgreSQL integration tests exist (they skip when no test DB is up).
+  - backend/tools/demo_smoke_test.py walks the demo flow (28 steps) and passed 28/28 against a local server + real PostgreSQL.
+  - Test count is now 197 (193 offline + 4 that need a test PostgreSQL).
 ================================================================================
 
 
@@ -235,7 +248,7 @@ TrustShield/
 │   │   ├── features.py (single feature source), datasets.py, collect_dataset.py, trainlib.py,
 │   │   │   train_lexical.py, train_page.py, model_runtime.py, evaluate_live.py, requirements-train.txt
 │   │   └── data/ (git-ignored: raw feeds, pages.jsonl, eval_report.json)
-│   └── tests/ ........................... 144 pytest tests (security, pipeline, forensics, ML); conftest.py isolates DB/env
+│   └── tests/ ........................... 197 pytest tests (security, pipeline, forensics, ML); conftest.py isolates DB/env
 ├── frontend/ ............................ SOC portal (index.html, app.js) (PC)
 ├── chrome_extension/ .................... MV3 extension (manifest, content.js, popup.*)
 ├── docs/ ................................ GitHub Pages download page + debug APK
@@ -572,7 +585,7 @@ Stale keys present in local .env (no longer used): GREEN_API_URL / GREEN_API_ID_
 13. DEPLOYMENT
 ================================================================================
   Local backend (Windows dev, no Docker):  cd backend ; pip install -r requirements.txt ; set env vars (.env) ; python app.py   (runs Flask on 0.0.0.0:8000, debug off)
-  Tests: from repo root  PYTHONPATH=backend python -m pytest backend/tests -q   (144 tests, ~90 s; DB/network isolated by conftest.py)
+  Tests: from repo root  PYTHONPATH=backend python -m pytest backend/tests -q   (197 tests, ~45 s; DB/network isolated by conftest.py)
   Android: open in Android Studio; set BACKEND_ENV/HOSTED_BACKEND_URL in .env; place app/google-services.json; ./gradlew assembleDebug.
   Render (current prod): Procfile -> "gunicorn --chdir backend -c gunicorn.conf.py app:app" (1 worker, gthread, 8 threads, timeout 120). Free tier sleeps after 15 min
      (about 50 s cold start). Sandbox is HTTP-only there. Needs env vars above.
@@ -594,7 +607,7 @@ WORKING
   - Server link pipeline (rules path), threat-DB auto-sync (OpenPhish), VirusTotal cache/limiter, SSRF-guarded sandbox, RDAP domain age.
   - Email forensics: parse, SPF (RFC 7208 subset: ip4/ip6/a/mx/include/redirect/all/exists, 10-lookup limit, 6 s budget), DKIM per-signature verify with d= alignment,
     DMARC alignment/policy, route geolocation, link analysis (top 12 deep, rest heuristic), WHOIS/RDAP, attachments, BEC text rules, graph/campaign, sealing, PDF.
-  - 144 automated tests passing (security, pipelines, forensics, ML plumbing).
+  - 197 automated tests passing (security, pipelines, forensics, ML plumbing).
 PARTIALLY WORKING
   - Sandbox: real browser only outside Render. JS-built phishing forms are invisible to the HTTP fallback.
   - VirusTotal on free key (quota). Geolocation free tiers. Chrome extension scraping. Graph/campaigns (volatile, global).
@@ -719,7 +732,7 @@ Admin: X-Admin-Key header, constant-time compare; disabled when unset.
   DO NOT: rely on live phishing URLs from feeds (often already dead); click "Proceed" on real malicious links; demo Link Gate (does not exist);
           show the Graph/Campaign tabs without logging in (they now need a token and the portal has no login screen yet).
   CLAIMS WE CAN MAKE: layered pipeline; notification interception before the click; SSRF-safe analysis; tamper-evident sealed cases with re-verification;
-          SPF/DKIM/DMARC with alignment; no message text leaves the device (only URLs); Docker image with real Chromium sandbox exists; tests: 144 passing.
+          SPF/DKIM/DMARC with alignment; no message text leaves the device (only URLs); Docker image with real Chromium sandbox exists; tests: 197 passing.
   CLAIMS NOT TO MAKE (until done/measured): ML accuracy figures; "detects any new phishing link"; "blocks links when tapped"; Play Store availability;
           "court-admissible"; real-time browser sandbox on the hosted free tier; multi-tenant organisation console.
 
@@ -811,7 +824,7 @@ KEY FEATURES: notification interception, 3-tier link analysis, scan history, ema
 IMPORTANT APIS: /api/auth/login, /api/links/scan, /api/sandbox-check, /api/forensics/analyze-eml, /api/forensics/verify-hash, /api/forensics/export-pdf, /api/extension/analyze.
 DEPLOYMENT: Render via Procfile (HTTP-only sandbox); Dockerfile+fly.toml ready (real Chromium); Android sideloaded APK; docs/ on GitHub Pages.
 AUTHENTICATION: phone+PIN -> bcrypt check -> signed bearer token (30 d); admin key for admin routes; anonymous but rate-limited public endpoints.
-CURRENT STATUS: backend hardened and tested (144 tests); ML stage built but untrained; Link Gate, consumer/org portals, Play release not started.
+CURRENT STATUS: backend hardened and tested (197 tests); ML stage built but untrained; Link Gate, consumer/org portals, Play release not started.
 BIGGEST LIMITATION: New/unknown phishing links are only weakly detected until the ML models are trained and the real browser sandbox is deployed.
 BIGGEST STRENGTH: End-to-end system (device interception + layered server analysis + sealed forensic trail) with an honest, test-covered, SSRF-hardened backend.
 MOST IMPORTANT FILES: app/.../NotificationListener.kt, app/.../LinkAnalyzer.kt, backend/app.py, backend/security.py, backend/evidence_seal.py,

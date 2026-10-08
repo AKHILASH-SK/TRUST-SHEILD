@@ -218,7 +218,7 @@ class LinkThreatPipeline:
                 logger.debug(f"VT reputation lookup failed: {e}")
                 vt_rep = {}
             vt_risk_score = vt_rep.get("vt_risk_score", 35.0)
-            if vt_rep.get("malicious_count", 0) >= 2 or vt_risk_score >= 90.0:
+            if vt_rep.get("malicious_count", 0) >= vt_rep.get("required_engines", 3) or vt_risk_score >= 90.0:
                 vt_malicious = True
                 vt_risk_score = max(vt_risk_score, 95.0)
             elif vt_rep.get("is_whitelisted") and not user_content:

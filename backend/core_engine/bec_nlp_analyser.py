@@ -10,7 +10,7 @@ Performs rule-based + lightweight ML NLP analysis of email subject and body text
 
 Design: Works in ZERO-dependency mode (pure Python regex + keyword heuristics)
 as primary engine. Optionally uses the pre-trained HuggingFace BERT phishing
-classifier from ml_engine.py if available.
+keyword/regex signals only (no trained language model is used).
 """
 
 import re

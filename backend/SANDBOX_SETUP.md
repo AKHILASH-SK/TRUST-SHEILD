@@ -1,3 +1,5 @@
+> **LEGACY DOCUMENT.** This file describes the original Node.js prototype (`server.js`), which has been removed. The backend is now the Flask app in `backend/app.py`; see the root `README.md` and the `Dockerfile`.
+
 # Sandbox Analysis Backend Setup (Tier 3)
 
 ## 🚀 Quick Start (5 minutes)

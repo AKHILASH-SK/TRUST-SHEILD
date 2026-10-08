@@ -11,21 +11,22 @@ if not hasattr(werkzeug, '__version__'):
 from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import HTTPException
 
 import psycopg
 import bcrypt
 import os
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 from phishing_feed import PhishingFeedImporter
-from core_engine.ml_engine import MultiModalFusionEngine
 from core_engine.link_threat_pipeline import get_link_pipeline
 import atexit
 import sys
 from brand_verification import verify_and_add_brand, discover_and_add_brand
 import json
 import logging
+import re
 import secrets
 import threading
 from contextlib import contextmanager
@@ -48,6 +49,12 @@ app = Flask(__name__)
 # Trust exactly one proxy hop (Render/Fly/Railway) so request.remote_addr is the real client IP
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(exc):
+    """Every framework-level error (404, 405, 413 ...) is returned as JSON with its real status code."""
+    return server_error(exc)
+
 
 # CORS: only the portal origins, the Chrome extension and local development
 _default_origins = "https://akhilash-sk.github.io,http://localhost:3000,http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000"
@@ -193,7 +200,7 @@ def persist_forensic_case(case_id: str, dossier: dict, raw_bytes: bytes = b"", o
     evidence_hash = evidence_seal.sha256_hex(raw_bytes)
     dossier["evidence_hash_sha256"] = evidence_hash
     dossier_json = evidence_seal.canonical_json(dossier)
-    sealed_at = datetime.utcnow().isoformat()
+    sealed_at = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     signature = evidence_seal.seal(case_id, evidence_hash, dossier_json, sealed_at)
 
     meta = dossier.get("metadata", {}) or {}
@@ -201,7 +208,7 @@ def persist_forensic_case(case_id: str, dossier: dict, raw_bytes: bytes = b"", o
     threat_score = float(dossier.get("overall_threat_score", 0.0) or 0.0)
     sender = (meta.get("from", "") or "")[:250]
     subject = (meta.get("subject", "") or "")[:490]
-    created_at = datetime.utcnow()
+    created_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     with db_cursor() as cur:
         cur.execute("""
@@ -510,6 +517,9 @@ def normalize_input_url(raw):
     if not url or len(url) > MAX_URL_LENGTH or any(ch in url for ch in ("\r", "\n", " ")):
         return None
     if "://" not in url:
+        # "javascript:...", "data:...", "mailto:...", "tel:..." are schemes, not hosts ("example.com:8080/x" is fine)
+        if re.match(r"^[a-z][a-z0-9+.\-]*:(?!\d+(?:/|$))", url, re.I):
+            return None
         url = "http://" + url
     if not url.lower().startswith(("http://", "https://")):
         return None
@@ -585,7 +595,7 @@ def analyze_extension_email():
         if not subject and not body and not links:
             return jsonify({"error": "No content to analyze"}), 400
 
-        now_utc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%a, %d %b %Y %H:%M:%S +0000")
         sender_domain = sender.split("@")[-1].strip("> ") if "@" in sender else "external-mail.net"
         boundary = f"----=_Part_Ext_{secrets.token_hex(8)}"
 
@@ -1310,7 +1320,7 @@ def find_shared_infrastructure():
     """
     try:
         from core_engine.graph_correlation import get_global_graph
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         ip = data.get('ip', '')
         domain = data.get('domain', '')
         if not ip and not domain:
@@ -1418,7 +1428,7 @@ def nlp_analyze_text():
     """
     try:
         from core_engine.bec_nlp_analyser import analyse_email_body
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         subject = data.get('subject', '')
         body = data.get('body', '')
         sender = data.get('sender', '')

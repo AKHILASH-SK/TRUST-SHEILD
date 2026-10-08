@@ -126,3 +126,34 @@ def test_vt_malicious_two_engines_reaches_suspicious_or_higher():
     r = FinalDecisionEngine().evaluate(url="https://bad.example.net/", vt_risk_score=95.0)
     assert r["threat_score"] >= 90
     assert r["verdict"] != "LEGITIMATE / CLEAN" and r["threat_score"] >= SUSPICIOUS_THRESHOLD
+
+
+# ---- popular sites must not be condemned by a couple of misfiring engines (google.com really shows 2 flags) ----
+
+def test_popular_domain_with_two_flags_is_still_trusted(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, rank=1)))
+    rep = make(tmp_path).get_vt_reputation("https://www.google.com/")
+    assert rep["is_whitelisted"] and rep["vt_risk_score"] <= 10.0 and rep["malicious_count"] == 2
+
+
+def test_popular_domain_needs_many_engines_to_be_malicious(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(16, rank=1)))
+    rep = make(tmp_path).get_vt_reputation("https://hijacked-giant.example/")
+    assert not rep["is_whitelisted"] and rep["vt_risk_score"] == 95.0
+
+
+def test_unranked_domain_needs_three_engines(tmp_path, monkeypatch):
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2)))
+    two = make(tmp_path).get_vt_reputation("https://odd-new-site.example/")
+    assert two["vt_risk_score"] == 50.0 and not two["is_whitelisted"]          # weak signal only
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(3)))
+    three = make(tmp_path).get_vt_reputation("https://another-new-site.example/")
+    assert three["vt_risk_score"] == 95.0
+
+
+def test_old_cache_entries_from_the_two_engine_rule_are_ignored(tmp_path, monkeypatch):
+    c = make(tmp_path)
+    c._cache.put("google.com", {"is_whitelisted": False, "malicious_count": 2, "popularity_rank": 99999999,
+                                "vt_risk_score": 95.0, "provider": ""}, 3600)   # a v1 entry (no version field)
+    patch_get(monkeypatch, lambda u: Resp(200, vt_payload(2, rank=1)))
+    assert c.get_vt_reputation("https://www.google.com/")["is_whitelisted"]

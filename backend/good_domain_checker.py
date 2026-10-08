@@ -18,6 +18,18 @@ DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data
 DEFINITIVE_TTL = 24 * 3600     # 200 / 404 verdicts
 ERROR_TTL = 5 * 60             # transient errors
 NEUTRAL_RISK = 35.0
+CACHE_VERSION = 2          # bump when the meaning of a cached result changes (v1 treated 2 flags as malicious everywhere)
+
+
+def required_engines(best_rank: int) -> int:
+    """How many VirusTotal engines must flag a domain before it counts as malicious. Popular domains need far more."""
+    if best_rank < 10_000:
+        return 15
+    if best_rank < 100_000:
+        return 10
+    if best_rank < 1_000_000:
+        return 5
+    return 3
 RATE_LIMITED_PROVIDER = "rate_limited"
 
 
@@ -157,8 +169,10 @@ class GoodDomainChecker:
     @staticmethod
     def _neutral(provider: str = "") -> dict:
         return {
+            "v": CACHE_VERSION,
             "is_whitelisted": False,
             "malicious_count": 0,
+            "required_engines": 3,
             "popularity_rank": 99999999,
             "vt_risk_score": NEUTRAL_RISK,
             "provider": provider,
@@ -215,31 +229,36 @@ class GoodDomainChecker:
             return result, ERROR_TTL
 
         malicious_count = (data.get("last_analysis_stats") or {}).get("malicious", 0)
-        result["malicious_count"] = malicious_count
-        if malicious_count >= 2:
-            result["vt_risk_score"] = 95.0
-            logger.warning(f"[Tier 2.5] Domain '{domain}' is flagged malicious by {malicious_count} VT engines!")
-            return result, DEFINITIVE_TTL
-
         best_rank, winner = 99999999, ""
         for provider, rank_data in (data.get("popularity_ranks") or {}).items():
             rank = (rank_data or {}).get("rank", 99999999)
             if rank < best_rank:
                 best_rank, winner = rank, provider
-        result["popularity_rank"] = best_rank
-        result["provider"] = winner
+        required = required_engines(best_rank)
+        result.update(malicious_count=malicious_count, popularity_rank=best_rank, provider=winner,
+                      required_engines=required)
 
-        if best_rank < 100000 and malicious_count == 0:
+        if malicious_count >= required:
+            result["vt_risk_score"] = 95.0
+            logger.warning(f"[Tier 2.5] Domain '{domain}' is flagged malicious by {malicious_count} VT engines "
+                           f"(needs {required} at rank {best_rank})!")
+            return result, DEFINITIVE_TTL
+
+        # A few vendors misfire on huge, well-known domains (google.com shows 1-2 flags), so popularity wins over a
+        # small number of detections; an unranked domain with 1-2 flags stays a weak signal only.
+        if best_rank < 100000:
             result["is_whitelisted"] = True
-            result["vt_risk_score"] = 0.0
-        elif best_rank < 500000 and malicious_count == 0:
+            result["vt_risk_score"] = 0.0 if malicious_count == 0 else 10.0
+        elif best_rank < 500000 and malicious_count <= 1:
             result["is_whitelisted"] = True
             result["vt_risk_score"] = 10.0
+        elif malicious_count > 0:
+            result["vt_risk_score"] = 50.0
         return result, DEFINITIVE_TTL
 
     def _lookup(self, domain: str) -> dict:
         cached = self._cache.get(domain)
-        if cached is not None:
+        if cached is not None and cached.get("v") == CACHE_VERSION:
             return cached
         result, ttl = self._query(domain)
         if ttl is not None:
@@ -264,11 +283,11 @@ class GoodDomainChecker:
 
         result = self._lookup(reg)
         if (host and host != reg and not result.get("is_whitelisted")
-                and result.get("malicious_count", 0) < 2
+                and result.get("malicious_count", 0) < result.get("required_engines", 3)
                 and result.get("provider") != RATE_LIMITED_PROVIDER
                 and (self._cache.get(host) is not None or self._limiter.remaining_minute() >= 2)):
             host_result = self._lookup(host)
-            if host_result.get("malicious_count", 0) >= 2:
+            if host_result.get("malicious_count", 0) >= host_result.get("required_engines", 3):
                 return host_result
         return result
 

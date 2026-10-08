@@ -1,3 +1,5 @@
+> **LEGACY DOCUMENT.** This file describes the original Node.js prototype (`server.js`), which has been removed. The backend is now the Flask app in `backend/app.py`; see the root `README.md` and the `Dockerfile`.
+
 # TrustShield Backend - Phishing Domain Database API
 
 ## What is This?
