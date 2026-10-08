@@ -60,7 +60,34 @@ def handle_http_exception(exc):
 
 # CORS: only the portal origins, the Chrome extension and local development
 _default_origins = "https://akhilash-sk.github.io,http://localhost:3000,http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000"
-_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+def parse_cors_origins(raw):
+    """
+    Accepts 'a,b' or a JSON-style list '["a", "b"]'. Entries that are not valid patterns are dropped, because a single
+    broken entry would otherwise make every browser request fail inside the CORS layer.
+    """
+    raw = (raw or "").strip()
+    if raw.startswith("["):
+        try:
+            items = json.loads(raw)
+        except ValueError:
+            items = raw.strip("[]").split(",")
+    else:
+        items = raw.split(",")
+    origins = []
+    for item in items:
+        origin = str(item).strip().strip("'\"").strip()
+        if not origin:
+            continue
+        try:
+            re.compile(origin)
+        except re.error:
+            logging.getLogger("trustshield.security").warning("Ignoring invalid CORS origin %r", origin)
+            continue
+        origins.append(origin)
+    return origins
+
+
+_cors_origins = parse_cors_origins(os.getenv("CORS_ORIGINS", _default_origins))
 _cors_origins.append(r"chrome-extension://.*")
 CORS(app, origins=_cors_origins, allow_headers=["Content-Type", "Authorization", "X-Admin-Key"])
 

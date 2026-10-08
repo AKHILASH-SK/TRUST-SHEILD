@@ -110,3 +110,13 @@ def test_one_failing_feed_does_not_stop_the_others(monkeypatch):
     monkeypatch.setattr(importer, "record_source", lambda name, url: None)
     assert importer.import_all_feeds() == (2, 0)
     assert stored == ["phishtank", "phishing_database"]
+
+
+# ---- CORS setting written as a JSON list must not break the server -------------------------------------------------------
+
+def test_cors_origins_accept_a_json_style_list_and_drop_broken_entries():
+    parse = backend_app.parse_cors_origins
+    assert parse('["http://localhost:8000", "http://localhost:3000"]') == ["http://localhost:8000", "http://localhost:3000"]
+    assert parse("http://a.example, http://b.example") == ["http://a.example", "http://b.example"]
+    assert parse('["http://ok.example", "[broken"]') == ["http://ok.example"]
+    assert parse("") == []
