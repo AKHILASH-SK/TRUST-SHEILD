@@ -1299,6 +1299,30 @@ def gateway_events():
     return jsonify({"events": list(GATEWAY_EVENTS)}), 200
 
 
+GATEWAY_NOTES = _collections.deque(maxlen=50)
+
+
+@app.route('/api/gateway/notes', methods=['GET', 'POST'])
+@rate_limit("gateway_notes", 300, 60)
+def gateway_notes():
+    """Results of the demo's other checks (fast-flux, fake page, SHA-256 seal) so the portal can show them next to the emails."""
+    if not _gateway_feed_allowed():
+        return jsonify({"error": "Forbidden"}), 403
+    if request.method == 'POST':
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid note"}), 400
+        level = str(data.get("level") or "info")
+        note = {"scene": str(data.get("scene") or "")[:20], "title": str(data.get("title") or "")[:140],
+                "level": level if level in ("ok", "bad", "warn", "info") else "info",
+                "lines": [str(x)[:300] for x in (data.get("lines") or [])[:8]] if isinstance(data.get("lines"), list) else []}
+        GATEWAY_NOTES.append(note)
+        return jsonify({"stored": True}), 201
+    if request.args.get("clear") == "1":
+        GATEWAY_NOTES.clear()
+    return jsonify({"notes": list(GATEWAY_NOTES)}), 200
+
+
 @app.route('/api/infra/check', methods=['POST'])
 @rate_limit("infra_check", 20, 60)
 def infrastructure_check():

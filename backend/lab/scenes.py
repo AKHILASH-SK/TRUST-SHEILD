@@ -50,6 +50,14 @@ def send(source_ip, raw):
             return f"REFUSED at SMTP time: {exc.smtp_code} {exc.smtp_error.decode(errors='replace')}"
 
 
+def note(scene, title, level, lines):
+    """Show this result in the portal's Mail Gateway tab as well as in the terminal (best effort: the demo never depends on it)."""
+    try:
+        requests.post(f"{API}/api/gateway/notes", json={"scene": scene, "title": title, "level": level, "lines": lines}, timeout=5)
+    except Exception:
+        pass
+
+
 def last_event():
     events = requests.get(f"{API}/api/gateway/events", timeout=10).json().get("events", [])
     return events[0] if events else {}
@@ -74,6 +82,7 @@ def main():
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
     world = LabWorld()
     requests.get(f"{API}/api/gateway/events?clear=1", timeout=10)
+    requests.get(f"{API}/api/gateway/notes?clear=1", timeout=10)
 
     scene("SCENE 1  The real bank writes to you (C -> A)", args.pause,
           f"The bank's mail server ({BANK_IP}) is listed in bank.test's SPF record and signs its mail with the bank's secret DKIM key.\n"
@@ -106,6 +115,9 @@ def main():
             ff = d["fast_flux"]
             say(f"  {d['domain']:<28} {ff['level'].upper():<10} {ff['distinct_ips']} IPs, TTL {ff.get('min_ttl')}s  - {ff['headline']}",
                 "red" if ff["level"] == "fast_flux" else "green")
+            note("Scene 4", f"Fast-flux check: {d['domain']}", "bad" if ff["level"] == "fast_flux" else "ok",
+                 [ff["headline"], f"{ff['distinct_ips']} different IP addresses seen in {ff.get('lookups_answered')} lookups",
+                  f"Answers expire in {ff.get('min_ttl')} seconds, spread over {len(ff.get('networks') or [])} unrelated networks"])
 
     scene("SCENE 5  A fake page sits between you and the real bank (adversary-in-the-middle)", args.pause,
           "The relay shows the REAL bank's login page, word for word, but on another domain, and passes what you type on to the real bank.\n"
@@ -131,6 +143,8 @@ def main():
                           f"(owned by that brand: {sandbox.get('brand_owns_domain')}), and it asks for a password")
             say(f"  {host:<28} {str(res.get('display_verdict')).upper():<10} {detail}",
                 "green" if res.get("display_verdict") == "Safe" else "red")
+            note("Scene 5", f"Page check: {host}", "ok" if res.get("display_verdict") == "Safe" else "bad",
+                 [f"Verdict: {res.get('display_verdict')}", detail[0].upper() + detail[1:]])
         stop()
     except Exception as exc:
         say(f"  (relay scene skipped: {type(exc).__name__}: {exc})", "yellow")
@@ -142,11 +156,16 @@ def main():
     altered = original.replace(b"Urgent", b"Urgenx", 1)
     say(f"  original email SHA-256 : {hashlib.sha256(original).hexdigest()}")
     say(f"  one letter changed     : {hashlib.sha256(altered).hexdigest()}", "yellow")
+    note("Scene 6", "SHA-256 fingerprint: one letter changed", "info",
+         [f"Original email : {hashlib.sha256(original).hexdigest()}", f"One letter changed: {hashlib.sha256(altered).hexdigest()}",
+          "Completely different codes, so a changed email can never pass as the original."])
     if forged.get("evidence_sha256"):
         res = requests.post(f"{API}/api/forensics/verify-hash", json={"query": forged["evidence_sha256"]}, timeout=20)
         if res.status_code == 200:
             body = res.json()
             say(f"  vault lookup of the forged email's fingerprint -> {body.get('integrity_verdict')}  (case {body.get('case_id')})", "green")
+            note("Scene 6", "Evidence vault: seal check", "ok",
+                 [str(body.get("integrity_verdict")), f"Case {body.get('case_id')}", f"Fingerprint {forged.get('evidence_sha256')}"])
         else:
             say("  (the case vault needs the database; the fingerprint itself is shown above)", "dim")
     say("\nDone. The portal's 'Mail Gateway' tab shows every message above, live.", "bold")

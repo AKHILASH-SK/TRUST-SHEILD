@@ -1063,7 +1063,45 @@ async function clearGatewayEvents() {
 }
 window.clearGatewayEvents = clearGatewayEvents;
 
+async function refreshGatewayNotes() {
+  const wrap = document.getElementById('gatewayNotesWrap');
+  const box = document.getElementById('gatewayNotes');
+  if (!wrap || !box) return;
+  let notes = [];
+  try {
+    const res = await fetch(`${API_BASE}/api/gateway/notes`);
+    if (!res.ok) return;
+    notes = (await res.json()).notes || [];
+  } catch (e) { return; }
+  wrap.classList.toggle('hidden', !notes.length);
+  box.replaceChildren();
+  const tone = { ok: 'border-emerald-200 bg-emerald-50', bad: 'border-red-200 bg-red-50', warn: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-slate-50' };
+  const tag = { ok: 'bg-emerald-100 text-emerald-700', bad: 'bg-red-100 text-red-700', warn: 'bg-amber-100 text-amber-700', info: 'bg-slate-200 text-slate-600' };
+  notes.forEach((n) => {
+    const card = document.createElement('div');
+    card.className = 'rounded-lg border p-3 ' + (tone[n.level] || tone.info);
+    const head = document.createElement('div');
+    head.className = 'flex items-center justify-between gap-2 mb-1';
+    const title = document.createElement('span');
+    title.className = 'text-[12px] font-bold text-slate-800 break-all';
+    title.textContent = n.title;
+    const scene = document.createElement('span');
+    scene.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase shrink-0 ' + (tag[n.level] || tag.info);
+    scene.textContent = n.scene || '';
+    head.appendChild(title); head.appendChild(scene);
+    card.appendChild(head);
+    (n.lines || []).forEach((line) => {
+      const p = document.createElement('p');
+      p.className = 'text-[11px] text-slate-600 leading-snug break-all';
+      p.textContent = line;
+      card.appendChild(p);
+    });
+    box.appendChild(card);
+  });
+}
+
 async function refreshGatewayEvents() {
+  refreshGatewayNotes();
   const status = document.getElementById('gatewayStatus');
   const body = document.getElementById('gatewayRows');
   const alertBox = document.getElementById('gatewayRotationAlert');

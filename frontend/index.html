@@ -866,6 +866,13 @@
         </div>
         <div id="gatewayMap" style="height: 320px; border-radius: 10px;"></div>
       </div>
+      <div id="gatewayNotesWrap" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center justify-between pb-2">
+          <span class="text-[12px] font-bold text-slate-800">Other checks in this demo</span>
+          <span class="text-[10px] text-slate-400">fast-flux, fake page, SHA-256 seal</span>
+        </div>
+        <div id="gatewayNotes" class="grid gap-2 md:grid-cols-2"></div>
+      </div>
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
         <table class="w-full text-[11.5px]">
           <thead><tr class="text-left text-[9px] font-mono uppercase text-slate-400 border-b border-slate-100">
@@ -1434,6 +1441,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.8"></script>
+  <script src="app.js?v=2.9"></script>
 </body>
 </html>
