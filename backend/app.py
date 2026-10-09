@@ -1334,6 +1334,21 @@ def _gateway_feed_allowed(write=False):
     return bool(key) and _hmac.compare_digest(supplied.encode(), key.encode())
 
 
+@app.route('/demo/page/<name>')
+def demo_page(name):
+    """The demo's viewable pages (real bank, relay copy, genuine/forged email). Static and harmless, but only shown during/after a demo."""
+    if not (_lab_on() or LAB_STATE["used"]):
+        return jsonify({"error": "Not found"}), 404
+    from lab.demo_pages import render
+    html = render(name)
+    if html is None:
+        return jsonify({"error": "Not found"}), 404
+    response = app.response_class(html, mimetype="text/html")
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route('/api/lab/mode', methods=['GET', 'POST'])
 def lab_mode():
     """GET: is demo mode on?  POST {"on": true, "minutes": 30} with header X-Lab-Token: switch it (the key is in backend/lab/data/toggle_token)."""

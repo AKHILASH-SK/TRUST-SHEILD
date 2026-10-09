@@ -866,6 +866,18 @@
         </div>
         <div id="gatewayMap" style="height: 320px; border-radius: 10px;"></div>
       </div>
+      <div id="demoPagesWrap" class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center justify-between pb-2">
+          <span class="text-[12px] font-bold text-slate-800">What the victim sees, and what TrustShield decided</span>
+          <span id="demoPagesHint" class="text-[10px] text-slate-400">simulated pages: they look identical, the address and the message source are the tell</span>
+        </div>
+        <div class="grid gap-3 md:grid-cols-2">
+          <div class="rounded-lg border border-slate-200 p-2"><div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-700">The real bank (hdfcbank.com)</span><span id="demoBadge-bank" class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-slate-100 text-slate-500">waiting</span></div><iframe id="demoFrame-bank" scrolling="no" title="real bank" style="width:100%;height:370px;border:0;border-radius:8px;background:#eef1f6"></iframe></div>
+          <div class="rounded-lg border border-slate-200 p-2"><div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-700">The relay copy (hdfcbank-secure-login.com)</span><span id="demoBadge-relay" class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-slate-100 text-slate-500">waiting</span></div><iframe id="demoFrame-relay" scrolling="no" title="relay page" style="width:100%;height:370px;border:0;border-radius:8px;background:#eef1f6"></iframe></div>
+          <div class="rounded-lg border border-slate-200 p-2"><div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-700">The genuine email</span><span id="demoBadge-mail-genuine" class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-slate-100 text-slate-500">waiting</span></div><iframe id="demoFrame-mail-genuine" scrolling="no" title="genuine email" style="width:100%;height:450px;border:0;border-radius:8px;background:#eef1f6"></iframe></div>
+          <div class="rounded-lg border border-slate-200 p-2"><div class="flex items-center justify-between px-1 pb-1"><span class="text-[11px] font-semibold text-slate-700">The forged email</span><span id="demoBadge-mail-forged" class="px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase bg-slate-100 text-slate-500">waiting</span></div><iframe id="demoFrame-mail-forged" scrolling="no" title="forged email" style="width:100%;height:450px;border:0;border-radius:8px;background:#eef1f6"></iframe></div>
+        </div>
+      </div>
       <div id="gatewayNotesWrap" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div class="flex items-center justify-between pb-2">
           <span class="text-[12px] font-bold text-slate-800">Other checks in this demo</span>
@@ -1441,6 +1453,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.9"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 </html>

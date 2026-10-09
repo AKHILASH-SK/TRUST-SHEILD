@@ -1048,6 +1048,7 @@ function plotGatewayEvents(events) {
 
 function startGatewayPolling() {
   stopGatewayPolling();
+  loadDemoFrames();
   setTimeout(() => { if (ensureGatewayMap()) gatewayMap.invalidateSize(); }, 200);
   refreshGatewayEvents();
   gatewayTimer = setInterval(refreshGatewayEvents, 2000);
@@ -1063,6 +1064,43 @@ async function clearGatewayEvents() {
 }
 window.clearGatewayEvents = clearGatewayEvents;
 
+var demoFramesLoaded = false;
+
+async function loadDemoFrames() {
+  if (demoFramesLoaded) return;
+  const names = ['bank', 'relay', 'mail-genuine', 'mail-forged'];
+  try {
+    const probe = await fetch(`${API_BASE}/demo/page/bank`);
+    if (!probe.ok) throw new Error('demo pages are not available yet');
+  } catch (e) {
+    const hint = document.getElementById('demoPagesHint');
+    if (hint) hint.textContent = 'run the demo (lab\\run_demo.ps1) and these pages appear here';
+    return;
+  }
+  names.forEach((n) => { const f = document.getElementById('demoFrame-' + n); if (f) f.src = `${API_BASE}/demo/page/${n}`; });
+  demoFramesLoaded = true;
+}
+
+function setDemoBadge(name, text, level) {
+  const el = document.getElementById('demoBadge-' + name);
+  if (!el) return;
+  const tone = { ok: 'bg-emerald-100 text-emerald-700', bad: 'bg-red-100 text-red-700', warn: 'bg-amber-100 text-amber-700' };
+  el.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase ' + (tone[level] || 'bg-slate-100 text-slate-500');
+  el.textContent = text;
+}
+
+function updateDemoBadges(events, notes) {
+  const page = (title) => notes.find(n => n.title === title);
+  const bank = page('Page check: hdfcbank.com');
+  const relay = page('Page check: hdfcbank-secure-login.com');
+  if (bank) setDemoBadge('bank', 'TrustShield: SAFE', bank.level);
+  if (relay) setDemoBadge('relay', 'TrustShield: DANGEROUS', relay.level);
+  const genuine = events.find(e => e.sender_level === 'authentic');
+  const forged = events.find(e => e.sender_level === 'spoofed');
+  if (genuine) setDemoBadge('mail-genuine', 'TrustShield: DELIVER', 'ok');
+  if (forged) setDemoBadge('mail-forged', 'TrustShield: QUARANTINE (forged)', 'bad');
+}
+
 async function refreshGatewayNotes() {
   const wrap = document.getElementById('gatewayNotesWrap');
   const box = document.getElementById('gatewayNotes');
@@ -1073,6 +1111,8 @@ async function refreshGatewayNotes() {
     if (!res.ok) return;
     notes = (await res.json()).notes || [];
   } catch (e) { return; }
+  window.__gatewayNotes = notes;
+  updateDemoBadges(window.__gatewayEvents || [], notes);
   wrap.classList.toggle('hidden', !notes.length);
   box.replaceChildren();
   const tone = { ok: 'border-emerald-200 bg-emerald-50', bad: 'border-red-200 bg-red-50', warn: 'border-amber-200 bg-amber-50', info: 'border-slate-200 bg-slate-50' };
@@ -1102,6 +1142,7 @@ async function refreshGatewayNotes() {
 
 async function refreshGatewayEvents() {
   refreshGatewayNotes();
+  if (!demoFramesLoaded) loadDemoFrames();                  // pages appear as soon as the demo has been run
   const status = document.getElementById('gatewayStatus');
   const body = document.getElementById('gatewayRows');
   const alertBox = document.getElementById('gatewayRotationAlert');
@@ -1130,6 +1171,8 @@ async function refreshGatewayEvents() {
     if (rotating) alertBox.textContent = 'IP rotation detected: ' + rotating.rotation.message +
       ' (addresses: ' + (rotating.rotation.failing_ips || []).join(', ') + ')';
   }
+  window.__gatewayEvents = events;
+  updateDemoBadges(events, window.__gatewayNotes || []);
   plotGatewayEvents(events);
   body.replaceChildren();
   if (!events.length) {

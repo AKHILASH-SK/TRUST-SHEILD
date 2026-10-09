@@ -43,3 +43,24 @@ def test_gateway_feed_writes_need_demo_mode_but_the_results_stay_readable_after_
     events = c.get("/api/gateway/events")
     assert events.status_code == 200 and any(e["id"] == "demo1" for e in events.get_json()["events"])   # results stay on screen
     c.get("/api/gateway/events?clear=1")
+
+
+def test_demo_pages_are_served_only_after_the_demo_has_been_used_and_are_self_contained():
+    c = client()
+    headers = {"X-Lab-Token": backend_app.LAB_TOKEN}
+    used_before = backend_app.LAB_STATE["used"]
+    backend_app.LAB_STATE["used"] = False
+    try:
+        assert c.get("/demo/page/bank").status_code == 404                                   # never shown outside a demo
+        c.post("/api/lab/mode", json={"on": True, "minutes": 1}, headers=headers)
+        for name in ("bank", "relay", "mail-genuine", "mail-forged"):
+            res = c.get(f"/demo/page/{name}")
+            assert res.status_code == 200 and res.mimetype == "text/html"
+            text = res.get_data(as_text=True)
+            assert "DEMO PAGE (simulated)" in text and "<script" not in text.lower() and "http://" not in text   # nothing external, nothing to run
+        assert c.get("/demo/page/../app").status_code == 404 and c.get("/demo/page/unknown").status_code == 404
+        assert "hdfcbank-secure-login.com" in c.get("/demo/page/relay").get_data(as_text=True)
+        assert "127.0.0.3" in c.get("/demo/page/mail-forged").get_data(as_text=True)
+    finally:
+        c.post("/api/lab/mode", json={"on": False}, headers=headers)
+        backend_app.LAB_STATE["used"] = used_before
