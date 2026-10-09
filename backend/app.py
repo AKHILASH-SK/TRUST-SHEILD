@@ -58,6 +58,18 @@ def handle_http_exception(exc):
     return server_error(exc)
 
 
+class _QuietPolling(logging.Filter):
+    """The phone polls scan progress every second; keep those routine lines out of the terminal so the [SCAN] lines
+    (what the pipeline is actually doing) stay readable."""
+    NOISY = ("GET /api/links/scan-jobs/", "GET /api/links/history/", "GET /health")
+
+    def filter(self, record):
+        message = record.getMessage()
+        return not any(n in message for n in self.NOISY)
+
+
+logging.getLogger("werkzeug").addFilter(_QuietPolling())
+
 # CORS: only the portal origins, the Chrome extension and local development
 _default_origins = "https://akhilash-sk.github.io,http://localhost:3000,http://localhost:5173,http://localhost:8000,http://127.0.0.1:8000"
 def parse_cors_origins(raw):

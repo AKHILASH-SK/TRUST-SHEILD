@@ -101,6 +101,14 @@ USER_CONTENT_HOSTS |= {
     "sendgrid.net", "mandrillapp.com", "ctctcdn.com", "forms.office.com", "formspree.io", "web3forms.com",
 }
 
+# More link shorteners (a short link says nothing about where it leads: the sandbox follows it to the real page) and
+# platforms where each customer gets its own sub-domain (a popular platform does not vouch for every tenant).
+USER_CONTENT_HOSTS |= {
+    "x.gd", "v.gd", "t.ly", "tiny.cc", "s.id", "soo.gd", "u.to", "clck.ru", "vk.cc", "bl.ink", "short.io", "cutt.us",
+    "tr.ee", "shrtco.de", "rebrand.ly", "bit.do", "adf.ly", "ouo.io", "link.tree", "gg.gg", "chilp.it", "mcaf.ee",
+    "i-webs.jp",
+}
+
 # Domains whose own login forms / redirects are trusted: brand domains only.
 GLOBAL_CLEAN_DOMAINS = BRAND_FAST_PATH_DOMAINS
 
@@ -408,7 +416,13 @@ def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[
         except Exception:
             review = None
         tel["llm_review"] = review
-        decision = reviewer.decide(lean, review)
+        if (tel.get("ml_capped_no_evidence") and review and review.get("verdict") in ("SAFE", "DANGEROUS")
+                and float(review.get("confidence", 0) or 0) >= getattr(reviewer, "MIN_CONFIDENCE", 0.75)):
+            # The model alone says dangerous but the sandbox found nothing concrete: the reviewer, who read the page,
+            # arbitrates between the two (SAFE clears it, DANGEROUS confirms the model).
+            decision = review["verdict"]
+        else:
+            decision = reviewer.decide(lean, review)
         if decision == "DANGEROUS":
             result["verdict"] = "CRITICAL FRAUD / PHISHING"
             result["threat_score"] = max(score, 85.0)

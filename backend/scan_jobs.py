@@ -62,9 +62,13 @@ class ScanJob:
                 return
             if s["status"] in ("done", "skipped") and status in ("pending", "running"):
                 return                      # never move backwards
+            changed = s["status"] != status
             s["status"] = status
             if detail:
                 s["detail"] = detail[:120]
+        if changed and status in ("running", "done"):
+            print(f"[SCAN {self.id[:6]}]   {s['label']:<22} {status}" + (f"  ({s['detail']})" if s["detail"] and status == "done" else ""),
+                  flush=True)
 
     def _close_stages(self) -> None:
         for s in self.stages.values():
@@ -77,14 +81,15 @@ class ScanJob:
             self.state = "done"
             self.finished = time.time()
             self._close_stages()
-        self._event.set()
+        shown = str((result or {}).get("display_verdict") or "?")
+        print(f"[SCAN {self.id[:6]}] FINISHED  {shown.upper():<30} score {result.get('threat_score', '?')}  "
+              f"in {self.finished - self.created:.0f}s  {self.url[:70]}", flush=True)
 
     def fail(self, message: str) -> None:
         with self._lock:
             self.state = "error"
             self.error = message
             self.finished = time.time()
-        self._event.set()
 
     def add_watcher(self, user_id: int, source_app: Optional[str]) -> bool:
         """Ask for the scan to be saved to this user's history when it finishes.
@@ -94,6 +99,11 @@ class ScanJob:
                 return False
             self.watchers.append((user_id, source_app or ""))
             return True
+
+    def release(self) -> None:
+        """Wake everyone waiting for this job. Called only after the result is stored, so a caller that wakes up and asks
+        again always finds the finished job in the cache."""
+        self._event.set()
 
     def wait(self, timeout: float = JOB_WAIT_SECONDS) -> bool:
         return self._event.wait(timeout)
@@ -144,15 +154,19 @@ class JobManager:
         with self._lock:
             hit = self._done.get(key)
             if hit and now - hit[0] < hit[1]:
+                print(f"[SCAN {hit[2].id[:6]}] CACHED    answered instantly from memory: {url[:80]}", flush=True)
                 return hit[2], "cached"
             if hit:
                 self._done.pop(key, None)
             running = self._running.get(key)
             if running is not None:
+                print(f"[SCAN {running.id[:6]}] JOINED    a second request for the same link attached to the running scan "
+                      f"({running.progress_percent()}% done)", flush=True)
                 return running, "joined"
             job = ScanJob(key, url)
             self._running[key] = job
             self._remember(job)
+        print(f"[SCAN {job.id[:6]}] STARTED   {url[:100]}", flush=True)
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"scan-{job.id[:6]}").start()
         return job, "started"
 
@@ -196,6 +210,7 @@ class JobManager:
             scan_progress.reset_sink(token)
             with self._lock:
                 self._running.pop(job.key, None)
+            job.release()
             if self.on_finish is not None and job.state == "done":
                 try:
                     self.on_finish(job)

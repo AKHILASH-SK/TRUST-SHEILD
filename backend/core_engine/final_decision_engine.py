@@ -72,6 +72,10 @@ def generate_deterministic_summary(
         if telemetry.get("ml_signals"):
             ml_line += " - key signals: " + ", ".join(telemetry["ml_signals"][:3])
         evidence_items.append(ml_line)
+    if telemetry.get("ml_capped_no_evidence"):
+        evidence_items.append("The risk model rates this page as likely malicious, but the sandbox found no concrete evidence "
+                              "(no fake brand, nothing sent to another site, no warning signs); it is not announced as dangerous "
+                              "on the model's score alone")
     if telemetry.get("ml_capped_uninspected"):
         evidence_items.append("The page could not be opened for inspection and nothing else found is malicious; "
                               "an unusual-looking link alone is not enough to call it dangerous")
@@ -328,6 +332,7 @@ class FinalDecisionEngine:
         #     the floors below can still only raise it.
         rule_score = threat_score
         ml_capped_uninspected = False
+        ml_capped_no_evidence = False
         if ml and not hard_override_triggered:
             threat_score = float(ml["score"])
             # Verified-clean rule: the browser really opened the page and found nothing hostile (no login or payment
@@ -354,6 +359,24 @@ class FinalDecisionEngine:
             if uninspected and not corroborated and threat_score >= CRITICAL_THRESHOLD:
                 threat_score = 55.0
                 ml_capped_uninspected = True
+
+            # Model-only conviction rule: the page WAS opened, but the sandbox found no concrete evidence of wrongdoing
+            # (no fake brand, nothing sent to another site, no warning sign, no list or VirusTotal signal, not a new
+            # domain). A 'dangerous' verdict resting only on the model's score is held at "Unverified" and goes to the AI
+            # second opinion instead of being announced as fact. (A real recruitment login page hosted for a company on a
+            # shared platform was scored 100% by the model alone.)
+            wording = _ev.get("wording") or {}
+            concrete_evidence = bool(
+                brand_impersonation or external_form_action or suspicious_exfiltration or hidden_iframes or title_mismatch
+                or _ev.get("download_executable") or _ev.get("redirects_to_popular_site") or _ev.get("submit_cross_domain")
+                or _ev.get("form_cross_domain") or _ev.get("login_leads_to_other_domain") or _ev.get("form_action_is_exfil_host")
+                or vt_risk_score >= 40 or heuristic_risk >= 40 or typosquat_risk or known_db_match
+                or 0 <= domain_age_days < 90 or wording.get("lure") or wording.get("threat") or wording.get("crypto")
+                or (set(_ev.get("sensitive_field_types") or []) & {"card", "cvv", "wallet_phrase", "gov_id", "pin"}))
+            if (_ev.get("verification_state") == "verified" and not uninspected and not concrete_evidence
+                    and threat_score >= CRITICAL_THRESHOLD):
+                threat_score = 70.0
+                ml_capped_no_evidence = True
 
         # 2b. Heuristic hard floors: each of these is dangerous by itself
         floor_reasons: List[str] = []
@@ -462,7 +485,8 @@ class FinalDecisionEngine:
             "ml_model_version": ml.get("model_version") if ml else None,
             "ml_lexical_probability": ml.get("lexical_probability") if ml else None,
             "ml_signals": ml.get("signals", []) if ml else [],
-            "ml_capped_uninspected": ml_capped_uninspected
+            "ml_capped_uninspected": ml_capped_uninspected,
+            "ml_capped_no_evidence": ml_capped_no_evidence
         }
         
         # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)

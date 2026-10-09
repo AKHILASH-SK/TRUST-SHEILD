@@ -143,10 +143,12 @@ class NotificationListener : NotificationListenerService() {
                     return
                 }
             } else {
-                if (linkTracker.hasProcessedNotification(notificationKey, fullMessage)) {
+                // Mail apps update the same notification (new text, same links): only links not yet handled for this
+                // notification are scanned.
+                linksToScan = linkTracker.newLinksForNotification(notificationKey, linkTracker.dedupeLinks(discoveredLinks))
+                if (linksToScan.isEmpty()) {
                     return
                 }
-                linksToScan = linkTracker.dedupeLinks(discoveredLinks)
             }
 
             // Log the app and message
@@ -167,14 +169,15 @@ class NotificationListener : NotificationListenerService() {
     }
 
     /**
-     * Analyze notification for links and perform security checks
-     * Shows user-visible alerts for suspicious/dangerous links
-     * Each notification is processed only once (no duplicates)
-     * 
-     * 3-Tier Analysis:
-     * Tier 1: Rule-based checks (instant)
-     * Tier 2: Firebase phishing database (fast)
-     * Tier 3: Sandbox analysis via backend (for unknown links)
+     * Analyze notification for links and alert the user.
+     *
+     * The BACKEND verdict is the one the user is shown: it runs the whole pipeline (threat lists, VirusTotal, a real
+     * sandbox browser, the ML models). The rules on this phone are only a hint: they used to raise a final "dangerous"
+     * alert on their own, and they disagreed with the backend (a real recruitment page was announced as a "homograph
+     * attack" while the history said Safe). Now:
+     *   - a hit in the phishing-domain database alerts at once (hard evidence);
+     *   - otherwise the link is sent to the backend and the alert follows ITS verdict;
+     *   - only when the backend cannot be reached do this phone's rules decide, and the alert says so.
      */
     private fun performLinkSecurityAnalysis(links: List<String>, packageName: String) {
         try {
@@ -182,126 +185,68 @@ class NotificationListener : NotificationListenerService() {
                 Log.d(TAG, "No links detected in notification")
                 return
             }
-            
             Log.d(TAG, "Found ${links.size} link(s) in notification from $packageName")
-            
-            // Step 2: Analyze each link (3-tier analysis)
+
             links.forEach { url ->
-                Log.d(TAG, "")
-                Log.d(TAG, "🔍 ============ ANALYZING LINK ============")
-                Log.d(TAG, "URL: $url")
-                
-                // TIER 1: Rule-based analysis (instant)
-                val analysis = linkAnalyzer.analyzeLink(url)
-                Log.d(TAG, "Tier 1 Verdict: ${analysis.riskLevel} - Reasons: ${analysis.reasons}")
-                
-                if (analysis.riskLevel == LinkRiskLevel.DANGEROUS) {
-                    Log.e(TAG, "🔴 DANGEROUS LINK (Tier 1 - Rule-based)!")
-                    alertManager.showDangerousLinkAlert(url, packageName, analysis.reasons)
-                    
-                    // Record immediately and stop
-                    linkScanRecorder.recordLinkScan(
-                        url = url,
-                        host = Uri.parse(url).host ?: "",
-                        riskLevel = analysis.riskLevel,
-                        verificationStatus = null,
-                        verifiedBrand = null,
-                        reasons = analysis.reasons,
-                        sourceApp = packageName,
-                        callback = object : LinkScanRecorder.OnLinkScanCallback {
-                            override fun onSuccess(scanId: Int, verdict: String) {}
-                            override fun onFailure(error: String) {}
-                        }
-                    )
-                    return@forEach
-                }
-                
-                // TIER 2: Firebase phishing database (background)
+                val hint = linkAnalyzer.analyzeLink(url)
+                Log.d(TAG, "Local hint for $url: ${hint.riskLevel} ${hint.reasons}")
+
                 phishingChecker.checkDomain(url) { firebaseResult ->
-                    var finalRiskLevel = analysis.riskLevel
-                    val finalReasons = analysis.reasons.toMutableList()
-                    var shouldRunTier3 = false
-                    
-                    when (firebaseResult.result) {
-                        PhishingCheckResult.DANGEROUS -> {
-                            Log.e(TAG, "🔴 DANGEROUS DOMAIN (Tier 2 - Firebase DB)!")
-                            finalRiskLevel = LinkRiskLevel.DANGEROUS
-                            finalReasons.add("Firebase: ${firebaseResult.message}")
-                            
-                            // ALWAYS alert for phishing DB hits, even if repeated
-                            alertManager.showDangerousLinkAlert(
-                                url, 
-                                packageName, 
-                                listOf("Firebase: ${firebaseResult.message}"),
-                                isFromPhishingDB = true  // Alert every time, no cooldown
-                            )
-                        }
-                        PhishingCheckResult.SUSPICIOUS -> {
-                            Log.w(TAG, "⚠️ SUSPICIOUS DOMAIN (Tier 2 - Firebase DB)!")
-                            finalRiskLevel = LinkRiskLevel.SUSPICIOUS
-                            finalReasons.add("Firebase: ${firebaseResult.message}")
-                            
-                            alertManager.showSuspiciousLinkAlert(
-                                url,
-                                packageName,
-                                listOf("Firebase: ${firebaseResult.message}"),
-                                isFromPhishingDB = true
-                            )
-                            shouldRunTier3 = true
-                        }
-                        PhishingCheckResult.SAFE -> {
-                            Log.d(TAG, "✓ Tier 2 passed: $url")
-                            if (analysis.riskLevel == LinkRiskLevel.SUSPICIOUS) {
-                                shouldRunTier3 = true
-                            }
-                        }
+                    var recordedLevel = hint.riskLevel
+                    val reasons = hint.reasons.toMutableList()
+                    var alertedFromDatabase = false
+
+                    if (firebaseResult.result == PhishingCheckResult.DANGEROUS) {
+                        Log.e(TAG, "DANGEROUS DOMAIN (phishing database): $url")
+                        recordedLevel = LinkRiskLevel.DANGEROUS
+                        reasons.add("Firebase: ${firebaseResult.message}")
+                        alertManager.showDangerousLinkAlert(
+                            url, packageName, listOf("Known phishing domain: ${firebaseResult.message}"), isFromPhishingDB = true
+                        )
+                        alertedFromDatabase = true
                     }
-                    
-                    // Record combined link scan to backend
-                    Log.d(TAG, "📤 Calling LinkScanRecorder.recordLinkScan() with $finalRiskLevel...")
+
                     linkScanRecorder.recordLinkScan(
                         url = url,
                         host = Uri.parse(url).host ?: "",
-                        riskLevel = finalRiskLevel,
+                        riskLevel = recordedLevel,
                         verificationStatus = null,
                         verifiedBrand = null,
-                        reasons = finalReasons,
+                        reasons = reasons,
                         sourceApp = packageName,
                         callback = object : LinkScanRecorder.OnLinkScanCallback {
-                            override fun onSuccess(scanId: Int, verdict: String) {
-                                Log.d(TAG, "✅ Backend response: Scan #$scanId - Verdict: $verdict")
-                                // If backend says DANGEROUS (Tier 0 override), show alert
-                                if (verdict == "DANGEROUS" && finalRiskLevel != LinkRiskLevel.DANGEROUS) {
-                                    Log.e(TAG, "🔴 BACKEND TIER 0 MATCH: $url is DANGEROUS (database phishing)")
-                                    alertManager.showDangerousLinkAlert(
-                                        url,
-                                        packageName,
-                                        listOf("Known phishing URL from database")
-                                    )
+                            override fun onResult(scanId: Int, verdict: String, reasons: String) {
+                                Log.d(TAG, "Backend verdict for $url: $verdict")
+                                if (alertedFromDatabase) return
+                                val points = com.example.trustshield.gate.GateText.bullets(reasons)
+                                when (verdict) {
+                                    "DANGEROUS" -> alertManager.showDangerousLinkAlert(url, packageName, points.ifEmpty { listOf("TrustShield analysis found this link dangerous") })
+                                    "SUSPICIOUS" -> alertManager.showSuspiciousLinkAlert(url, packageName, points.ifEmpty { listOf("TrustShield could not confirm this link is safe") })
+                                    else -> Log.d(TAG, "Backend says safe: no alert for $url")
                                 }
                             }
-                            
+
+                            override fun onSuccess(scanId: Int, verdict: String) {}
+
                             override fun onFailure(error: String) {
-                                Log.e(TAG, "❌ Backend API error: $error")
+                                Log.e(TAG, "Backend not reachable for $url: $error")
+                                if (alertedFromDatabase) return
+                                val note = "Checked on this phone only (the TrustShield server could not be reached)"
+                                when (hint.riskLevel) {
+                                    LinkRiskLevel.DANGEROUS -> alertManager.showDangerousLinkAlert(url, packageName, hint.reasons.take(3) + note)
+                                    LinkRiskLevel.SUSPICIOUS -> alertManager.showSuspiciousLinkAlert(url, packageName, hint.reasons.take(3) + note)
+                                    LinkRiskLevel.SAFE -> {}
+                                }
                             }
                         }
                     )
-                    
-                    // TIER 3: Sandbox analysis
-                    if (shouldRunTier3 && finalRiskLevel != LinkRiskLevel.DANGEROUS) {
-                        Log.d(TAG, "⚠️ Continuing to Tier 3...")
-                        performSandboxAnalysis(url, packageName, true)
-                    } else if (finalRiskLevel == LinkRiskLevel.SAFE) {
-                        Log.d(TAG, "✓ All tiers passed for: $url - Link is safe")
-                    }
                 }
             }
-            
         } catch (e: Exception) {
             Log.e(TAG, "Error in link security analysis: ${e.message}", e)
         }
     }
-    
+
     /**
      * Tier 3: Sandbox analysis via backend for SUSPICIOUS links only
      * @param isSuspicious Only runs if link was SUSPICIOUS in Tier 1

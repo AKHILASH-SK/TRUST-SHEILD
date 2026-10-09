@@ -365,32 +365,43 @@ BRAND_ALIASES = {
 }
 
 
+# brands that ordinary sites mention in their body for sign-in buttons, widgets, maps or analytics
+WIDGET_BRANDS = {"google", "facebook", "microsoft", "apple", "twitter", "linkedin", "youtube", "instagram", "github",
+                 "whatsapp", "telegram", "amazon", "paypal"}
+
+
 def detect_brand(state: Dict[str, Any], page_registered: str) -> Dict[str, Any]:
     """Which well-known brand does the page claim to be, and does the domain really belong to it?"""
     try:
         from ml.features import BRAND_DOMAINS
     except Exception:  # pragma: no cover
         BRAND_DOMAINS = {}
-    headline = " ".join([state.get("title", ""), state.get("ogSite", ""), state.get("ogTitle", ""),
-                         " ".join(state.get("logoAlts", []))]).lower()
+    strong = " ".join([state.get("title", ""), state.get("ogSite", ""), state.get("ogTitle", "")]).lower()    # what the page calls itself
+    logos = " ".join(state.get("logoAlts", [])).lower()                                                      # alt text of images on the page
     body = (state.get("text", "") or "").lower()
-    best, best_score = "", 0
+    best, best_score, best_head = "", 0, 0
     for brand in BRAND_DOMAINS:
         names = [brand] + BRAND_ALIASES.get(brand, [])
         pat = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
-        head_hits = len(pat.findall(headline))
+        # An image alt such as "Google" on a "Sign in with Google" button is a sign-in option, not the page's own identity:
+        # for widget brands only the page title and site name count.
+        head_hits = len(pat.findall(strong)) + (0 if brand in WIDGET_BRANDS else len(pat.findall(logos)))
         body_hits = len(pat.findall(body[:3000])) if len(brand) >= 6 else 0     # short names (ups, axis, chase) are too ambiguous in prose
-        if head_hits >= 1 or body_hits >= 5:
+        # Brands that sites mention all the time as a sign-in option, widget or analytics (Google, Facebook, ...) never
+        # count from the body alone, and any other brand needs many more mentions: otherwise a company's own login page
+        # that says "Sign in with Google" is mistaken for a fake Google page.
+        body_needed = 99 if brand in WIDGET_BRANDS else 8
+        if head_hits >= 1 or body_hits >= body_needed:
             score = 3 * head_hits + body_hits
             if score > best_score:
-                best, best_score = brand, score
+                best, best_score, best_head = brand, score, head_hits
     claimed = best
     owns = None
     if claimed:
         official = BRAND_DOMAINS[claimed]
         owns = any(page_registered == d or page_registered.endswith("." + d) for d in official)
     label = (page_registered.split(".")[0] if page_registered else "").replace("-", "")
-    return {"claimed_brand": claimed, "brand_owns_domain": owns,
+    return {"claimed_brand": claimed, "brand_owns_domain": owns, "brand_claim_in_headline": best_head > 0,
             "brand_in_domain_label": bool(claimed and claimed in label and not owns)}
 
 
@@ -932,7 +943,9 @@ class BrowserSandbox:
         cross_submit = bool(ev.get("submit_cross_domain") and ev.get("probe_credentials_sent"))
         exfil = bool(ev.get("submit_to_messaging_api") or ev.get("form_action_is_exfil_host")
                      or (ev.get("probe_credentials_sent") and (ev.get("submit_to_ip") or ev.get("submit_insecure"))))
-        impersonation = bool(claimed and owns is False and (ev.get("credential_surface_found") or ev.get("brand_in_domain_label")))
+        claim_is_real = bool(ev.get("brand_claim_in_headline", True) or ev.get("brand_in_domain_label"))
+        impersonation = bool(claimed and owns is False and claim_is_real
+                             and (ev.get("credential_surface_found") or ev.get("brand_in_domain_label")))
         ev.update({
             "sandbox_has_password_field": int("password" in sensitive or bool(sensitive & {"card", "wallet_phrase", "gov_id", "pin"})),
             "external_form_action": int(bool(ev.get("form_cross_domain") or cross_submit)),

@@ -93,6 +93,19 @@ class LinkTracker(context: Context) {
     }
 
     /**
+     * Links of one notification that were not handled yet. Apps such as Gmail update the SAME notification (new text,
+     * same links); links already handled for that notification are skipped. A link in a NEW notification is scanned.
+     */
+    fun newLinksForNotification(notificationKey: String, links: List<String>): List<String> {
+        val fresh = mutableListOf<String>()
+        for (link in links) {
+            val id = "l:$notificationKey:${canonicalKey(link)}"
+            if (processedNotificationKeys.putIfAbsent(id, System.currentTimeMillis()) == null) fresh.add(link)
+        }
+        return fresh
+    }
+
+    /**
      * Collapse the different spellings of one link inside a single notification
      * ("www.x.org", "https://www.x.org/", "https://x.org") into one entry; the version with a scheme wins.
      */

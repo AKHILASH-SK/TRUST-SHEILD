@@ -23,7 +23,9 @@ class AlertNotificationManager(private val context: Context) {
         private const val TAG = "ALERT_NOTIFY"
         private const val CHANNEL_ID = "trustshield_security_alerts"
         private const val CHANNEL_NAME = "Security Alerts"
-        private const val ALERT_COOLDOWN_MS = 30000  // 30 seconds - don't show same link alert twice within this period
+        // No time-window suppression: every newly received link is alerted. Duplicates are prevented at the source
+        // (per-message and per-notification link tracking), never by hiding an alert for a while.
+        private const val ALERT_COOLDOWN_MS = 0L
     }
     
     private val notificationManager: NotificationManager = 

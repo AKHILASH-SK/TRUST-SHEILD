@@ -27,9 +27,11 @@ def test_the_rule_does_not_apply_when_the_page_has_a_login_form_or_flags_or_is_u
     assert evaluate(CLEAN_EVIDENCE, vt_risk_score=45.7)["verdict"].startswith(("SUSPICIOUS", "CRITICAL"))
 
 
-def test_a_confident_model_still_wins_on_a_clean_looking_page():
+def test_a_confident_model_alone_no_longer_convicts_a_clean_looking_page():
+    # changed on purpose: with nothing concrete found by the sandbox, the model's score alone stays "Unverified"
     confident = {**MODERATE_ML, "score": 92.0, "probability": 0.95}
-    assert evaluate(CLEAN_EVIDENCE, ml=confident)["verdict"].startswith("CRITICAL")
+    out = evaluate(CLEAN_EVIDENCE, ml=confident)
+    assert out["verdict"].startswith("SUSPICIOUS") and out["telemetry"]["ml_capped_no_evidence"] is True
 
 
 # ---- the same link always gets the same answer --------------------------------------------------------------------
@@ -243,3 +245,75 @@ def test_user_content_platforms_seen_hosting_phishing_are_not_fast_path_whitelis
         assert is_user_content_host(url), url
         assert not is_brand_fast_path(url), url
     assert is_brand_fast_path("https://www.adobe.com/")           # the brand's own site is still trusted
+
+
+# ---- a brand mentioned in the body is not a claim to BE that brand ------------------------------------------------------------
+
+def test_a_company_login_page_that_says_sign_in_with_google_is_not_a_fake_google_page():
+    from core_engine.browser_sandbox import detect_brand
+    state = {"title": "Rakuten Group - New Graduate Recruitment", "ogSite": "", "ogTitle": "", "logoAlts": [],
+             "text": "Sign in with Google. " * 12 + "Protected by reCAPTCHA. Google Privacy Policy and Terms."}
+    result = detect_brand(state, "i-webs.jp")
+    assert result["claimed_brand"] == "" and result["brand_owns_domain"] is None
+
+
+def test_a_page_titled_like_a_brand_on_the_wrong_domain_is_still_caught():
+    from core_engine.browser_sandbox import detect_brand
+    state = {"title": "Sign in to your Google Account", "ogSite": "", "ogTitle": "", "logoAlts": ["Google"], "text": "Email or phone"}
+    result = detect_brand(state, "secure-login-check.xyz")
+    assert result["claimed_brand"] == "google" and result["brand_owns_domain"] is False and result["brand_claim_in_headline"]
+
+
+def test_shorteners_and_multi_tenant_platforms_are_never_trusted_for_their_popularity():
+    from core_engine.link_threat_pipeline import is_brand_fast_path, is_user_content_host
+    for url in ("https://x.gd/vlkxb", "https://t.ly/abc", "https://mypage.3010.i-webs.jp/entry/login"):
+        assert is_user_content_host(url) and not is_brand_fast_path(url), url
+
+
+def test_a_sign_in_with_google_button_image_is_not_the_page_claiming_to_be_google():
+    from core_engine.browser_sandbox import detect_brand
+    state = {"title": "Rakuten Group New Graduate Recruitment", "ogSite": "", "ogTitle": "",
+             "logoAlts": ["google", "rakuten"], "text": "Log in"}
+    assert detect_brand(state, "i-webs.jp")["claimed_brand"] == ""
+
+
+def test_a_model_only_conviction_of_an_inspected_page_without_concrete_evidence_is_not_announced_as_dangerous():
+    page_alarm = {"score": 100.0, "probability": 1.0, "band": "DANGEROUS", "model": "page", "signals": ["ev n links"]}
+    verified = {"verification_state": "verified", "credential_surface_found": True, "sensitive_field_types": [], "wording": {}}
+    out = FinalDecisionEngine().evaluate(url="https://tenant.platform.example/login", ml=page_alarm, sandbox_evidence=verified,
+                                         domain_age_days=-1)
+    assert out["verdict"].startswith("SUSPICIOUS") and out["telemetry"]["ml_capped_no_evidence"] is True
+
+
+def test_concrete_evidence_keeps_the_dangerous_verdict():
+    page_alarm = {"score": 100.0, "probability": 1.0, "band": "DANGEROUS", "model": "page", "signals": []}
+    verified = {"verification_state": "verified", "credential_surface_found": True, "sensitive_field_types": [], "wording": {}}
+    for extra in ({"brand_impersonation": 1}, {"vt_risk_score": 45.0}, {"domain_age_days": 5}, {"heuristic_risk": 50.0},
+                  {"suspicious_exfiltration": 1}):
+        kwargs = {"domain_age_days": -1, **extra}
+        out = FinalDecisionEngine().evaluate(url="https://x.example/", ml=page_alarm, sandbox_evidence=verified, **kwargs)
+        assert out["threat_score"] >= 80, extra
+
+
+def test_when_the_model_alone_accuses_the_reviewer_arbitrates_between_model_and_evidence():
+    from core_engine.link_threat_pipeline import DISPLAY_DANGEROUS, DISPLAY_SAFE, DISPLAY_UNVERIFIED, finalize_verdict
+
+    class Reviewer:
+        MIN_CONFIDENCE = 0.75
+
+        def __init__(self, verdict, confidence):
+            self.answer = {"verdict": verdict, "confidence": confidence, "reasons": ["read the page"], "impersonated_brand": ""}
+
+        def review(self, *a, **k):
+            return self.answer
+
+        decide = staticmethod(lambda lean, res: None)
+
+    def result():
+        return {"verdict": "SUSPICIOUS", "threat_score": 70.0, "analysis_complete": True, "summary": "s",
+                "telemetry": {"hard_override_triggered": False, "ml_capped_no_evidence": True}}
+
+    ml = {"probability": 1.0}
+    assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.9))["display_verdict"] == DISPLAY_SAFE
+    assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("DANGEROUS", 0.9))["display_verdict"] == DISPLAY_DANGEROUS
+    assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.5))["display_verdict"] == DISPLAY_UNVERIFIED

@@ -609,28 +609,26 @@ class LinkAnalyzer {
      * Example: g00gle.com (zero instead of O)
      */
     private fun checkHomographAttack(host: String): Boolean {
-        
-        // Check for mixed character types in domain
-        val hasDigits = host.any { it.isDigit() }
-        val hasLetters = host.any { it.isLetter() }
-        
-        // Check for confusing character combinations
-        val confusingPatterns = listOf(
-            Regex("0[oO]"), // 0 and O mixed
-            Regex("[1l]"), // 1 and l mixed
-            Regex("[5s]"), // 5 and S mixed
-            Regex("[8b]")  // 8 and B mixed
-        )
-        
-        if (hasDigits && hasLetters) {
-            confusingPatterns.forEach { pattern ->
-                if (pattern.containsMatchIn(host)) {
-                    return true
-                }
-            }
+        // A real look-alike imitates a KNOWN brand: one label mixes letters and digits and, once the digits are turned
+        // back into the letters they imitate (0 -> o, 1 -> l, 3 -> e, 5 -> s, 4 -> a, 8 -> b), it spells that brand
+        // (g00gle, paypa1, amaz0n). Digits alone (a numeric label such as "3010") or an ordinary word are not enough.
+        if (isTrustedDomain(host)) return false
+        val labels = host.lowercase().split('.')
+        if (labels.size < 2) return false
+        return labels.dropLast(1).any { label ->
+            val hasLetter = label.any { it.isLetter() }
+            val hasDigit = label.any { it.isDigit() }
+            if (!hasLetter || !hasDigit) return@any false
+            val plain = label.replace("-", "")
+            val restored = plain.map {
+                when (it) { '0' -> 'o'; '1' -> 'l'; '3' -> 'e'; '5' -> 's'; '4' -> 'a'; '8' -> 'b'; else -> it }
+            }.joinToString("")
+            restored != plain && KNOWN_BRAND_LABELS.any { it.length >= 4 && restored.contains(it) }
         }
-        
-        return false
+    }
+
+    private val KNOWN_BRAND_LABELS: Set<String> by lazy {
+        LEGITIMATE_DOMAINS.map { it.substringBefore('.') }.filter { it.length >= 4 }.toSet()
     }
 
     private fun isTrustedDomain(host: String): Boolean {

@@ -25,6 +25,8 @@ class LinkScanRecorder(private val context: Context) {
     interface OnLinkScanCallback {
         fun onSuccess(scanId: Int, verdict: String)
         fun onFailure(error: String)
+        /** The backend's full answer (its reasons). Called just before onSuccess. */
+        fun onResult(scanId: Int, verdict: String, reasons: String) {}
     }
     
     /**
@@ -104,6 +106,7 @@ class LinkScanRecorder(private val context: Context) {
                     
                     // Execute callback on main thread
                     GlobalScope.launch {
+                        callback?.onResult(scanResponse.id, scanResponse.verdict, scanResponse.reasons)
                         callback?.onSuccess(scanResponse.id, scanResponse.verdict)
                     }
                 } else {
