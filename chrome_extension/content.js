@@ -3,6 +3,12 @@
  * Automatically extracts email context and injects a floating shield HUD into Gmail / Outlook.
  */
 
+// The popup injects this file every time it opens; the guard makes a second injection do nothing instead of failing with
+// "Identifier has already been declared". Everything lives inside this function so no name can collide.
+(function () {
+if (window.__trustShieldContentLoaded) return;
+window.__trustShieldContentLoaded = true;
+
 // The hosted copy is out of date; only fall back to it when this is deliberately switched on.
 const ALLOW_CLOUD_FALLBACK = false;
 const BACKEND_LOCAL_URL = "http://127.0.0.1:8000/api/extension/analyze";
@@ -572,3 +578,5 @@ if (document.readyState === 'loading') {
 } else {
   initFloatingGuardWidget();
 }
+
+})();
