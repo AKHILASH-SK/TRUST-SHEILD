@@ -1,0 +1,54 @@
+# Legitimate links that must NEVER come back "Dangerous".   Format:  url | category | note (optional)
+# Add or remove lines freely; lines starting with # are ignored. "Safe" is the goal, "Unverified" is acceptable (listed as a warning).
+
+# --- big sites and tools people tap every day (usually answered by the trusted-domain shortcuts)
+https://www.google.com/search?q=weather | big site
+https://mail.google.com/mail/u/0/ | big site
+https://meet.google.com/abc-defg-hij | big site
+https://accounts.google.com/signin | big site
+https://www.youtube.com/watch?v=dQw4w9WgXcQ | big site
+https://www.microsoft.com/en-in/microsoft-365 | big site
+https://learn.microsoft.com/en-us/azure/ | big site
+https://www.amazon.in/ | big site
+https://www.flipkart.com/ | big site
+https://www.linkedin.com/in/someone | big site
+https://en.wikipedia.org/wiki/Phishing | big site
+https://stackoverflow.com/questions/11227809 | big site
+https://www.netflix.com/in/ | big site
+https://www.paypal.com/signin | big site
+https://zoom.us/join | big site
+https://www.swiggy.com/ | big site
+https://www.zomato.com/ | big site
+
+# --- banks and government (login pages that look "dangerous" to a careless model)
+https://www.hdfcbank.com/ | bank
+https://netbanking.hdfcbank.com/netbanking/ | bank
+https://www.icicibank.com/ | bank
+https://www.onlinesbi.sbi/ | bank
+https://www.axisbank.com/ | bank
+https://www.irctc.co.in/nget/train-search | government/travel
+https://www.incometax.gov.in/iec/foportal/ | government
+https://uidai.gov.in/ | government
+https://www.india.gov.in/ | government
+
+# --- documents, forms and code (trusted collaboration platforms)
+https://docs.google.com/spreadsheets/d/1AbC/edit | collaboration | view page
+https://docs.google.com/document/d/1AbC/edit | collaboration | view page
+https://docs.google.com/forms/d/e/1FAIpQLSeIbAwwDmGz1fDpICAXPkFVG9wbWPjcg1BpphK84NgkAI48UA/viewform | collaboration | a real form
+https://drive.google.com/file/d/1AbC/view | collaboration
+https://github.com/torvalds/linux | collaboration
+https://forms.office.com/r/abcdef | collaboration
+
+# --- small ordinary sites (these really go through the sandbox and the models)
+https://belgianart.be/ | small site
+https://tescort.com/ | small site
+https://lasisa.net/ | small site
+https://bnportugal.gov.pt/ | small site | login behind menus: slow
+https://swatch.com/ | small site | blocks automated browsers
+https://mensjournal.com/ | small site
+
+# --- student projects on free hosting (the case the models used to get wrong)
+https://boogi.netlify.app/ | hosted project
+https://masud-todo-app.netlify.app/ | hosted project
+https://datum-ashy-beta.vercel.app/ | hosted project | KNOWN WEAK SPOT: login form, expected Unverified
+https://elearning-project-5423b.web.app/ | hosted project | KNOWN WEAK SPOT: Firebase sign-in, expected Unverified
