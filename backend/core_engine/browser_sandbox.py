@@ -978,7 +978,7 @@ class BrowserSandbox:
         sensitive = set(ev.get("sensitive_field_types", []))
         claimed = ev.get("claimed_brand", "")
         owns = ev.get("brand_owns_domain")
-        cross_submit = bool(ev.get("submit_cross_domain") and ev.get("probe_credentials_sent"))
+        cross_submit = bool(ev.get("submit_cross_domain") and ev.get("probe_credentials_sent") and not ev.get("idp_login"))
         exfil = bool(ev.get("submit_to_messaging_api") or ev.get("form_action_is_exfil_host")
                      or (ev.get("probe_credentials_sent") and (ev.get("submit_to_ip") or ev.get("submit_insecure"))))
         claim_is_real = bool(ev.get("brand_claim_in_headline", True) or ev.get("brand_in_domain_label"))
@@ -986,7 +986,7 @@ class BrowserSandbox:
                              and (ev.get("credential_surface_found") or ev.get("brand_in_domain_label")))
         ev.update({
             "sandbox_has_password_field": int("password" in sensitive or bool(sensitive & {"card", "wallet_phrase", "gov_id", "pin"})),
-            "external_form_action": int(bool(ev.get("form_cross_domain") or cross_submit)),
+            "external_form_action": int(bool((ev.get("form_cross_domain") and not ev.get("idp_login")) or cross_submit)),
             "suspicious_exfiltration": int(exfil),
             "sandbox_hidden_iframes": int(ev.get("hidden_iframes", 0)),
             "sandbox_title_mismatch": int(impersonation and bool(ev.get("page_title"))),

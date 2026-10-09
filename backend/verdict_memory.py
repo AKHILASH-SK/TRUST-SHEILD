@@ -26,7 +26,7 @@ from scan_jobs import cache_key
 
 logger = logging.getLogger("trustshield.memory")
 
-RULES_VERSION = "2026-10-09.2"          # bump when a change to the rules should invalidate everything remembered
+RULES_VERSION = "2026-10-09.3"          # bump when a change to the rules should invalidate everything remembered
 TTL_DANGEROUS_SECONDS = 48 * 3600
 TTL_SAFE_SECONDS = 2 * 3600
 MAX_RESULT_BYTES = 60_000

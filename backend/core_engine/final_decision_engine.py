@@ -371,9 +371,11 @@ class FinalDecisionEngine:
             wording = _ev.get("wording") or {}
             concrete_evidence = bool(
                 brand_impersonation or external_form_action or suspicious_exfiltration or hidden_iframes or title_mismatch
-                or _ev.get("download_executable") or _ev.get("redirects_to_popular_site") or _ev.get("submit_cross_domain")
+                or _ev.get("download_executable") or _ev.get("redirects_to_popular_site")
+                or (_ev.get("submit_cross_domain") and not _ev.get("idp_login"))
                 or (bool(_ev.get("claimed_brand")) and _ev.get("brand_owns_domain") is False)      # titled as a big brand it does not own
-                or _ev.get("form_cross_domain") or _ev.get("login_leads_to_other_domain") or _ev.get("form_action_is_exfil_host")
+                or (_ev.get("form_cross_domain") and not _ev.get("idp_login"))
+                or (_ev.get("login_leads_to_other_domain") and not _ev.get("idp_login")) or _ev.get("form_action_is_exfil_host")
                 or vt_risk_score >= 40 or heuristic_risk >= 40 or typosquat_risk or known_db_match
                 or 0 <= domain_age_days < 90 or wording.get("lure") or wording.get("threat") or wording.get("crypto")
                 or (set(_ev.get("sensitive_field_types") or []) & {"card", "cvv", "wallet_phrase", "gov_id", "pin"}))

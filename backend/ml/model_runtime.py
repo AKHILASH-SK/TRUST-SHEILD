@@ -107,7 +107,9 @@ class ModelRuntime:
     @staticmethod
     def _probability(art: Dict[str, Any], row: np.ndarray) -> float:
         raw = art["model"].predict_proba(row)[:, 1]
-        return float(art["calibrator"].predict(raw)[0])
+        # Training chose the thresholds among probabilities rounded to 4 decimals, so scoring must round the same way: a
+        # calibration step such as 13/14 = 0.928571 must reach a threshold stored as 0.9286.
+        return round(float(art["calibrator"].predict(raw)[0]), 4)
 
     @staticmethod
     def _signals(art: Dict[str, Any], row: np.ndarray, k: int = 4) -> List[str]:

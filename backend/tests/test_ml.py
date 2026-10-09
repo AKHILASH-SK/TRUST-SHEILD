@@ -222,3 +222,19 @@ def test_hosted_benign_loader_survives_a_rate_limit(monkeypatch, tmp_path):
 
     monkeypatch.setattr(datasets.requests, "get", lambda *a, **k: Limited())
     assert datasets.load_hosted_benign(refresh=True, target=10) == []
+
+
+def test_probabilities_are_rounded_like_the_thresholds_chosen_in_training():
+    import numpy as np
+    from ml.model_runtime import ModelRuntime, band_of
+
+    class Calibrator:
+        def predict(self, raw):
+            return np.array([13 / 14])               # a calibration step: 0.928571...
+
+    class Model:
+        def predict_proba(self, row):
+            return np.array([[0.1, 0.9]])
+
+    p = ModelRuntime._probability({"model": Model(), "calibrator": Calibrator()}, np.zeros((1, 3)))
+    assert p == 0.9286 and band_of(p, 0.0789, 0.9286) == "DANGEROUS"       # was 0.928571 < 0.9286: stuck at "suspicious"

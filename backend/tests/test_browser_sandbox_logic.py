@@ -142,3 +142,13 @@ def test_firebase_and_google_sign_in_apis_count_as_a_normal_login():
     assert "collector-drop.xyz" not in bs.IDENTITY_PROVIDER_API_HOSTS and "api.telegram.org" not in bs.IDENTITY_PROVIDER_API_HOSTS
     login = base_evidence(credential_surface_found=True, probe_credentials_sent=True, submit_cross_domain=True, idp_login=True)
     assert bs.evidence_score(login) < 35                                # not convicted just for posting to the sign-in API
+
+
+def test_a_firebase_login_is_not_counted_as_a_form_sent_to_another_site():
+    ev = base_evidence(credential_surface_found=True, probe_credentials_sent=True, submit_cross_domain=True, idp_login=True,
+                       sensitive_field_types=["password"])
+    out = bs.BrowserSandbox()._finish(ev)
+    assert out["external_form_action"] == 0
+    stolen = base_evidence(credential_surface_found=True, probe_credentials_sent=True, submit_cross_domain=True,
+                           sensitive_field_types=["password"])
+    assert bs.BrowserSandbox()._finish(stolen)["external_form_action"] == 1
