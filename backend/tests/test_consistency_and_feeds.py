@@ -156,3 +156,15 @@ def test_no_ai_guess_for_a_link_nobody_could_open():
               "telemetry": {"hard_override_triggered": False, "ml_capped_uninspected": True,
                             "verification_state": "unverified", "unverified_reason": "timeout"}}
     assert finalize_verdict(result, url="http://x/", reviewer=Boom())["display_verdict"] == DISPLAY_UNVERIFIED
+
+
+# ---- platforms that host other people's pages never vouch for a page on them -------------------------------------------------
+
+def test_user_content_platforms_seen_hosting_phishing_are_not_fast_path_whitelisted():
+    from core_engine.link_threat_pipeline import is_brand_fast_path, is_user_content_host
+    for url in ("https://secure-page-editor--x.replit.app/", "https://new.express.adobe.com/webpage/abc",
+                "https://q-r.to/bfUXPY", "https://l.ead.me/bgbvF8", "https://2ffkjk.share-eu1.hsforms.com/2V",
+                "https://pichincha-x.lovable.app/", "https://us11.campaign-archive.com/?u=1"):
+        assert is_user_content_host(url), url
+        assert not is_brand_fast_path(url), url
+    assert is_brand_fast_path("https://www.adobe.com/")           # the brand's own site is still trusted

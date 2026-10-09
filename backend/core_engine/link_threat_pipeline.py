@@ -89,6 +89,17 @@ USER_CONTENT_HOSTS |= {
     "r2.dev", "my.canva.site", "github.dev", "codesandbox.io", "stackblitz.io", "pythonanywhere.com",
 }
 
+# Seen hosting live phishing pages (PhishTank / OpenPhish, October 2026): page builders, form tools, QR-code and
+# link-in-bio services, shorteners and e-mail archives. Their popularity must not vouch for a page on them.
+USER_CONTENT_HOSTS |= {
+    "replit.app", "replit.co", "express.adobe.com", "spark.adobe.com", "lovable.app", "lovable.dev", "wixstudio.com",
+    "webwave.dev", "weeblysite.com", "webcindario.com", "twil.io", "forms.app", "hsforms.com", "hsforms.net",
+    "hubspotusercontent.com", "campaign-archive.com", "list-manage.com", "mailchi.mp", "bolt.host", "v0.dev",
+    "vusercontent.net", "typedream.app", "q-r.to", "qrco.de", "qr-codes.io", "qr.io", "me-qr.com", "l.ead.me",
+    "ead.me", "reurl.cc", "beacons.ai", "linktr.ee", "bio.link", "lnk.bio", "linkin.bio", "taplink.cc", "cakeresume.com",
+    "sendgrid.net", "mandrillapp.com", "ctctcdn.com", "forms.office.com", "formspree.io", "web3forms.com",
+}
+
 # Domains whose own login forms / redirects are trusted: brand domains only.
 GLOBAL_CLEAN_DOMAINS = BRAND_FAST_PATH_DOMAINS
 
