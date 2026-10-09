@@ -110,6 +110,8 @@ def test_download_of_an_apk_is_flagged(lab):
     assert ev["sandbox_threat_score"] >= 35
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Chromium shuts down slowly on Windows when a page never finishes loading; "
+                                            "live scans run in a killable process (see test_sandbox_isolation.py). Runs in Docker.")
 def test_slow_site_times_out_as_unverified_within_the_budget(lab):
     started = time.monotonic()
     ev = scan("slow-site.com", budget=6)

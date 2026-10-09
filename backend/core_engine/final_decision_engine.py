@@ -72,6 +72,9 @@ def generate_deterministic_summary(
         if telemetry.get("ml_signals"):
             ml_line += " - key signals: " + ", ".join(telemetry["ml_signals"][:3])
         evidence_items.append(ml_line)
+    if telemetry.get("ml_capped_uninspected"):
+        evidence_items.append("The page could not be opened for inspection and nothing else found is malicious; "
+                              "an unusual-looking link alone is not enough to call it dangerous")
     
     if telemetry.get("known_db_match"):
         evidence_items.append("Confirmed malicious signature in threat intelligence database (URLhaus/OpenPhish)")
@@ -324,6 +327,7 @@ class FinalDecisionEngine:
         # 2a. Trained ML classifier (final stage). It sets the score unless a hard rule already fired;
         #     the floors below can still only raise it.
         rule_score = threat_score
+        ml_capped_uninspected = False
         if ml and not hard_override_triggered:
             threat_score = float(ml["score"])
             # Verified-clean rule: the browser really opened the page and found nothing hostile (no login or payment
@@ -338,6 +342,18 @@ class FinalDecisionEngine:
                     and vt_risk_score < 40 and not (0 <= domain_age_days < 180)
                     and float(ml.get("probability", 1.0)) < 0.85):
                 threat_score = min(threat_score, 25.0)
+
+            # Uninspected-and-uncorroborated rule: when the page could not be opened (timeout, blocked, unreachable) the
+            # text of the link is all the model saw. A link that merely LOOKS unusual (many subdomains, a port number,
+            # long random path: typical of internal tools and dev servers) is not proof of phishing, so without any
+            # independent support the score is held in the "Unverified" band instead of "Dangerous".
+            uninspected = (sandbox_unreachable == 1 or sandbox_blocked == 1
+                           or _ev.get("verification_state") == "unverified")
+            corroborated = (vt_risk_score >= 40 or heuristic_risk >= 40 or bool(typosquat_risk) or free_hosting
+                            or 0 <= domain_age_days < 90 or bool(known_db_match))
+            if uninspected and not corroborated and threat_score >= CRITICAL_THRESHOLD:
+                threat_score = 55.0
+                ml_capped_uninspected = True
 
         # 2b. Heuristic hard floors: each of these is dangerous by itself
         floor_reasons: List[str] = []
@@ -445,7 +461,8 @@ class FinalDecisionEngine:
             "ml_model": ml["model"] if ml else None,
             "ml_model_version": ml.get("model_version") if ml else None,
             "ml_lexical_probability": ml.get("lexical_probability") if ml else None,
-            "ml_signals": ml.get("signals", []) if ml else []
+            "ml_signals": ml.get("signals", []) if ml else [],
+            "ml_capped_uninspected": ml_capped_uninspected
         }
         
         # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)

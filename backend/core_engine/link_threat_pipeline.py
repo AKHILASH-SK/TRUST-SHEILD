@@ -371,7 +371,10 @@ def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[
         result["threat_score"] = min(score, 25.0)
         result["summary"] = (result.get("summary", "") + "\n- This page is offline right now (the address does not respond), "
                              "so there is nothing to open.").strip()
-    elif not hard and str(result.get("verdict", "")).upper().startswith("SUSPICIOUS"):
+    elif (not hard and str(result.get("verdict", "")).upper().startswith("SUSPICIOUS")
+          and not tel.get("ml_capped_uninspected")):
+        # (a link whose page could not be opened and that nothing else condemns stays 'Unverified': the reviewer would
+        #  only be guessing from the address, with no page content to look at)
         lean = ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE")
         try:
             review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=ml_result,

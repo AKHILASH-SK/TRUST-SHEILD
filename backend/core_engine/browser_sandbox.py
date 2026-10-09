@@ -630,7 +630,7 @@ class BrowserSandbox:
 
     def _screenshot(self, page, ev) -> None:
         try:
-            ev["_screenshot_b64"] = base64.b64encode(page.screenshot(type="jpeg", quality=55)).decode("ascii")
+            ev["_screenshot_b64"] = base64.b64encode(page.screenshot(type="jpeg", quality=55, timeout=2500)).decode("ascii")
         except Exception:
             pass
 
@@ -640,6 +640,7 @@ class BrowserSandbox:
             response = page.goto(url, wait_until="domcontentloaded", timeout=budget.ms(12000))
         except Exception as exc:
             msg = str(exc).lower()
+            page.set_default_timeout(1500)       # the page is stuck: every follow-up step must fail fast, not wait
             if "timeout" in msg:
                 ev.update(verification_state="unverified", unverified_reason="timeout")
             else:
@@ -1001,7 +1002,7 @@ def evidence_score(ev: Dict[str, Any]) -> int:
 # Hard-timeout isolation
 # ---------------------------------------------------------------------------------------------------------------------
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HARD_TIMEOUT_EXTRA_SECONDS = 20
+HARD_TIMEOUT_EXTRA_SECONDS = 12
 
 
 def _kill_tree(proc) -> None:

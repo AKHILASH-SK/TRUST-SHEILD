@@ -120,3 +120,39 @@ def test_cors_origins_accept_a_json_style_list_and_drop_broken_entries():
     assert parse("http://a.example, http://b.example") == ["http://a.example", "http://b.example"]
     assert parse('["http://ok.example", "[broken"]') == ["http://ok.example"]
     assert parse("") == []
+
+
+# ---- an unusual-looking link whose page could not be opened is not proof of phishing -------------------------------------
+
+LEXICAL_ALARM = {"score": 97.3, "probability": 0.998, "band": "DANGEROUS", "model": "lexical", "signals": ["has port"]}
+TIMED_OUT = {"verification_state": "unverified", "unverified_reason": "timeout"}
+
+
+def test_uninspected_link_condemned_only_by_the_link_text_model_stays_unverified():
+    out = FinalDecisionEngine().evaluate(url="http://tool.corp.example:5173/p/1", ml=LEXICAL_ALARM, sandbox_unreachable=1,
+                                         sandbox_evidence=TIMED_OUT, domain_age_days=-1, heuristic_risk=30.0,
+                                         heuristic_flags=["HIGH_SHANNON_ENTROPY"])
+    assert out["verdict"].startswith("SUSPICIOUS") and out["threat_score"] < 80
+    assert out["telemetry"]["ml_capped_uninspected"] is True and "could not be opened" in out["summary"]
+
+
+def test_independent_evidence_keeps_the_dangerous_verdict_even_when_the_page_could_not_be_opened():
+    for extra in ({"vt_risk_score": 45.7}, {"heuristic_risk": 45.0}, {"free_hosting": True}, {"domain_age_days": 10}):
+        kwargs = {"domain_age_days": -1, **extra}
+        out = FinalDecisionEngine().evaluate(url="http://x.example/", ml=LEXICAL_ALARM, sandbox_unreachable=1,
+                                             sandbox_evidence=TIMED_OUT, **kwargs)
+        assert out["threat_score"] >= 80, extra
+
+
+def test_no_ai_guess_for_a_link_nobody_could_open():
+    from core_engine.link_threat_pipeline import DISPLAY_UNVERIFIED, finalize_verdict
+
+    class Boom:
+        def review(self, *a, **k):
+            raise AssertionError("the reviewer must not be asked")
+        decide = staticmethod(lambda lean, res: None)
+
+    result = {"verdict": "SUSPICIOUS", "threat_score": 55.0, "analysis_complete": False, "summary": "s",
+              "telemetry": {"hard_override_triggered": False, "ml_capped_uninspected": True,
+                            "verification_state": "unverified", "unverified_reason": "timeout"}}
+    assert finalize_verdict(result, url="http://x/", reviewer=Boom())["display_verdict"] == DISPLAY_UNVERIFIED
