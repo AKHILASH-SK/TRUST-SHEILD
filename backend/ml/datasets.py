@@ -144,3 +144,77 @@ if __name__ == "__main__":
     print(f"benign     {'phiusiil':18s} {len(legit):>8,d} urls   e.g. {legit[0][:70] if legit else '-'}")
     tr = load_tranco(args.refresh)
     print(f"benign     {'tranco':18s} {len(tr):>8,d} domains e.g. {tr[0][1] if tr else '-'}")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Legitimate sites that live on shared hosting platforms (vercel.app, netlify.app, github.io ...).
+# The old training data had almost none (13 benign against 363 malicious), so the models learned "hosted = phishing".
+# Source: GitHub repositories with real stars whose "homepage" is a live site on one of those platforms. Real projects with
+# stars are overwhelmingly genuine apps, blogs, portfolios and demos. Dead sites are filtered later by the sandbox visit.
+# ---------------------------------------------------------------------------------------------------------------------
+HOSTED_TOPICS = [
+    "vercel", "netlify", "github-pages", "nextjs", "react", "vue", "svelte", "portfolio", "blog", "dashboard",
+    "landing-page", "saas", "ecommerce", "tailwindcss", "typescript", "web-app", "admin-dashboard", "chatgpt", "ai",
+    "documentation", "resume", "personal-website", "astro", "nuxt", "gatsby", "vite", "pwa", "todo-app", "weather-app",
+    "calculator", "game", "quiz-app", "movie-app", "chat-app", "project-management", "analytics", "openai", "firebase",
+    "supabase", "mongodb", "nodejs", "express", "api", "frontend", "full-stack", "template", "boilerplate", "demo",
+]
+HOSTED_STAR_BANDS = [(15, 40), (41, 120), (121, 500), (501, 100000)]
+
+
+def load_hosted_benign(refresh: bool = False, target: int = 3000, max_age_days: float = 14.0) -> List[str]:
+    """URLs of live sites on shared hosting platforms that belong to real, starred GitHub projects (benign label)."""
+    from urllib.parse import urlparse
+    from .features import FREE_HOSTING_SUFFIXES
+    os.makedirs(RAW_DIR, exist_ok=True)
+    path = os.path.join(RAW_DIR, "hosted_benign.txt")
+    if not refresh and os.path.exists(path) and (time.time() - os.path.getmtime(path)) < max_age_days * 86400:
+        with open(path, encoding="utf-8") as fh:
+            cached = [ln.strip() for ln in fh if ln.strip()]
+        if len(cached) >= min(target, 500):
+            return cached
+    suffixes = tuple(FREE_HOSTING_SUFFIXES)
+    token = os.getenv("GITHUB_TOKEN", "").strip()
+    headers = {**HEADERS, "Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    pause = 2.2 if token else 6.6                      # GitHub search: 30/min with a token, 10/min without
+    found: Dict[str, str] = {}
+    print(f"[datasets] collecting legitimate hosted sites from GitHub (target {target}; "
+          f"{'with' if token else 'without'} a GitHub token this takes about {int(len(HOSTED_TOPICS) * len(HOSTED_STAR_BANDS) * pause / 60)} min at most) ...", flush=True)
+    stop = False
+    for topic in HOSTED_TOPICS:
+        for lo, hi in HOSTED_STAR_BANDS:
+            if stop or len(found) >= target:
+                break
+            q = f"topic:{topic} stars:{lo}..{hi}"
+            try:
+                resp = requests.get("https://api.github.com/search/repositories",
+                                    params={"q": q, "sort": "stars", "order": "desc", "per_page": 100}, headers=headers, timeout=40)
+            except Exception as exc:
+                print(f"   network problem ({type(exc).__name__}); using what was collected", flush=True)
+                stop = True
+                break
+            if resp.status_code in (403, 429):
+                print("   GitHub rate limit reached; using what was collected so far", flush=True)
+                stop = True
+                break
+            if resp.status_code != 200:
+                time.sleep(pause)
+                continue
+            for item in resp.json().get("items", []):
+                homepage = (item.get("homepage") or "").strip()
+                if not homepage.lower().startswith("https://"):
+                    continue
+                host = (urlparse(homepage).hostname or "").lower()
+                if host.endswith(suffixes) and host not in found:
+                    found[host] = f"https://{host}/"
+            time.sleep(pause)
+        print(f"   {topic:18s} -> {len(found):,d} sites", flush=True)
+        if stop or len(found) >= target:
+            break
+    urls = list(found.values())
+    if urls:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(urls))
+    return urls

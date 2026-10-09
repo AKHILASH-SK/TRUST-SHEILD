@@ -71,6 +71,7 @@ def main() -> None:
     ap.add_argument("--pages", default=os.path.join(datasets.DATA_DIR, "pages.jsonl"))
     ap.add_argument("--no-exclude-pages", action="store_true")
     ap.add_argument("--refresh", action="store_true")
+    ap.add_argument("--no-hosted", action="store_true", help="do not add legitimate hosted sites (reproduces the old behaviour)")
     ap.add_argument("--jobs", type=int, default=-1, help="CPU workers for feature extraction")
     ap.add_argument("--seed", type=int, default=7)
     args = ap.parse_args()
@@ -94,6 +95,9 @@ def main() -> None:
     tranco_urls = [f"https://{d}/" for _, d in tranco]
     rng.shuffle(tranco_urls)
     ben += tranco_urls[:90_000]
+    hosted_ben = datasets.load_hosted_benign(args.refresh) if not args.no_hosted else []
+    print(f"   benign hosted sites (real GitHub projects on shared hosting): {len(hosted_ben):,d}", flush=True)
+    ben += hosted_ben
     # deep links collected from reachable benign pages (benign URLs that have paths)
     if os.path.exists(args.pages):
         with open(args.pages, encoding="utf-8") as fh:
@@ -106,7 +110,9 @@ def main() -> None:
                     ben.append(rec["url"])
     ben = list(dict.fromkeys(ben))
     rng.shuffle(ben)
+    hosted_set = set(hosted_ben)
     ben = ben[:args.max_benign]
+    ben = list(dict.fromkeys(ben + [u for u in hosted_ben]))          # the hosted sites are never cut by the size limit
     print(f"   benign    {len(ben):,d} urls", flush=True)
 
     held_out = set() if args.no_exclude_pages else load_pages_urls(args.pages)
@@ -146,7 +152,10 @@ def main() -> None:
     # ---- 3. train ------------------------------------------------------------------------------
     print("[4/6] training LightGBM ...", flush=True)
     cat = [LEXICAL_HOST_FEATURES.index("tld_id")]
-    clf = trainlib.fit_lgbm(X[tr], labels[tr], X[va], labels[va], categorical=cat)
+    weights, wstat = trainlib.hosted_balance_weights(urls, labels)
+    print(f"   shared-hosting balance: malicious {wstat['hosted_malicious']:,d} vs benign {wstat['hosted_benign']:,d}; "
+          f"benign hosted sites weighted x{wstat['benign_hosted_weight']:.1f}", flush=True)
+    clf = trainlib.fit_lgbm(X[tr], labels[tr], X[va], labels[va], categorical=cat, w_tr=weights[tr], w_val=weights[va])
     print(f"   best iteration: {clf.best_iteration_}", flush=True)
 
     # ---- 4. calibrate and choose thresholds ------------------------------------------------------
@@ -161,6 +170,7 @@ def main() -> None:
     p_test = calibrator.predict(clf.predict_proba(X[te])[:, 1])
     metrics = trainlib.evaluate(labels[te], p_test, thresholds)
     trainlib.print_report("TEST SET (sites the model never saw)", metrics)
+    hosted_metrics = trainlib.print_hosted_report([u for u, m in zip(urls, te) if m], labels[te], p_test, thresholds)
     importances = trainlib.top_importances(clf, LEXICAL_HOST_FEATURES)
     print("\ntop features (share of model gain %):")
     for name, share in importances[:12]:
@@ -169,7 +179,7 @@ def main() -> None:
     # ---- 6. save -----------------------------------------------------------------------------------
     path = trainlib.save_artifact("lexical_model", {
         "model": clf, "calibrator": calibrator, "features": LEXICAL_HOST_FEATURES, "feature_version": FEATURE_VERSION,
-        "thresholds": thresholds, "metrics": {"test": metrics}, "top_features": importances,
+        "thresholds": thresholds, "metrics": {"test": metrics, "hosted_test": hosted_metrics}, "top_features": importances,
         "trained_rows": int(len(urls)), "train_malicious": int(labels[tr].sum()),
         "train_benign": int((labels[tr] == 0).sum()), "excluded_page_urls": len(held_out),
         "categorical": ["tld_id"],

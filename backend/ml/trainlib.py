@@ -141,15 +141,63 @@ def lgbm_params(n_rows: int) -> Dict[str, Any]:
     )
 
 
-def fit_lgbm(X_tr, y_tr, X_val, y_val, categorical: Optional[List[int]] = None):
+def fit_lgbm(X_tr, y_tr, X_val, y_val, categorical: Optional[List[int]] = None, w_tr=None, w_val=None):
     import lightgbm as lgb
     clf = lgb.LGBMClassifier(class_weight="balanced", **lgbm_params(len(y_tr)))
+    kwargs = {}
+    if w_tr is not None:
+        kwargs["sample_weight"] = w_tr
+        kwargs["eval_sample_weight"] = [w_val if w_val is not None else np.ones(len(y_val))]
     clf.fit(
         X_tr, y_tr, eval_set=[(X_val, y_val)], eval_metric="binary_logloss",
         categorical_feature=categorical or "auto",
         callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(100)],
+        **kwargs,
     )
     return clf
+
+
+def hosted_balance_weights(urls: List[str], labels, cap: float = 8.0):
+    """
+    Sample weights that make the two classes count equally AMONG sites on shared hosting platforms. Without this a handful of
+    benign hosted sites is drowned by hundreds of phishing pages on the same platforms and the model learns that hosting
+    itself is evidence of phishing. Everything not hosted keeps weight 1.
+    """
+    from .features import is_hosted
+    hosted = np.array([is_hosted(u) for u in urls])
+    labels = np.asarray(labels)
+    n_mal = int(((labels == 1) & hosted).sum())
+    n_ben = int(((labels == 0) & hosted).sum())
+    weights = np.ones(len(urls), dtype=np.float32)
+    if n_ben > 0 and n_mal > n_ben:
+        weights[(labels == 0) & hosted] = min(cap, n_mal / n_ben)
+    return weights, {"hosted_malicious": n_mal, "hosted_benign": n_ben,
+                     "benign_hosted_weight": float(weights[(labels == 0) & hosted][0]) if n_ben else 1.0}
+
+
+def print_hosted_report(urls: List[str], y, p, thresholds: Dict[str, Any]) -> Dict[str, Any]:
+    """The part of the test set that lives on shared hosting platforms, reported on its own (this is where the old bias was)."""
+    from .features import is_hosted
+    mask = np.array([is_hosted(u) for u in urls])
+    out = {"n": int(mask.sum())}
+    if mask.sum() < 5:
+        print("\n(hosted sites in the test set: too few to report separately)")
+        return out
+    yy, pp = np.asarray(y)[mask], np.asarray(p)[mask]
+    ben, mal = pp[yy == 0], pp[yy == 1]
+    t_lo, t_hi = thresholds["t_low"], thresholds["t_high"]
+    out.update({
+        "n_benign": int(len(ben)), "n_malicious": int(len(mal)),
+        "benign_called_dangerous_pct": round(100 * float((ben >= t_hi).mean()), 1) if len(ben) else None,
+        "benign_called_safe_pct": round(100 * float((ben <= t_lo).mean()), 1) if len(ben) else None,
+        "malicious_called_dangerous_pct": round(100 * float((mal >= t_hi).mean()), 1) if len(mal) else None,
+        "malicious_called_safe_pct": round(100 * float((mal <= t_lo).mean()), 1) if len(mal) else None,
+    })
+    print(f"\n=== SITES ON SHARED HOSTING (vercel.app, github.io ...) - test set ===")
+    print(f"benign {out['n_benign']}: SAFE {out['benign_called_safe_pct']}%   DANGEROUS {out['benign_called_dangerous_pct']}%   "
+          f"(the old model called nearly all of these suspicious)")
+    print(f"malicious {out['n_malicious']}: SAFE {out['malicious_called_safe_pct']}%   DANGEROUS {out['malicious_called_dangerous_pct']}%")
+    return out
 
 
 def fit_calibrator(p_val: np.ndarray, y_val: np.ndarray):

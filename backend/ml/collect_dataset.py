@@ -119,6 +119,15 @@ def pick_benign(n: int, rng: random.Random, seen: set, refresh: bool) -> List[Tu
     return chosen
 
 
+def pick_hosted_benign(n: int, rng: random.Random, seen: set, refresh: bool) -> List[Tuple[str, str]]:
+    """Legitimate sites on shared hosting platforms (one per host), so the models learn that hosting alone proves nothing."""
+    if n <= 0:
+        return []
+    urls = [u for u in datasets.load_hosted_benign(refresh, target=max(n * 2, 1500)) if u not in seen]
+    rng.shuffle(urls)
+    return [(u, "hosted_github") for u in urls[:n]]
+
+
 def visit(sandbox, url: str, label: int, source: str) -> Dict:
     started = time.time()
     try:
@@ -170,6 +179,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Collect live page evidence for model training")
     ap.add_argument("--n-malicious", type=int, default=3000)
     ap.add_argument("--n-benign", type=int, default=3000)
+    ap.add_argument("--n-hosted-benign", type=int, default=0,
+                    help="legitimate sites on shared hosting platforms (from GitHub projects): fixes the 'hosted = phishing' bias")
     ap.add_argument("--deep-links", type=int, default=2, help="internal links to add per reachable benign page")
     ap.add_argument("--workers", type=int, default=4, help="parallel browsers (each Chromium uses ~300-400 MB)")
     ap.add_argument("--out", default=DEFAULT_OUT)
@@ -191,6 +202,7 @@ def main() -> None:
     jobs: List[Tuple[str, int, str]] = []
     jobs += [(u, 1, s) for u, s in pick_malicious(args.n_malicious, rng, seen, args.refresh)]
     jobs += [(u, 0, s) for u, s in pick_benign(args.n_benign, rng, seen, args.refresh)]
+    jobs += [(u, 0, s) for u, s in pick_hosted_benign(args.n_hosted_benign, rng, seen, False)]
     rng.shuffle(jobs)
     print(f"[collect] queued {len(jobs):,d} URLs ({sum(1 for j in jobs if j[1] == 1):,d} malicious, "
           f"{sum(1 for j in jobs if j[1] == 0):,d} benign)", flush=True)

@@ -152,6 +152,11 @@ def _is_free_hosting(parts: Dict[str, Any]) -> bool:
     return any(host == s or host.endswith("." + s) for s in FREE_HOSTING_SUFFIXES)
 
 
+def is_hosted(url: str) -> bool:
+    """True for a site on a shared hosting platform (name.vercel.app, name.github.io ...)."""
+    return _is_free_hosting(split_url(url))
+
+
 def _brand_mismatch(host: str, registered: str) -> int:
     """1 when a known brand name appears in the host but the site is not that brand's own domain."""
     tokens = re.split(r"[^a-z0-9]+", host)

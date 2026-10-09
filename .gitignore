@@ -63,3 +63,4 @@ backend/ml/data/
 # Local screen recordings and large media (GitHub rejects files over 100 MB)
 *.mp4
 *.mov
+backend/core_engine/trained_models/_previous/

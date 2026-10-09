@@ -75,10 +75,25 @@ def fresh_benign(n: int, rng: random.Random, exclude_hashes: set, exclude_urls: 
     return out
 
 
+def fresh_hosted_benign(n: int, rng: random.Random, exclude_hashes: set, exclude_urls: set, exclude_groups: set) -> List[str]:
+    """Legitimate sites on shared hosting (real GitHub projects) that no model trained on: the bias test."""
+    pool = list(datasets.load_hosted_benign())
+    rng.shuffle(pool)
+    out = []
+    for u in pool:
+        if u in exclude_urls or trainlib.url_hash(u) in exclude_hashes or group_key(u) in exclude_groups:
+            continue
+        out.append(u)
+        if len(out) >= n:
+            break
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Measure verdict accuracy of the live pipeline on fresh links")
     ap.add_argument("--n-malicious", type=int, default=150)
     ap.add_argument("--n-benign", type=int, default=150)
+    ap.add_argument("--n-hosted-benign", type=int, default=0, help="also test legitimate sites on shared hosting (vercel.app, github.io ...)")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=21)
     ap.add_argument("--max-minutes", type=int, default=60, help="stop and report after this many minutes")
@@ -109,7 +124,9 @@ def main() -> None:
 
     mal = fresh_malicious(args.n_malicious, rng, exclude_hashes, exclude_urls, exclude_groups)
     ben = fresh_benign(args.n_benign, rng, exclude_hashes, exclude_urls, exclude_groups)
-    jobs: List[Tuple[str, int]] = [(u, 1) for u in mal] + [(u, 0) for u in ben]
+    hosted = fresh_hosted_benign(args.n_hosted_benign, rng, exclude_hashes, exclude_urls, exclude_groups) if args.n_hosted_benign else []
+    hosted_set = set(hosted)
+    jobs: List[Tuple[str, int]] = [(u, 1) for u in mal] + [(u, 0) for u in ben] + [(u, 0) for u in hosted]
     rng.shuffle(jobs)
     print(f"[eval] {len(mal)} fresh malicious + {len(ben)} unseen benign links "
           f"(excluded {len(exclude_hashes):,d} training URLs)", flush=True)
@@ -165,7 +182,8 @@ def main() -> None:
         return
 
     mal_rows = [r for r in rows if r["label"] == 1 and r["band"] != "ERROR"]
-    ben_rows = [r for r in rows if r["label"] == 0 and r["band"] != "ERROR"]
+    ben_rows = [r for r in rows if r["label"] == 0 and r["band"] != "ERROR" and r["url"] not in hosted_set]
+    hosted_rows = [r for r in rows if r["url"] in hosted_set and r["band"] != "ERROR"]
 
     def pct(part: int, whole: int) -> str:
         return f"{100 * part / whole:5.1f}%" if whole else "  n/a"
@@ -192,6 +210,16 @@ def main() -> None:
     print(f"verdict time: median {secs[len(secs)//2]}s, 90th percentile {secs[int(len(secs)*0.9)]}s, "
           f"errors {sum(r['band'] == 'ERROR' for r in rows)}")
 
+    hosted_summary = None
+    if hosted_rows:
+        c = collections.Counter(r["band"] for r in hosted_rows)
+        hosted_summary = {"n": len(hosted_rows), "safe": c["SAFE"], "unverified": c["SUSPICIOUS"], "dangerous": c["DANGEROUS"]}
+        print(f"\nLEGITIMATE SITES ON SHARED HOSTING n={len(hosted_rows)} -> SAFE {pct(c['SAFE'], len(hosted_rows))}   "
+              f"UNVERIFIED {pct(c['SUSPICIOUS'], len(hosted_rows))}   DANGEROUS {pct(c['DANGEROUS'], len(hosted_rows))}   "
+              f"(goal: DANGEROUS about 0%, SAFE as high as possible)")
+        for r in [r for r in hosted_rows if r["band"] == "DANGEROUS"][:10]:
+            print(f"   wrongly DANGEROUS: {r['url'][:70]}  p={r.get('ml_p')}")
+
     print("\n-- phishing the pipeline called SAFE (misses):")
     for r in [r for r in mal_rows if r["band"] == "SAFE"][:15]:
         print(f"   {r['url'][:85]}  p={r.get('ml_p')} complete={r.get('complete')}")
@@ -202,7 +230,7 @@ def main() -> None:
     os.makedirs(os.path.dirname(args.report), exist_ok=True)
     with open(args.report, "w", encoding="utf-8") as fh:
         json.dump({"when": time.strftime("%Y-%m-%d %H:%M"), "with_threat_db": args.with_threat_db,
-                   "with_virustotal": args.with_virustotal, "rows": rows}, fh, indent=1)
+                   "with_virustotal": args.with_virustotal, "hosted_benign": hosted_summary, "rows": rows}, fh, indent=1)
     print(f"\nfull report saved to {args.report}", flush=True)
     os._exit(0)          # do not wait for scans that were still running when we stopped
 

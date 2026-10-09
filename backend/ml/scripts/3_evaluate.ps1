@@ -4,10 +4,12 @@
 #     powershell -ExecutionPolicy Bypass -File backend\ml\scripts\3_evaluate.ps1
 #
 # Options: -Malicious 150  -Benign 150  -Workers 6  -NoLlm   (-NoLlm switches the Gemini second opinion off)
+#          -Hosted 60   also test legitimate sites on shared hosting (vercel.app, github.io ...) that no model trained on
 
 param(
     [int]$Malicious = 150,
     [int]$Benign = 150,
+    [int]$Hosted = 0,
     [int]$Workers = 6,
     [switch]$NoLlm
 )
@@ -40,4 +42,4 @@ if ($NoLlm) { $extra += "--no-llm" }
 $dataDir = Join-Path $repo "backend\ml\data"
 docker run --rm --shm-size=2g --memory=6g @envArgs -w /srv/backend `
     -v "${dataDir}:/srv/backend/ml/data" trustshield-backend `
-    python -m ml.evaluate_live --n-malicious $Malicious --n-benign $Benign --workers $Workers @extra
+    python -m ml.evaluate_live --n-malicious $Malicious --n-benign $Benign --n-hosted-benign $Hosted --workers $Workers @extra

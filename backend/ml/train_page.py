@@ -122,7 +122,11 @@ def main() -> None:
     # ---- 3. train ------------------------------------------------------------------------------------
     print("[3/5] training LightGBM ...", flush=True)
     cat = [PAGE_MODEL_FEATURES.index("tld_id")]
-    clf = trainlib.fit_lgbm(X[tr], y[tr], X[va], y[va], categorical=cat)
+    page_urls = [r["url"] for r in rows]
+    weights, wstat = trainlib.hosted_balance_weights(page_urls, y)
+    print(f"   shared-hosting pages: malicious {wstat['hosted_malicious']:,d} vs benign {wstat['hosted_benign']:,d}; "
+          f"benign hosted pages weighted x{wstat['benign_hosted_weight']:.1f}", flush=True)
+    clf = trainlib.fit_lgbm(X[tr], y[tr], X[va], y[va], categorical=cat, w_tr=weights[tr], w_val=weights[va])
     print(f"   best iteration: {clf.best_iteration_}", flush=True)
 
     # ---- 4. calibrate, thresholds, honest test ------------------------------------------------------
@@ -136,6 +140,7 @@ def main() -> None:
     metrics = trainlib.evaluate(y[te], p_test, thresholds)
     trainlib.print_report("PAGE MODEL - TEST SET (sites never seen in training)", metrics)
 
+    hosted_metrics = trainlib.print_hosted_report([u for u, m in zip(page_urls, te) if m], y[te], p_test, thresholds)
     lex_thr = lex["thresholds"]
     lex_metrics = trainlib.evaluate(y[te], lex_prob[te], lex_thr)
     trainlib.print_report("for comparison: LEXICAL MODEL ALONE on the same pages", lex_metrics)
@@ -153,7 +158,7 @@ def main() -> None:
     path = trainlib.save_artifact("page_model", {
         "model": clf, "calibrator": calibrator, "features": PAGE_MODEL_FEATURES,
         "feature_version": FEATURE_VERSION, "thresholds": thresholds,
-        "metrics": {"test": metrics, "lexical_alone_on_same_pages": lex_metrics},
+        "metrics": {"test": metrics, "lexical_alone_on_same_pages": lex_metrics, "hosted_test": hosted_metrics},
         "top_features": importances, "trained_rows": int(len(rows)),
         "train_malicious": int(y[tr].sum()), "train_benign": int((y[tr] == 0).sum()),
         "lexical_model_version": lex.get("version"), "categorical": ["tld_id"],

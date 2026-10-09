@@ -165,3 +165,60 @@ def test_evidence_features_from_sandbox_v2():
     assert f["ev_cred_found"] == 1 and f["ev_has_password"] == 1 and f["ev_has_otp"] == 1 and f["ev_submit_cross_domain"] == 1
     assert f["ev_brand_owns_domain"] == 0.0 and f["ev_tls_free_ca"] == 1 and f["ev_domain_age_days"] == 4
     assert math.isnan(evidence_features({**ev, "brand_owns_domain": None})["ev_brand_owns_domain"])      # unknown stays unknown
+
+
+# ---- shared-hosting bias fix --------------------------------------------------------------------------------------------
+
+def test_is_hosted_recognises_shared_hosting_platforms():
+    from ml.features import is_hosted
+    assert is_hosted("https://my-app.vercel.app/") and is_hosted("https://someone.github.io/blog") and is_hosted("https://x.netlify.app")
+    assert not is_hosted("https://www.google.com/") and not is_hosted("https://example.co.uk/")
+
+
+def test_hosted_balance_weights_stop_phishing_from_drowning_the_few_benign_hosted_sites():
+    import numpy as np
+    from ml import trainlib
+    urls = ["https://a%d.vercel.app/" % i for i in range(40)] + ["https://good1.vercel.app/", "https://good2.netlify.app/",
+                                                                  "https://plain.example.com/", "https://other.example.org/"]
+    labels = np.array([1] * 40 + [0, 0, 0, 0])
+    weights, stat = trainlib.hosted_balance_weights(urls, labels)
+    assert stat["hosted_malicious"] == 40 and stat["hosted_benign"] == 2
+    assert weights[40] == weights[41] == 8.0                     # capped: 40/2 = 20 would be too aggressive
+    assert weights[42] == weights[43] == 1.0 and (weights[:40] == 1.0).all()       # nothing else is touched
+
+
+def test_hosted_benign_loader_collects_real_projects_and_ignores_the_rest(monkeypatch, tmp_path):
+    from ml import datasets
+    monkeypatch.setattr(datasets, "RAW_DIR", str(tmp_path))
+    monkeypatch.setattr(datasets.time, "sleep", lambda s: None)
+    monkeypatch.setattr(datasets, "HOSTED_TOPICS", ["vercel"])
+    monkeypatch.setattr(datasets, "HOSTED_STAR_BANDS", [(15, 40)])
+    calls = []
+
+    class Resp:
+        status_code = 200
+
+        def json(self):
+            return {"items": [{"homepage": "https://cool-app.vercel.app/"}, {"homepage": "https://cool-app.vercel.app/about"},
+                              {"homepage": "http://insecure.vercel.app/"}, {"homepage": "https://example.com/"},
+                              {"homepage": ""}, {"homepage": "https://my.github.io/site"}]}
+
+    monkeypatch.setattr(datasets.requests, "get", lambda *a, **k: calls.append(k.get("params")) or Resp())
+    urls = datasets.load_hosted_benign(refresh=True, target=100)
+    assert urls == ["https://cool-app.vercel.app/", "https://my.github.io/"]      # https only, hosted only, one per host
+    assert calls and "topic:vercel" in calls[0]["q"]
+    # the second call uses the cached file instead of asking GitHub again
+    monkeypatch.setattr(datasets.requests, "get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must use the cache")))
+    assert datasets.load_hosted_benign(refresh=False, target=2) == urls
+
+
+def test_hosted_benign_loader_survives_a_rate_limit(monkeypatch, tmp_path):
+    from ml import datasets
+    monkeypatch.setattr(datasets, "RAW_DIR", str(tmp_path))
+    monkeypatch.setattr(datasets.time, "sleep", lambda s: None)
+
+    class Limited:
+        status_code = 403
+
+    monkeypatch.setattr(datasets.requests, "get", lambda *a, **k: Limited())
+    assert datasets.load_hosted_benign(refresh=True, target=10) == []
