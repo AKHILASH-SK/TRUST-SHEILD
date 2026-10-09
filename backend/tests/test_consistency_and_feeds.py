@@ -572,3 +572,15 @@ def test_quick_explanation_answers_without_waiting_for_the_writer(monkeypatch):
     facts = explainer.facts_from_features(DATUM_FEATURES, "https://datum-ashy-beta.vercel.app", "SAFE", 30.0)
     text, source = explainer.explain(facts, use_ai=False)
     assert source == "rules" and "Threat Summary" in text
+
+
+def test_a_hosted_page_titled_as_a_big_brand_it_does_not_own_is_convicted_only_when_the_model_agrees():
+    critical = {"score": 100.0, "probability": 1.0, "band": "DANGEROUS", "model": "page", "signals": ["page title claims a brand"]}
+    mild = {"score": 30.0, "probability": 0.3, "band": "SAFE", "model": "page", "signals": []}
+    fake = {**CLEAN_EVIDENCE, "claimed_brand": "facebook", "brand_owns_domain": False}
+    out = evaluate(fake, ml=critical, free_hosting=True)
+    assert out["telemetry"]["ml_capped_no_evidence"] is False and out["threat_score"] >= 80
+    # the same claim without the model's agreement is not enough (a blog that merely mentions Facebook)
+    assert evaluate(fake, ml=mild, free_hosting=True)["threat_score"] < 60
+    # no brand claim: the model alone on a hosted page is still capped
+    assert evaluate(CLEAN_EVIDENCE, ml=critical, free_hosting=True)["telemetry"]["ml_capped_no_evidence"] is True

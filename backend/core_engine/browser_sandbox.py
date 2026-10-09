@@ -668,7 +668,7 @@ class BrowserSandbox:
             self._redirect_chain(response, ev)
             self._tls(response, ev)
         try:
-            page.wait_for_load_state("networkidle", timeout=budget.ms(3500))
+            page.wait_for_load_state("networkidle", timeout=budget.ms(1200))      # _settle() below does the real waiting
         except Exception:
             pass
         self.landing_registered = registered(page.url)
@@ -777,7 +777,7 @@ class BrowserSandbox:
         except Exception:
             pass
         try:
-            target.wait_for_load_state("networkidle", timeout=budget.ms(2000))
+            target.wait_for_load_state("networkidle", timeout=budget.ms(1000))
         except Exception:
             pass
         if target is page and page.url == before_url:
