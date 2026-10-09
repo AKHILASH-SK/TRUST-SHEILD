@@ -56,7 +56,8 @@ def send(port, source_ip, raw, from_addr=f"alerts@{BANK_DOMAIN}"):
 
 
 def read_all(folder):
-    return [open(os.path.join(folder, f), "rb").read().decode("utf-8", "replace") for f in sorted(os.listdir(folder))]
+    files = sorted(os.listdir(folder), key=lambda f: os.path.getmtime(os.path.join(folder, f)))          # oldest first
+    return [open(os.path.join(folder, f), "rb").read().decode("utf-8", "replace") for f in files]
 
 
 def test_the_gateway_sees_the_real_connecting_ip_and_delivers_genuine_mail(gateway):
@@ -108,3 +109,10 @@ def test_rotation_tracker_counts_only_failing_senders_inside_the_window():
     assert tracker.record("bank.test", "10.0.0.9", failed=False, now=103)["distinct_ips"] == 2         # passing mail does not count
     assert tracker.record("bank.test", "10.0.0.3", failed=True, now=104)["rotating"] is True
     assert tracker.record("bank.test", "10.0.0.4", failed=True, now=400)["distinct_ips"] == 1          # the old ones aged out
+
+
+def test_the_location_of_the_real_connecting_address_is_recorded(gateway):
+    world, port, gw, root = gateway
+    send(port, "127.0.0.3", forged_bank_email())
+    text = read_all(root / "quarantine")[0]
+    assert "X-TrustShield-Location: Bucharest, Romania | Cheap VPS hosting (simulated)" in text

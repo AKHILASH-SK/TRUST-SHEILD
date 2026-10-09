@@ -92,6 +92,15 @@ The worst finding sets the headline (Safe / Warning / Danger / Could not check).
 ### 4.6 SHA-256 / sealing
 Each analysed email gets `evidence_sha256` (fingerprint of the original bytes). The case is sealed with a keyed signature (HMAC with the server secret); `/api/forensics/verify-hash` re-checks it (`SEAL VALID` / `TAMPERED`).
 
+### 4.7 Who sends, who receives, and where is the sender? (the gateway in plain words)
+- **Who sends:** any mail server (or a script) that wants to deliver a message. In the demo it is a small Python script posing as the bank's server (127.0.0.2) or the attacker (127.0.0.3 ...).
+- **To whom:** the person named in the envelope (`RCPT TO`), e.g. `victim@example.test`. In real life the recipient's domain publishes an **MX record** ("deliver my mail to this server"). If that MX points at TrustShield, every sender's server connects to us first.
+- **What we do with it:** judge it, then **deliver** (to `gateway/mailbox/inbox`), **warn**, or **quarantine** (`gateway/mailbox/quarantine`). *Today the "inbox" is a folder. Forwarding onward to the user's real mailbox server is the next step for a real deployment and is not built.*
+- **Where is the sender?** The gateway sees the **real connecting IP**. We look that IP up (existing geolocation: ipwho.is / ip-api) and show **city, country, network name, and a "hosting/VPS" or "proxy/VPN" flag**.
+  It appears in the gateway console line, in the Mail Gateway tab (a **Location** column and a **world map**), in the `X-TrustShield-Location` header, and in the portal's **Geolocation** tab for an uploaded email.
+- **Important:** that location is the **sending server**, not the person. If the sender used **Gmail**, the connecting IP is Google's data centre (Gmail does not reveal the user's own IP). If the attacker runs their **own SMTP server**, or a cheap VPS, you see *that* machine. If they use a VPN/Tor/hacked machine, you see that. City accuracy is approximate.
+- **In the lab**, the 127.0.0.x addresses have **simulated** locations (Mumbai = the bank, Bucharest/Lagos/Sao Paulo/Jakarta/Frankfurt/Singapore = the attacker's rotating servers), clearly labelled "(simulated)".
+
 ## 5. Files added/changed
 
 ```

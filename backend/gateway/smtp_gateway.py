@@ -69,6 +69,14 @@ class Gateway:
             return "warn"
         return "deliver"
 
+    @staticmethod
+    def _location_text(result, peer_ip):
+        for hop in ((result or {}).get("origin_intelligence") or {}).get("route_map") or []:
+            if hop.get("ip") == peer_ip:
+                place = ", ".join(x for x in (hop.get("city"), hop.get("country")) if x and x != "Unknown")
+                return f"{place or 'unknown'} | {hop.get('isp') or 'unknown network'}"
+        return "unknown"
+
     # -- one message -----------------------------------------------------------------------------------------------------
     def process(self, peer_ip: str, helo: str, mail_from: str, rcpt_to: list, content: bytes) -> Dict[str, Any]:
         msg_id = uuid.uuid4().hex[:10]
@@ -90,6 +98,7 @@ class Gateway:
                 f"X-TrustShield-Score: {header_safe((result or {}).get('overall_threat_score', ''))}",
                 f"X-TrustShield-Sender-Check: {header_safe(sender.get('level') or 'unverified')}: {header_safe(sender.get('headline'))}",
                 f"X-TrustShield-Connecting-IP: {peer_ip}",
+                f"X-TrustShield-Location: {header_safe(self._location_text(result, peer_ip))}",
                 f"X-TrustShield-Case: {header_safe((result or {}).get('case_id'))}",
                 f"X-TrustShield-Evidence-SHA256: {header_safe((result or {}).get('evidence_hash'))}"]
         if rotation["rotating"]:
@@ -100,7 +109,15 @@ class Gateway:
         with open(path, "wb") as fh:
             fh.write(delivered)
 
-        event = {"id": msg_id, "time": time.strftime("%H:%M:%S"), "connecting_ip": peer_ip, "mail_from": header_safe(mail_from, 120),
+        geo = {}
+        for hop in ((result or {}).get("origin_intelligence") or {}).get("route_map") or []:
+            if hop.get("ip") == peer_ip:
+                geo = hop
+                break
+        flags = [name for name, on in (("hosting/VPS", geo.get("is_hosting")), ("proxy/VPN", geo.get("is_proxy"))) if on]
+        location = ", ".join(x for x in (geo.get("city"), geo.get("country")) if x and x != "Unknown")
+        event = {"id": msg_id, "lat": geo.get("lat") if geo and geo.get("geo_status") == "success" else None,
+                 "lon": geo.get("lon") if geo and geo.get("geo_status") == "success" else None, "location": location, "isp": geo.get("isp") if geo else None, "network_flags": ", ".join(flags), "time": time.strftime("%H:%M:%S"), "connecting_ip": peer_ip, "mail_from": header_safe(mail_from, 120),
                  "claimed_domain": claimed, "sender_level": sender.get("level") or "unverified",
                  "headline": sender.get("headline") or "", "verdict": (result or {}).get("verdict") or "analysis unavailable",
                  "score": (result or {}).get("overall_threat_score"), "action": action, "case_id": (result or {}).get("case_id"),
@@ -110,7 +127,8 @@ class Gateway:
         with open(os.path.join(self.root, "log.jsonl"), "a", encoding="utf-8") as fh:
             fh.write(json.dumps(event) + "\n")
         self.report(event)
-        print(f"[gateway] {event['time']}  from {peer_ip:<12} claims {claimed or '?':<20} -> {action.upper():<10} "
+        where = (event["location"] or "location unknown") + (f" [{event['network_flags']}]" if event["network_flags"] else "")
+        print(f"[gateway] {event['time']}  from {peer_ip:<12} ({where})  claims {claimed or '?':<14} -> {action.upper():<10} "
               f"{event['verdict']} ({event['sender_level']})", flush=True)
         return event
 

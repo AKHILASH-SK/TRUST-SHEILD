@@ -1000,9 +1000,55 @@ function renderInfrastructure(data) {
 
 // ---------- Mail Gateway tab ----------
 var gatewayTimer = null;
+var gatewayMap = null;
+var gatewayMarkers = null;
+
+function ensureGatewayMap() {
+  if (typeof L === 'undefined' || !document.getElementById('gatewayMap')) return null;
+  if (!gatewayMap) {
+    gatewayMap = L.map('gatewayMap', { zoomControl: true, attributionControl: false, scrollWheelZoom: false }).setView([20, 10], 2);
+    // same tiles as the Geolocation tab; plain OpenStreetMap tiles if they cannot be loaded
+    const primary = L.tileLayer(`https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=${STADIA_API_KEY}`,
+      { maxZoom: 18, minZoom: 1 });
+    let fellBack = false;
+    primary.on('tileerror', function () {
+      if (fellBack) return;
+      fellBack = true;
+      gatewayMap.removeLayer(primary);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, minZoom: 1, attribution: '&copy; OpenStreetMap contributors' }).addTo(gatewayMap);
+    });
+    primary.addTo(gatewayMap);
+    gatewayMarkers = L.featureGroup().addTo(gatewayMap);
+  }
+  return gatewayMap;
+}
+
+function plotGatewayEvents(events) {
+  const map = ensureGatewayMap();
+  if (!map) return;
+  gatewayMarkers.clearLayers();
+  const colours = { quarantine: '#ef4444', warn: '#f59e0b', deliver: '#22c55e' };
+  const seen = {};
+  events.forEach((e) => {
+    const lat = parseFloat(e.lat), lon = parseFloat(e.lon);
+    if (!isFinite(lat) || !isFinite(lon) || (lat === 0 && lon === 0)) return;
+    const key = e.connecting_ip;
+    if (seen[key]) return;                                   // one marker per address (the newest event)
+    seen[key] = true;
+    const marker = L.circleMarker([lat, lon], { radius: 8, color: '#fff', weight: 1.5, fillColor: colours[e.action] || '#94a3b8', fillOpacity: 0.9 });
+    const tip = document.createElement('div');
+    tip.textContent = e.connecting_ip + ' - ' + (e.location || '') + (e.network_flags ? ' [' + e.network_flags + ']' : '') + ' - ' + (e.action || '');
+    marker.bindTooltip(tip);
+    marker.addTo(gatewayMarkers);
+  });
+  if (gatewayMarkers.getLayers().length) {
+    map.fitBounds(gatewayMarkers.getBounds(), { padding: [30, 30], maxZoom: 5 });
+  }
+}
 
 function startGatewayPolling() {
   stopGatewayPolling();
+  setTimeout(() => { if (ensureGatewayMap()) gatewayMap.invalidateSize(); }, 200);
   refreshGatewayEvents();
   gatewayTimer = setInterval(refreshGatewayEvents, 2000);
 }
@@ -1046,11 +1092,12 @@ async function refreshGatewayEvents() {
     if (rotating) alertBox.textContent = 'IP rotation detected: ' + rotating.rotation.message +
       ' (addresses: ' + (rotating.rotation.failing_ips || []).join(', ') + ')';
   }
+  plotGatewayEvents(events);
   body.replaceChildren();
   if (!events.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = 8; td.className = 'p-6 text-center text-slate-400';
+    td.colSpan = 9; td.className = 'p-6 text-center text-slate-400';
     td.textContent = 'No messages yet. Send mail to the gateway (port 2525) or run the demo scenes.';
     tr.appendChild(td); body.appendChild(tr);
     return;
@@ -1063,6 +1110,7 @@ async function refreshGatewayEvents() {
     const cell = (text, cls) => { const td = document.createElement('td'); td.className = 'p-3 ' + (cls || ''); td.textContent = text == null ? '' : text; tr.appendChild(td); return td; };
     cell(e.time, 'font-mono text-slate-500');
     cell(e.connecting_ip, 'font-mono font-bold text-slate-800');
+    cell((e.location || 'unknown') + (e.isp ? ' - ' + e.isp : '') + (e.network_flags ? ' [' + e.network_flags + ']' : ''), 'text-slate-600 max-w-[180px]');
     cell(e.claimed_domain || '-', 'font-mono');
     cell([e.spf, e.dkim, e.dmarc].map(v => (v || '?').toUpperCase()).join(' / '), 'font-mono text-[10px]');
     cell((e.sender_level || '') + (e.headline ? ': ' + e.headline : ''), 'text-slate-600 max-w-xs');

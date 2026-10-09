@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 IP_API_URL = "http://ip-api.com/json/{ip}?fields=status,message,country,city,lat,lon,isp,as,proxy,hosting"
 IPWHO_URL = "https://ipwho.is/{ip}"
 DEFAULT_TIMEOUT = 3.0
+GEO_OVERRIDE = None          # callable(ip) -> geo dict or None; set by the lab (backend/lab) and never in production
 
 MAX_ROUTE_HOPS = 15
 ROUTE_TIME_BUDGET = 12.0
@@ -138,6 +139,11 @@ def resolve_ip_location(ip_address: str, timeout: float = DEFAULT_TIMEOUT,
     name used only by the mail-provider proxy override.
     """
     clean_ip = str(ip_address).strip()
+
+    if GEO_OVERRIDE is not None:                      # lab only: pretend locations for the simulated sender addresses
+        simulated = GEO_OVERRIDE(clean_ip)
+        if simulated is not None:
+            return dict(simulated)
 
     cached = _cache_get(clean_ip)
     if cached is not None:

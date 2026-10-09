@@ -859,12 +859,19 @@
         </div>
         <div id="gatewayRotationAlert" class="hidden mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-[12px] text-red-800 font-semibold"></div>
       </div>
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-3">
+        <div class="flex items-center justify-between px-1 pb-2">
+          <span class="text-[12px] font-bold text-slate-800">Where the senders connect from</span>
+          <span class="text-[10px] text-slate-400">red = quarantined, amber = warned, green = delivered</span>
+        </div>
+        <div id="gatewayMap" style="height: 320px; border-radius: 10px;"></div>
+      </div>
       <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
         <table class="w-full text-[11.5px]">
           <thead><tr class="text-left text-[9px] font-mono uppercase text-slate-400 border-b border-slate-100">
-            <th class="p-3">Time</th><th class="p-3">Real connecting IP</th><th class="p-3">Claims to be</th><th class="p-3">SPF / DKIM / DMARC</th>
+            <th class="p-3">Time</th><th class="p-3">Real connecting IP</th><th class="p-3">Where that address is</th><th class="p-3">Claims to be</th><th class="p-3">SPF / DKIM / DMARC</th>
             <th class="p-3">Sender check</th><th class="p-3">Verdict</th><th class="p-3">Action</th><th class="p-3">Sealed case</th></tr></thead>
-          <tbody id="gatewayRows"><tr><td colspan="8" class="p-6 text-center text-slate-400">No messages yet. Send mail to the gateway (port 2525) or run the demo scenes.</td></tr></tbody>
+          <tbody id="gatewayRows"><tr><td colspan="9" class="p-6 text-center text-slate-400">No messages yet. Send mail to the gateway (port 2525) or run the demo scenes.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -1427,6 +1434,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.5"></script>
+  <script src="app.js?v=2.8"></script>
 </body>
 </html>

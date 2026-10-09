@@ -1264,7 +1264,7 @@ import hmac as _hmac
 
 GATEWAY_EVENTS = _collections.deque(maxlen=200)
 _GATEWAY_FIELDS = ("id", "time", "connecting_ip", "mail_from", "claimed_domain", "sender_level", "headline", "verdict", "score",
-                   "action", "case_id", "evidence_sha256", "spf", "dkim", "dmarc", "stored_as")
+                   "action", "case_id", "evidence_sha256", "spf", "dkim", "dmarc", "stored_as", "location", "isp", "network_flags", "lat", "lon")
 
 
 def _gateway_feed_allowed():

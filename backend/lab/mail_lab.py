@@ -27,6 +27,30 @@ SELECTOR = "lab"
 KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "lab_dkim_private.pem")
 
 
+# Pretend places for the simulated sender addresses, so the demo can show a map and a location column. (127.0.0.x is not on the
+# internet, so these are SIMULATED and labelled as such.)
+LAB_GEO = {
+    "127.0.0.2": ("Mumbai", "India", 19.076, 72.8777, "Bank data centre (simulated)", False, False),
+    "127.0.0.3": ("Bucharest", "Romania", 44.4268, 26.1025, "Cheap VPS hosting (simulated)", True, False),
+    "127.0.0.4": ("Lagos", "Nigeria", 6.5244, 3.3792, "Compromised home router (simulated)", False, False),
+    "127.0.0.5": ("Sao Paulo", "Brazil", -23.5505, -46.6333, "Cheap VPS hosting (simulated)", True, False),
+    "127.0.0.6": ("Jakarta", "Indonesia", -6.2088, 106.8456, "Open proxy (simulated)", False, True),
+    "127.0.0.7": ("Frankfurt", "Germany", 50.1109, 8.6821, "Anonymising VPN exit (simulated)", True, True),
+    "127.0.0.8": ("Singapore", "Singapore", 1.3521, 103.8198, "Cheap VPS hosting (simulated)", True, False),
+    "127.0.0.9": ("Hanoi", "Vietnam", 21.0278, 105.8342, "Compromised web server (simulated)", False, False),
+}
+
+
+def lab_geo(ip):
+    row = LAB_GEO.get(ip)
+    if row is None:
+        return None
+    city, country, lat, lon, isp, hosting, proxy = row
+    return {"ip": ip, "city": city, "country": country, "lat": lat, "lon": lon, "isp": isp, "asn": "SIMULATED",
+            "is_suspicious_proxy": bool(hosting or proxy), "is_proxy": proxy, "is_hosting": hosting, "is_private": False,
+            "status": "success", "provider": "lab (simulated)"}
+
+
 class LabWorld:
     """Pretend DNS for the lab domains, plus the bank's DKIM key (kept in lab/data so samples and the demo backend agree)."""
 
@@ -60,14 +84,18 @@ class LabWorld:
         return None
 
     def install(self):
+        from core_engine import geo_tracer
         email_forensics.DNS_OVERRIDE = self.answer
         email_forensics.LAB_MODE = True
+        geo_tracer.GEO_OVERRIDE = lab_geo
         return self
 
     @staticmethod
     def uninstall():
+        from core_engine import geo_tracer
         email_forensics.DNS_OVERRIDE = None
         email_forensics.LAB_MODE = False
+        geo_tracer.GEO_OVERRIDE = None
 
 
 def build_message(from_header, from_ip, subject="Important notice", body="Please review your account.", reply_to=None,

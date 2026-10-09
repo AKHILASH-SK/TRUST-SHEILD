@@ -177,6 +177,9 @@ def trace_originating_ip(received_headers: List[str]) -> Tuple[Optional[str], in
     for idx, header in enumerate(reversed_hops, start=1):
         clean_header = " ".join(header.split())
         extracted_ips = extract_ips_from_string(clean_header)
+        # the address the receiving server recorded (in brackets) comes first: text the sender chose (HELO) must not lead
+        bracketed = [m.group(1) for m in _CONNECTION_IP.finditer(clean_header.split(" by ", 1)[0])]
+        extracted_ips = [ip for ip in bracketed if ip in extracted_ips] + [ip for ip in extracted_ips if ip not in bracketed]
         public_ips = [ip for ip in extracted_ips if is_public_ip(ip)]
 
         if originating_ip is None and public_ips:

@@ -58,6 +58,7 @@ def last_event():
 def show_event(event):
     colour = {"quarantine": "red", "warn": "yellow", "deliver": "green"}.get(event.get("action"), None)
     say(f"  gateway saw the connection from : {event.get('connecting_ip')}")
+    say(f"  where that address is           : {event.get('location') or 'unknown'}  ({event.get('isp') or '?'}) {event.get('network_flags') or ''}")
     say(f"  the email claims to be          : {event.get('claimed_domain')}")
     say(f"  SPF / DKIM / DMARC              : {event.get('spf')} / {event.get('dkim')} / {event.get('dmarc')}")
     say(f"  TrustShield says                : {event.get('headline')}")

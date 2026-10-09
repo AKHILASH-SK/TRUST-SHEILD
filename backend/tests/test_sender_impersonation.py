@@ -154,3 +154,10 @@ def test_the_connecting_ip_is_the_one_the_receiving_server_recorded_not_one_the_
     assert find_connecting_ip([internal, gmail_style]) == "209.85.220.41"
     # headers without brackets still work as before
     assert find_connecting_ip(["from host by mx with SMTP; connection from 93.184.216.34"]) == "93.184.216.34"
+
+
+def test_each_hop_is_located_by_the_address_the_server_recorded_not_by_the_helo_text():
+    from core_engine.email_forensics import trace_originating_ip
+    hop = "from 8.8.8.8 (evil.example [93.184.216.34]) by mx.receiver.example with ESMTP"
+    origin, total, hops = trace_originating_ip([hop])
+    assert origin == "93.184.216.34" and hops[0]["public_ips"][0] == "93.184.216.34"
