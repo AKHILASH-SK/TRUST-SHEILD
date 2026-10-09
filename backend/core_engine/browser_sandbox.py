@@ -68,6 +68,11 @@ IDENTITY_PROVIDER_DOMAINS = {
     "amazoncognito.com", "paypal.com", "digilocker.gov.in", "sso.gov.in", "yahoo.com", "slack.com", "dropbox.com",
 }
 
+# Sign-in APIs that ordinary apps call directly from their own login form (Firebase Authentication, Google Identity).
+IDENTITY_PROVIDER_API_HOSTS = {
+    "identitytoolkit.googleapis.com", "securetoken.googleapis.com", "www.googleapis.com", "oauth2.googleapis.com",
+}
+
 # Services that phishing kits use to receive stolen data
 EXFIL_HOST_SUFFIXES = (
     "api.telegram.org", "telegram.org", "discord.com", "discordapp.com", "hooks.slack.com", "formspree.io",
@@ -829,6 +834,8 @@ class BrowserSandbox:
             ev["submit_domain"] = rec["domain"]
             ev["submit_host"] = rec["host"]
             ev["submit_cross_domain"] = bool(rec["domain"] and rec["domain"] != page_domain)
+            if ev["submit_cross_domain"] and (rec["host"] in IDENTITY_PROVIDER_API_HOSTS or rec["host"].startswith("cognito-idp.")):
+                ev["idp_login"] = True                      # Firebase / Google / Cognito sign-in API: how many real apps log in
             ev["submit_to_messaging_api"] = host_is_exfil(rec["host"])
             ev["submit_to_ip"] = _is_ip(rec["host"])
             ev["submit_insecure"] = rec["url"].startswith("http://") and self._landing_https

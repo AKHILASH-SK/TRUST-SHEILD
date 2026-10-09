@@ -135,3 +135,10 @@ def test_brand_spelled_with_spaces_and_hyphenated_lookalike_domain():
 def test_storage_buckets_count_as_free_hosting():
     from core_engine.link_threat_pipeline import is_user_content_host
     assert is_user_content_host("https://j1has6zgife5b8jillo0.s3.amazonaws.com/x") and is_user_content_host("http://b.s3.eu-west-1.amazonaws.com/")
+
+
+def test_firebase_and_google_sign_in_apis_count_as_a_normal_login():
+    assert {"identitytoolkit.googleapis.com", "securetoken.googleapis.com"} <= bs.IDENTITY_PROVIDER_API_HOSTS
+    assert "collector-drop.xyz" not in bs.IDENTITY_PROVIDER_API_HOSTS and "api.telegram.org" not in bs.IDENTITY_PROVIDER_API_HOSTS
+    login = base_evidence(credential_surface_found=True, probe_credentials_sent=True, submit_cross_domain=True, idp_login=True)
+    assert bs.evidence_score(login) < 35                                # not convicted just for posting to the sign-in API
