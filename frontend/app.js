@@ -931,6 +931,15 @@ function renderVerdict(data, elapsedSeconds) {
       verdictBadge.innerText = data.verdict || 'SUSPICIOUS / UNVERIFIED ORIGIN';
     }
     if (verdictHeadline) verdictHeadline.innerText = 'Suspicious Infrastructure & Anomalous Identity';
+  } else if (data.analysis_complete === false) {
+    // Nothing malicious was found, but a stage failed or a link could not be inspected: never show a clean verdict.
+    if (scoreCircle) scoreCircle.setAttribute('stroke', '#f59e0b');
+    if (verdictCard) verdictCard.className = 'rounded-xl border border-amber-200 p-6 bg-white shadow-sm relative overflow-hidden transition-all duration-300';
+    if (verdictBadge) {
+      verdictBadge.className = 'verdict-stamp anim-stamp-in text-amber-600 bg-amber-50';
+      verdictBadge.innerText = 'INCOMPLETE / REVIEW MANUALLY';
+    }
+    if (verdictHeadline) verdictHeadline.innerText = 'No Threat Found, but the Analysis Is Incomplete';
   } else {
     if (scoreCircle) scoreCircle.setAttribute('stroke', '#10b981');
     if (verdictCard) verdictCard.className = 'rounded-xl border border-emerald-200 p-6 bg-white shadow-sm relative overflow-hidden transition-all duration-300';
@@ -1063,6 +1072,15 @@ function renderNarrativeAndLinks(data) {
 
     const flagHtml = flags.map(f => `<span class="px-1.5 py-0.5 rounded bg-red-50 border border-red-200 text-red-700 text-[9px] font-mono">${f}</span>`).join(' ');
 
+    // What to say when no red flag was raised: be exact about whether the page was really inspected
+    let noFlagNote = '<span class="text-slate-400 font-mono text-[9px]">No malicious indicators found</span>';
+    if (tel.status === 'WHITELISTED') {
+      noFlagNote = '<span class="text-slate-400 font-mono text-[9px]">Trusted domain: deep scan skipped</span>';
+    } else if (tel.verification_state === 'unverified' || tel.analysis_complete === false) {
+      const why = tel.unverified_reason ? ` (${String(tel.unverified_reason).replace(/_/g, ' ')})` : '';
+      noFlagNote = `<span class="px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 text-[9px] font-mono">Page could not be inspected${why}: unverified</span>`;
+    }
+
     const card = document.createElement('div');
     card.className = 'p-2.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5 text-xs';
     card.innerHTML = `
@@ -1072,7 +1090,7 @@ function renderNarrativeAndLinks(data) {
         <span class="px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${scoreBadgeColor}">${Math.round(score)}/100</span>
       </div>
       <div class="flex flex-wrap gap-1">
-        ${flagHtml || '<span class="text-slate-400 font-mono text-[9px]">Clean structural heuristics</span>'}
+        ${flagHtml || noFlagNote}
       </div>
     `;
     container.appendChild(card);
@@ -2457,6 +2475,9 @@ function updateHeaderStatus(data) {
     } else if (score >= 50) {
       pill.className = 'text-[9.5px] font-bold text-amber-600 truncate';
       pill.innerText = 'Suspicious Origin';
+    } else if (data.analysis_complete === false) {
+      pill.className = 'text-[9.5px] font-bold text-amber-600 truncate';
+      pill.innerText = 'Review Needed';
     } else {
       pill.className = 'text-[9.5px] font-bold text-emerald-600 truncate';
       pill.innerText = 'Verified Clean';
