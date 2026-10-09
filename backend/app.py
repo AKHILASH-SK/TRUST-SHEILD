@@ -696,17 +696,20 @@ def scan_feature_rows(pipeline_res, tier_analyzed, db_source=None):
         for name in ("verdict", "threat_score", "display_verdict", "decisive", "analysis_complete"):
             if pipeline_res.get(name) is not None:
                 rows.append((name, pipeline_res[name]))
-        for name, value in (pipeline_res.get("telemetry") or {}).items():
+        def add(prefix, value, depth=0):
             if isinstance(value, dict):
-                for sub_name, sub_value in value.items():
-                    if isinstance(sub_value, (str, int, float, bool)):
-                        rows.append((f"{name}.{sub_name}", sub_value))
+                if depth < 3:
+                    for sub_name, sub_value in value.items():
+                        add(f"{prefix}.{sub_name}", sub_value, depth + 1)
             elif isinstance(value, (list, tuple)):
                 if value:
-                    rows.append((name, ", ".join(str(v) for v in value[:12])))
+                    rows.append((prefix, ", ".join(str(v) for v in value[:12])))
             elif value is not None:
-                rows.append((name, value))
-    return [(str(n)[:255], str(v)[:500]) for n, v in rows][:120]
+                rows.append((prefix, value))
+
+        for name, value in (pipeline_res.get("telemetry") or {}).items():
+            add(name, value)
+    return [(str(n)[:255], str(v)[:500]) for n, v in rows][:200]
 
 
 def ensure_link_scan_columns():
@@ -1021,56 +1024,73 @@ def scan_job_status(job_id):
 @rate_limit("links_explain", 20, 60, per_user=True)
 def explain_link():
     """
-    On-demand forensic summary for one of the caller's scanned links.
+    The explanation of one of the caller's scans: what the sandbox saw, what (if anything) looked suspicious, why the
+    verdict was reached. Built from that scan's own stored evidence, so it is different for every scan; Gemini writes it when
+    available (from the facts only), otherwise rules do. It is stored with the scan, so Gemini is used once per scan.
     """
     try:
+        from core_engine import explainer
         data = request.get_json(silent=True) or {}
         scan_id = data.get('scan_id')
         url = normalize_input_url(data.get('url')) if data.get('url') else None
+        refresh = data.get('refresh') is True or (scan_id is None and url is not None)      # the app's Refresh button
 
         if not url and not scan_id:
             return jsonify({"error": "Missing url or scan_id"}), 400
 
-        existing_reasons = None
-        existing_verdict = None
+        row = None
         with db_cursor() as cur:
             if scan_id:
-                cur.execute("SELECT id, url, reasons, verdict FROM link_scans WHERE id = %s AND user_id = %s",
+                cur.execute("SELECT id, url, verdict, threat_score FROM link_scans WHERE id = %s AND user_id = %s",
                             (scan_id, g.user_id))
             else:
-                cur.execute("SELECT id, url, reasons, verdict FROM link_scans WHERE url = %s AND user_id = %s "
+                cur.execute("SELECT id, url, verdict, threat_score FROM link_scans WHERE url = %s AND user_id = %s "
                             "ORDER BY analyzed_at DESC LIMIT 1", (url, g.user_id))
             row = cur.fetchone()
-            if row:
-                scan_id, url, existing_reasons, existing_verdict = row[0], row[1], row[2], row[3]
-            elif scan_id:
-                return jsonify({"error": "Scan not found"}), 404
+        if row is None and scan_id:
+            return jsonify({"error": "Scan not found"}), 404
 
-        if existing_reasons and "Threat Summary" in existing_reasons:
-            return jsonify({
-                "status": "success", "url": url, "scan_id": scan_id,
-                "verdict": existing_verdict or "SAFE",
-                "threat_score": 90.0 if existing_verdict == "DANGEROUS" else (50.0 if existing_verdict == "SUSPICIOUS" else 0.0),
-                "summary": existing_reasons
-            }), 200
+        features, result = {}, None
+        if row:
+            scan_id, url, verdict, score = row[0], row[1], row[2] or "SAFE", row[3]
+            with db_cursor() as cur:
+                cur.execute("SELECT feature_name, feature_value FROM scan_features WHERE scan_id = %s ORDER BY id", (scan_id,))
+                features = {n: v for n, v in cur.fetchall()}
+        else:                                                   # a link that was never scanned by this user
+            verdict, score = "SAFE", None
 
-        pipeline_res = run_link_pipeline(url)
-        if pipeline_res is None:
-            return jsonify({"error": "Analysis service is busy"}), 503
-        summary = pipeline_res.get("summary", "")
-        threat_score = pipeline_res.get("threat_score", 0.0)
-        norm_verdict = to_client_verdict(pipeline_res)
+        cached = features.get("ai_explanation")
+        if cached and not refresh:
+            try:
+                saved = json.loads(cached)
+                return jsonify({"status": "success", "url": url, "scan_id": scan_id, "verdict": verdict,
+                                "threat_score": score, "summary": saved["summary"], "source": saved.get("source", "rules"),
+                                "model": saved.get("model", "")}), 200
+            except Exception:
+                pass
+
+        if len(features) < 5:                                   # older scan without stored evidence: use the (shared) analysis
+            result = run_link_pipeline(url)
+            if result is None:
+                return jsonify({"error": "Analysis service is busy"}), 503
+            verdict, score = to_client_verdict(result), float(result.get("threat_score", 0) or 0)
+            features = {n: v for n, v in scan_feature_rows(result, result.get("tier_analyzed", "V2_LINK_PIPELINE"))}
+
+        facts = explainer.facts_from_features(features, url, verdict, score)
+        summary, source = explainer.explain(facts)
+        label = "Written by Google Gemini" if source == "gemini" else "Summary from the analysis"
 
         if scan_id:
-            with db_cursor() as cur:
-                cur.execute("UPDATE link_scans SET reasons = %s, verdict = %s, risk_level = %s, threat_score = %s "
-                            "WHERE id = %s AND user_id = %s",
-                            (summary, norm_verdict, norm_verdict, threat_score, scan_id, g.user_id))
+            try:
+                with db_cursor() as cur:
+                    cur.execute("DELETE FROM scan_features WHERE scan_id = %s AND feature_name = 'ai_explanation'", (scan_id,))
+                    cur.execute("INSERT INTO scan_features (scan_id, feature_name, feature_value) VALUES (%s, %s, %s)",
+                                (scan_id, "ai_explanation", json.dumps({"summary": summary, "source": source, "model": label})))
+            except Exception as e:
+                logging.getLogger("trustshield.scan").warning("could not store the explanation: %s", e)
 
-        return jsonify({
-            "status": "success", "url": url, "scan_id": scan_id,
-            "verdict": norm_verdict, "threat_score": threat_score, "summary": summary
-        }), 200
+        return jsonify({"status": "success", "url": url, "scan_id": scan_id, "verdict": verdict, "threat_score": score,
+                        "summary": summary, "source": source, "model": label}), 200
 
     except Exception as e:
         return server_error(e)

@@ -125,12 +125,12 @@ def parse_response(raw: Any) -> Optional[Dict[str, Any]]:
     return {"verdict": verdict, "confidence": round(confidence, 2), "reasons": reasons, "impersonated_brand": brand}
 
 
-def _call_gemini(prompt: str) -> Optional[str]:
+def _call_gemini(prompt: str, system_instruction: Optional[str] = None, schema: Optional[dict] = None) -> Optional[str]:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    kwargs = dict(system_instruction=SYSTEM_INSTRUCTION, temperature=0.0, max_output_tokens=1024,
-                  response_mime_type="application/json", response_schema=RESPONSE_SCHEMA)
+    kwargs = dict(system_instruction=system_instruction or SYSTEM_INSTRUCTION, temperature=0.0, max_output_tokens=1024,
+                  response_mime_type="application/json", response_schema=schema or RESPONSE_SCHEMA)
     try:                                   # a short answer needs no hidden "thinking" tokens
         kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
     except Exception:
@@ -214,3 +214,27 @@ def decide(lean: str, result: Optional[Dict[str, Any]]) -> Optional[str]:
     if result["verdict"] == "SAFE" and lean == "SAFE":
         return "SAFE"
     return None
+
+
+def generate_json(prompt: str, system_instruction: str, schema: dict, timeout: float = TIMEOUT_SECONDS) -> Optional[str]:
+    """
+    One JSON answer from Gemini for a different task (e.g. writing the explanation of a scan), with the same protections as
+    the reviewer: model fallback, quota circuit breaker and a hard time limit. Returns the raw JSON text, or None.
+    """
+    global _paused_until
+    if not is_enabled() or time.time() < _paused_until:
+        return None
+    if not _slots.acquire(timeout=2):
+        return None
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        return pool.submit(_call_gemini, prompt, system_instruction, schema).result(timeout=timeout)
+    except Exception as exc:
+        text = str(exc)
+        if "429" in text or "RESOURCE_EXHAUSTED" in text:
+            _paused_until = time.time() + QUOTA_PAUSE_SECONDS
+        logger.warning("Gemini text generation unavailable: %s", type(exc).__name__)
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+        _slots.release()

@@ -333,6 +333,7 @@ class FinalDecisionEngine:
         rule_score = threat_score
         ml_capped_uninspected = False
         ml_capped_no_evidence = False
+        hosted_name_ignored = False
         if ml and not hard_override_triggered:
             threat_score = float(ml["score"])
             # Verified-clean rule: the browser really opened the page and found nothing hostile (no login or payment
@@ -354,7 +355,9 @@ class FinalDecisionEngine:
             # independent support the score is held in the "Unverified" band instead of "Dangerous".
             uninspected = (sandbox_unreachable == 1 or sandbox_blocked == 1
                            or _ev.get("verification_state") == "unverified")
-            corroborated = (vt_risk_score >= 40 or heuristic_risk >= 40 or bool(typosquat_risk) or free_hosting
+            # (shared hosting is deliberately NOT corroboration: on a platform where anyone gets a sub-domain, the host name is
+            #  chosen by the page owner and says nothing about safety)
+            corroborated = (vt_risk_score >= 40 or heuristic_risk >= 40 or bool(typosquat_risk)
                             or 0 <= domain_age_days < 90 or bool(known_db_match))
             if uninspected and not corroborated and threat_score >= CRITICAL_THRESHOLD:
                 threat_score = 55.0
@@ -373,10 +376,14 @@ class FinalDecisionEngine:
                 or vt_risk_score >= 40 or heuristic_risk >= 40 or typosquat_risk or known_db_match
                 or 0 <= domain_age_days < 90 or wording.get("lure") or wording.get("threat") or wording.get("crypto")
                 or (set(_ev.get("sensitive_field_types") or []) & {"card", "cvv", "wallet_phrase", "gov_id", "pin"}))
-            if (_ev.get("verification_state") == "verified" and not uninspected and not concrete_evidence
-                    and threat_score >= CRITICAL_THRESHOLD):
-                threat_score = 70.0
+            # Pages on shared hosting (vercel.app, netlify.app, github.io ...) are held to the same standard from a lower bar:
+            # the model learned "free host = phishing" (almost all its hosted training pages were malicious), so even a
+            # merely suspicious model score on such a page needs concrete evidence behind it.
+            model_alarm = threat_score >= CRITICAL_THRESHOLD or (free_hosting and threat_score >= SUSPICIOUS_THRESHOLD)
+            if (_ev.get("verification_state") == "verified" and not uninspected and not concrete_evidence and model_alarm):
+                threat_score = 70.0 if threat_score >= CRITICAL_THRESHOLD else 60.0
                 ml_capped_no_evidence = True
+                hosted_name_ignored = bool(free_hosting)
 
         # 2b. Heuristic hard floors: each of these is dangerous by itself
         floor_reasons: List[str] = []
@@ -486,7 +493,9 @@ class FinalDecisionEngine:
             "ml_lexical_probability": ml.get("lexical_probability") if ml else None,
             "ml_signals": ml.get("signals", []) if ml else [],
             "ml_capped_uninspected": ml_capped_uninspected,
-            "ml_capped_no_evidence": ml_capped_no_evidence
+            "ml_capped_no_evidence": ml_capped_no_evidence,
+            "hosted_name_ignored": hosted_name_ignored,
+            "free_hosting": bool(free_hosting)
         }
         
         # 5. Synthesize Sub-Millisecond (<1ms) Forensic Explanation (Zero Latency)

@@ -42,6 +42,7 @@ class LinkDetailActivity : AppCompatActivity() {
     private lateinit var llGeminiLoading: View
     private lateinit var llGeminiContent: View
     private lateinit var geminiSummaryText: TextView
+    private lateinit var explainSourceLabel: TextView
     private lateinit var geminiEvidenceText: TextView
     private lateinit var geminiActionText: TextView
     private lateinit var geminiActionBox: View
@@ -72,6 +73,7 @@ class LinkDetailActivity : AppCompatActivity() {
         llGeminiLoading = findViewById(R.id.ll_gemini_loading)
         llGeminiContent = findViewById(R.id.ll_gemini_content)
         geminiSummaryText = findViewById(R.id.tv_gemini_summary)
+        explainSourceLabel = findViewById(R.id.tv_explain_source)
         geminiEvidenceText = findViewById(R.id.tv_gemini_evidence)
         geminiActionText = findViewById(R.id.tv_gemini_action)
         geminiActionBox = findViewById(R.id.ll_gemini_action_box)
@@ -257,7 +259,10 @@ class LinkDetailActivity : AppCompatActivity() {
                     val result = response.body()!!
                     Log.d(TAG, "Gemini forensic explanation received successfully!")
 
-                    val summary = result.summary ?: "Analysis complete. No specific threats detected."
+                    // The label tells the truth about who wrote the text: Gemini, or the rule-based summary
+                    explainSourceLabel.text = result.model?.takeIf { it.isNotBlank() }
+                        ?: if (result.source == "gemini") "Written by Google Gemini" else "Summary from the analysis"
+                    val summary = result.summary ?: "No explanation is available for this scan."
                     if (result.verdict != null) {
                         currentVerdict = result.verdict
                         updateVerdictBadge(currentVerdict, currentVerdict)
@@ -268,18 +273,20 @@ class LinkDetailActivity : AppCompatActivity() {
                     Log.w(TAG, "Explain API returned error code: ${response.code()}")
                     llGeminiLoading.visibility = View.GONE
                     llGeminiContent.visibility = View.VISIBLE
-                    geminiSummaryText.text = "AI telemetry inspection complete. Verified by TrustShield V2 MultiModal Engine."
-                    geminiEvidenceText.text = "• Domain heuristics analyzed\n• Sandbox form & SSL inspection passed"
-                    geminiActionText.text = "Exercise caution when entering personal information."
+                    explainSourceLabel.text = "Not available"
+                    geminiSummaryText.text = "The explanation could not be loaded right now. Tap Refresh to try again."
+                    geminiEvidenceText.text = "No details were received from the server."
+                    geminiActionText.text = "The verdict shown above is still valid."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch Gemini forensic report: ${e.message}", e)
                 llGeminiLoading.visibility = View.GONE
                 llGeminiContent.visibility = View.VISIBLE
-                geminiSummaryText.text = "Gemini AI connection offline. Using local threat telemetry."
-                geminiEvidenceText.text = "• Rule-based heuristics active\n• Local database signature check completed"
-                geminiActionText.text = "Inspect link sender and certificate before proceeding."
-                Toast.makeText(this@LinkDetailActivity, "Network timeout: Using offline telemetry", Toast.LENGTH_SHORT).show()
+                explainSourceLabel.text = "Not available"
+                geminiSummaryText.text = "The explanation could not be loaded because the TrustShield server could not be reached."
+                geminiEvidenceText.text = "No details were received."
+                geminiActionText.text = "The verdict shown above is still valid. Tap Refresh to try again."
+                Toast.makeText(this@LinkDetailActivity, "Could not reach the server", Toast.LENGTH_SHORT).show()
             } finally {
                 btnRefreshGemini.isEnabled = true
             }

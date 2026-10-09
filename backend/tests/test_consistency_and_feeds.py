@@ -1,4 +1,6 @@
 """Verified-clean pages, repeatable verdicts, scan evidence rows and the public phishing feeds (no network, no database)."""
+import json
+
 import app as backend_app
 from core_engine.final_decision_engine import FinalDecisionEngine
 from phishing_feed import PhishingFeedImporter
@@ -214,7 +216,7 @@ def test_uninspected_link_condemned_only_by_the_link_text_model_stays_unverified
 
 
 def test_independent_evidence_keeps_the_dangerous_verdict_even_when_the_page_could_not_be_opened():
-    for extra in ({"vt_risk_score": 45.7}, {"heuristic_risk": 45.0}, {"free_hosting": True}, {"domain_age_days": 10}):
+    for extra in ({"vt_risk_score": 45.7}, {"heuristic_risk": 45.0}, {"domain_age_days": 10}):
         kwargs = {"domain_age_days": -1, **extra}
         out = FinalDecisionEngine().evaluate(url="http://x.example/", ml=LEXICAL_ALARM, sandbox_unreachable=1,
                                              sandbox_evidence=TIMED_OUT, **kwargs)
@@ -317,3 +319,76 @@ def test_when_the_model_alone_accuses_the_reviewer_arbitrates_between_model_and_
     assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.9))["display_verdict"] == DISPLAY_SAFE
     assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("DANGEROUS", 0.9))["display_verdict"] == DISPLAY_DANGEROUS
     assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.5))["display_verdict"] == DISPLAY_UNVERIFIED
+
+
+def test_shared_hosting_is_not_evidence_and_a_hosted_page_needs_concrete_evidence():
+    # model says only "suspicious" (score 65) for a page on shared hosting, the sandbox found nothing concrete
+    suspicious = {"score": 65.0, "probability": 0.7, "band": "SUSPICIOUS", "model": "page", "signals": ["host len"]}
+    out = evaluate(CLEAN_EVIDENCE, ml=suspicious, free_hosting=True)
+    assert out["telemetry"]["ml_capped_no_evidence"] is True and out["telemetry"]["hosted_name_ignored"] is True
+    # ...but the same score on an ordinary domain is left alone
+    plain = evaluate({**CLEAN_EVIDENCE, "credential_surface_found": True}, ml=suspicious, free_hosting=False)
+    assert plain["telemetry"]["ml_capped_no_evidence"] is False
+    # an uninspected hosted page is no longer convicted by its host name
+    uninspected = FinalDecisionEngine().evaluate(url="https://app.vercel.app/", ml=LEXICAL_ALARM, sandbox_unreachable=1,
+                                                 sandbox_evidence=TIMED_OUT, domain_age_days=-1, free_hosting=True)
+    assert uninspected["threat_score"] < 80
+    # concrete evidence on a hosted page still convicts
+    hosted_bad = evaluate({**CLEAN_EVIDENCE, "submit_cross_domain": True}, ml=suspicious, free_hosting=True, brand_impersonation=1)
+    assert hosted_bad["telemetry"]["ml_capped_no_evidence"] is False
+
+
+# ---- the per-scan explanation is built from that scan's own facts ------------------------------------------------------------
+
+DATUM_FEATURES = {
+    "display_verdict": "Safe", "threat_score": "30.0", "tier_analyzed": "V2_LINK_PIPELINE", "verification_state": "verified",
+    "sandbox.page_title": "DATUM - Planning-to-Execution Bridge", "sandbox.credential_surface_found": "True",
+    "sandbox.credential_field_types": "other, password", "sandbox.probe_ran": "True", "sandbox.submit_cross_domain": "False",
+    "sandbox.blocked_internal_requests": "4", "vt_detections": "0", "vt_engines": "92", "free_hosting": "True",
+    "ml_model": "page", "ml_probability": "1.0", "ml_signals": "link text looks suspicious, ev n links, host len",
+    "ml_capped_no_evidence": "True", "llm_review.verdict": "SAFE", "llm_review.confidence": "0.85",
+}
+PHISH_FEATURES = {
+    "display_verdict": "Dangerous", "threat_score": "100.0", "verification_state": "verified", "sandbox.page_title": "Sign in",
+    "sandbox.credential_surface_found": "True", "sandbox.probe_ran": "True", "sandbox.submit_cross_domain": "True",
+    "sandbox.submit_domain": "evil-collector.xyz", "sandbox.claimed_brand": "microsoft", "sandbox.brand_owns_domain": "False",
+    "override_reason": "Login form sends the typed credentials to a different site", "vt_detections": "3", "vt_engines": "92",
+}
+
+
+def test_each_scan_gets_its_own_specific_explanation():
+    from core_engine import explainer
+    safe_text, safe_source = explainer.explain(explainer.facts_from_features(DATUM_FEATURES, "https://datum-ashy-beta.vercel.app", "SAFE", 30.0), use_ai=False)
+    bad_text, _ = explainer.explain(explainer.facts_from_features(PHISH_FEATURES, "http://login-check.xyz/", "DANGEROUS", 100.0), use_ai=False)
+    assert safe_source == "rules" and safe_text != bad_text
+    # the safe page: specific facts, and what made it look suspicious, and why it still is safe
+    assert "stayed on the same site" in safe_text and "4 times" in safe_text and "shared hosting platform" in safe_text
+    assert "100% likely" in safe_text and "treated as safe" in safe_text and "credential harvesting" not in safe_text.lower()
+    # the phishing page: concrete findings, never the safe page's facts
+    assert "evil-collector.xyz" in bad_text and "microsoft" in bad_text and "Do not open" in bad_text and "shared hosting" not in bad_text
+
+
+def test_an_unverified_page_that_was_not_opened_says_so_and_claims_no_checks_it_did_not_make():
+    from core_engine import explainer
+    facts = explainer.facts_from_features({"display_verdict": "Unverified - open with care", "verification_state": "unverified",
+                                           "unverified_reason": "timeout"}, "http://tool.corp.example:5173/p", "SUSPICIOUS", 55.0)
+    text, _ = explainer.explain(facts, use_ai=False)
+    assert "could not open the page" in text and "timeout" in text and "No login or payment form" not in text
+
+
+def test_gemini_text_is_used_when_valid_but_cannot_change_the_action_or_break_the_format(monkeypatch):
+    from core_engine import explainer
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("ENABLE_LLM_REVIEW", "true")
+    facts = explainer.facts_from_features(PHISH_FEATURES, "http://login-check.xyz/", "DANGEROUS", 100.0)
+    good = json.dumps({"headline": "Fake Microsoft login", "what_we_saw": ["A login page copying Microsoft."],
+                       "why_suspicious": ["It sends passwords elsewhere."], "why_this_verdict": "Passwords would go to a stranger.",
+                       "what_to_do": "It is fine to open."})
+    text, source = explainer.explain(facts, writer=lambda *a: good)
+    assert source == "gemini" and "Fake Microsoft login" in text and "Do not open this link" in text and "fine to open" not in text
+    assert text.count("•") == 3                                           # the three sections the app displays
+    # garbage or a failing writer falls back to the rule text
+    assert explainer.explain(facts, writer=lambda *a: "not json")[1] == "rules"
+    def boom(*a):
+        raise RuntimeError("quota")
+    assert explainer.explain(facts, writer=boom)[1] == "rules"

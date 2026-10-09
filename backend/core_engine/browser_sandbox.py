@@ -670,6 +670,7 @@ class BrowserSandbox:
         self._landing_https = page.url.startswith("https://")
         self._dismiss_overlays(page)
         page.wait_for_timeout(400)
+        self._settle(page, budget)
 
         landing = self._snapshot(page)
         if not landing:
@@ -839,6 +840,36 @@ class BrowserSandbox:
             return (page.content() or "")[:400_000]
         except Exception:
             return ""
+
+    def _settle(self, page, budget: "_Budget", max_seconds: float = 6.0) -> None:
+        """
+        Single-page apps often show a loading screen and draw the real page (the login form) a few seconds later, after
+        their own API calls. Looking too early misses it. Wait until the page stops changing: the number of inputs,
+        buttons and the amount of text stay the same for two checks in a row. Stops at once when a login field is
+        already there, and never waits longer than max_seconds or the remaining scan budget.
+        """
+        probe = """() => {
+            const vis = (e) => { const r = e.getBoundingClientRect(); const s = getComputedStyle(e);
+                                 return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+            const inputs = [...document.querySelectorAll('input,textarea,select')].filter(vis);
+            return {n: inputs.length, pw: inputs.filter(i => i.type === 'password').length,
+                    b: document.querySelectorAll('button,a[href]').length,
+                    t: Math.round(((document.body && document.body.innerText) || '').length / 20)};
+        }"""
+        deadline = time.monotonic() + min(max_seconds, max(0.0, budget.left() - 8.0))
+        last, stable = None, 0
+        try:
+            while time.monotonic() < deadline:
+                now = page.evaluate(probe)
+                if now.get("pw", 0) > 0:
+                    return                                   # a password field is on screen: the page is ready
+                stable = stable + 1 if now == last else 0
+                if stable >= 2:
+                    return                                   # unchanged for two checks in a row
+                last = now
+                page.wait_for_timeout(600)
+        except Exception:
+            return
 
     def _has_page_content(self, page) -> bool:
         try:

@@ -117,7 +117,9 @@ data class LinkExplainResponse(
     val scan_id: Int?,
     val verdict: String?,
     val threat_score: Float?,
-    val summary: String?
+    val summary: String?,
+    val source: String? = null,       // "gemini" when Gemini wrote the text, "rules" otherwise
+    val model: String? = null         // the label to show, e.g. "Written by Google Gemini"
 )
 
 // ===== Health Check Models =====

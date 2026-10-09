@@ -181,9 +181,10 @@
                                 android:textColor="@color/primary_navy" />
 
                             <TextView
+                                android:id="@+id/tv_explain_source"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Google Gemini 3.6 Flash"
+                                android:text="Analysis summary"
                                 android:textSize="11sp"
                                 android:textColor="@color/accent_cyan_dark"
                                 android:textStyle="bold" />
