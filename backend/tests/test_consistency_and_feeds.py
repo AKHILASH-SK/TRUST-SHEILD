@@ -392,3 +392,64 @@ def test_gemini_text_is_used_when_valid_but_cannot_change_the_action_or_break_th
     def boom(*a):
         raise RuntimeError("quota")
     assert explainer.explain(facts, writer=boom)[1] == "rules"
+
+
+# ---- history: new link is added, same verdict is not repeated, a changed verdict updates the old record -----------------------
+
+class _FakeCursor:
+    def __init__(self, script):
+        self.script, self.calls, self._next = script, [], None
+
+    def execute(self, sql, params=None):
+        self.calls.append((" ".join(sql.split()), params))
+        self._next = self.script.pop(0) if self.script else None
+
+    def executemany(self, sql, rows):
+        self.calls.append((" ".join(sql.split()), list(rows)))
+
+    def fetchone(self):
+        return self._next
+
+
+def _run_record(monkeypatch, existing_row, verdict_result):
+    import contextlib
+    cur = _FakeCursor([None, (99,)] if existing_row is None else [existing_row, None, None])
+
+    @contextlib.contextmanager
+    def fake_db():
+        yield cur
+    monkeypatch.setattr(backend_app, "db_cursor", fake_db)
+    return backend_app._record_job_scan(8, "https://www.site.example/", verdict_result, "Link Gate (x)"), cur.calls
+
+
+SAFE_RESULT = {"verdict": "LEGITIMATE / CLEAN", "threat_score": 4.0, "display_verdict": "Safe", "summary": "ok", "telemetry": {}}
+
+
+def test_history_adds_a_new_link(monkeypatch):
+    scan_id, calls = _run_record(monkeypatch, None, SAFE_RESULT)
+    assert scan_id == 99 and any(c[0].startswith("INSERT INTO link_scans") for c in calls)
+
+
+def test_history_does_not_repeat_the_same_verdict(monkeypatch):
+    scan_id, calls = _run_record(monkeypatch, (5, "SAFE"), SAFE_RESULT)
+    assert scan_id is None and not any(c[0].startswith(("INSERT", "UPDATE")) for c in calls)
+
+
+def test_history_updates_a_stale_verdict_instead_of_keeping_it(monkeypatch):
+    scan_id, calls = _run_record(monkeypatch, (5, "DANGEROUS"), SAFE_RESULT)
+    assert scan_id == 5
+    assert any(c[0].startswith("UPDATE link_scans") for c in calls) and not any(c[0].startswith("INSERT INTO link_scans") for c in calls)
+    assert any(c[0].startswith("DELETE FROM scan_features") for c in calls)
+    lookup = calls[0][1][1]                                      # both spellings are searched
+    assert "https://www.site.example/" in lookup and "https://site.example" in lookup
+
+
+def test_a_known_phishing_link_is_explained_without_waiting_for_the_writer():
+    from core_engine import explainer
+
+    def must_not_be_called(*a):
+        raise AssertionError("the writer must not be asked for a link on a public phishing list")
+    facts = explainer.facts_from_features({"display_verdict": "Dangerous", "status": "KNOWN_THREAT", "phishing_feed_source": "openphish"},
+                                          "https://x.example/app", "DANGEROUS", 100.0)
+    text, source = explainer.explain(facts, writer=must_not_be_called)
+    assert source == "rules" and "public phishing list" in text

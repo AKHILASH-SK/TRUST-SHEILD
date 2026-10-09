@@ -637,23 +637,41 @@ def _job_result_payload(result):
 
 def _record_job_scan(user_id, url, result, source_app):
     """
-    Save a scan made through a scan job (a tap in the Link Gate) to the user's history. A link that is already in that
-    user's history (for example from the notification scan of the same message) is not added a second time.
+    Save a scan made through a scan job (a tap in the Link Gate) to the user's history.
+    - The link is not in that user's history yet: a new record is added.
+    - It is already there (for example from the notification scan of the same message) with the SAME verdict: nothing is
+      added a second time.
+    - It is already there but the new analysis reached a DIFFERENT verdict (for example it was fixed or the page changed):
+      the old record is updated, so the history never keeps showing a stale answer.
+    'www.' and trailing-slash spellings of the link count as the same link.
     """
     bare = url.rstrip("/")
+    spellings = {url, bare, bare + "/"}
+    for u in list(spellings):
+        spellings.add(u.replace("://www.", "://", 1) if "://www." in u else u.replace("://", "://www.", 1))
     verdict = to_client_verdict(result)
+    reasons = str(result.get("summary", ""))[:4000]
+    score = float(result.get("threat_score", 0) or 0)
+    complete = bool(result.get("analysis_complete", True))
     with db_cursor() as cur:
-        cur.execute("SELECT 1 FROM link_scans WHERE user_id = %s AND url = ANY(%s) LIMIT 1",
-                    (user_id, [url, bare, bare + "/"]))
-        if cur.fetchone():
+        cur.execute("SELECT id, risk_level FROM link_scans WHERE user_id = %s AND url = ANY(%s) ORDER BY id DESC LIMIT 1",
+                    (user_id, sorted(spellings)))
+        existing = cur.fetchone()
+        if existing and existing[1] == verdict:
             return None
-        cur.execute(
-            """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at,
-                                       source_app, threat_score, analysis_complete)
-               VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s) RETURNING id""",
-            (user_id, url, verdict, str(result.get("summary", ""))[:4000], verdict, source_app,
-             float(result.get("threat_score", 0) or 0), bool(result.get("analysis_complete", True))))
-        scan_id = cur.fetchone()[0]
+        if existing:
+            scan_id = existing[0]
+            cur.execute("""UPDATE link_scans SET risk_level = %s, verdict = %s, reasons = %s, threat_score = %s,
+                                  analysis_complete = %s, analyzed_at = NOW(), source_app = COALESCE(%s, source_app)
+                           WHERE id = %s""", (verdict, verdict, reasons, score, complete, source_app, scan_id))
+            cur.execute("DELETE FROM scan_features WHERE scan_id = %s", (scan_id,))
+        else:
+            cur.execute(
+                """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at,
+                                           source_app, threat_score, analysis_complete)
+                   VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s) RETURNING id""",
+                (user_id, url, verdict, reasons, verdict, source_app, score, complete))
+            scan_id = cur.fetchone()[0]
     try:
         rows = scan_feature_rows(result, result.get("tier_analyzed", "V2_LINK_PIPELINE"))
         with db_cursor() as cur:
