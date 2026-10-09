@@ -576,48 +576,103 @@ def to_client_verdict(pipeline_res):
     return 'SAFE'
 
 
-_verdict_cache = {}
-_verdict_cache_lock = threading.Lock()
-VERDICT_CACHE_SECONDS = int(os.getenv("VERDICT_CACHE_SECONDS", "600"))
-VERDICT_CACHE_MAX = 2000
+import scan_jobs
+from core_engine import scan_progress
 
 
-def _verdict_cache_key(url):
-    """'https://www.x.org/' and 'http://x.org' are the same link."""
-    k = url.strip().lower().split("#")[0]
-    for prefix in ("https://", "http://"):
-        if k.startswith(prefix):
-            k = k[len(prefix):]
-    if k.startswith("www."):
-        k = k[4:]
-    return k.rstrip("/")
+def _scan_runner(url):
+    """
+    The one analysis every entry point shares: known-threat database first (instant), then the full pipeline.
+    Progress is reported to whichever scan job is listening.
+    """
+    scan_progress.report("threat_lists", "running")
+    try:
+        is_phishing, threat_type, db_source = phishing_importer.check_url_in_database(url)
+    except Exception:
+        is_phishing, threat_type, db_source = False, None, None
+    if is_phishing and not is_short_url(url):
+        scan_progress.report("threat_lists", "done", f"listed by {db_source}")
+        for stage in ("link_analysis", "reputation", "sandbox", "model"):
+            scan_progress.report(stage, "skipped", "already known as dangerous")
+        return {
+            "url": url, "verdict": "CRITICAL FRAUD / PHISHING", "threat_score": 100.0, "display_verdict": "Dangerous",
+            "decisive": True, "analysis_complete": True, "tier_0_match": True, "tier_analyzed": "TIER_0",
+            "summary": (f"\u2022 Threat Summary: This link is on a public phishing list ({db_source}, {threat_type}).\n"
+                        f"\u2022 Key Forensic Evidence: Known phishing link reported by {db_source}.\n"
+                        "\u2022 Recommended Action: Do not open this link."),
+            "telemetry": {"known_db_match": 1, "status": "KNOWN_THREAT", "phishing_feed_source": db_source,
+                          "threat_type": threat_type, "analysis_complete": True},
+        }
+    result = get_link_pipeline().analyze_url(url)
+    if isinstance(result, dict):
+        result.setdefault("tier_analyzed", "V2_LINK_PIPELINE")
+        result.setdefault("tier_0_match", False)
+    return result
+
+
+def _job_result_payload(result):
+    """What a client needs from a finished scan."""
+    return {
+        "verdict": to_client_verdict(result),
+        "display_verdict": result.get("display_verdict"),
+        "decisive": result.get("decisive"),
+        "threat_score": float(result.get("threat_score", 0) or 0),
+        "analysis_complete": bool(result.get("analysis_complete", True)),
+        "reasons": result.get("summary", ""),
+        "tier_0_match": bool(result.get("tier_0_match")),
+    }
+
+
+def _record_job_scan(user_id, url, result, source_app):
+    """
+    Save a scan made through a scan job (a tap in the Link Gate) to the user's history. A link that is already in that
+    user's history (for example from the notification scan of the same message) is not added a second time.
+    """
+    bare = url.rstrip("/")
+    verdict = to_client_verdict(result)
+    with db_cursor() as cur:
+        cur.execute("SELECT 1 FROM link_scans WHERE user_id = %s AND url = ANY(%s) LIMIT 1",
+                    (user_id, [url, bare, bare + "/"]))
+        if cur.fetchone():
+            return None
+        cur.execute(
+            """INSERT INTO link_scans (user_id, url, risk_level, reasons, verdict, analyzed_at,
+                                       source_app, threat_score, analysis_complete)
+               VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s) RETURNING id""",
+            (user_id, url, verdict, str(result.get("summary", ""))[:4000], verdict, source_app,
+             float(result.get("threat_score", 0) or 0), bool(result.get("analysis_complete", True))))
+        scan_id = cur.fetchone()[0]
+    try:
+        rows = scan_feature_rows(result, result.get("tier_analyzed", "V2_LINK_PIPELINE"))
+        with db_cursor() as cur:
+            cur.executemany("INSERT INTO scan_features (scan_id, feature_name, feature_value) VALUES (%s, %s, %s)",
+                            [(scan_id, n, v) for n, v in rows])
+    except Exception as e:
+        logging.getLogger("trustshield.scan").warning("could not store scan features: %s", e)
+    return scan_id
+
+
+def _on_scan_job_finished(job):
+    for user_id, source_app in list(job.watchers):
+        try:
+            _record_job_scan(user_id, job.url, job.result, source_app)
+        except Exception as e:
+            logging.getLogger("trustshield.scan").warning("could not record scan for user %s: %s", user_id, e)
+
+
+scan_jobs_manager = scan_jobs.JobManager(_scan_runner, slots=_analysis_slots, on_finish=_on_scan_job_finished)
 
 
 def run_link_pipeline(url):
     """
-    Run the link pipeline with a cap on concurrent analyses. Returns None if the server is busy.
-    A DECISIVE result is reused for the same link for a few minutes so repeated messages get an identical,
-    instant answer (and do not burn browser time or AI quota). Every receipt is still written to the history;
-    only the analysis is reused. Uncertain results are never cached, so they are re-checked next time.
+    Analyse a link through the shared scan jobs. Returns None if the server is busy or the analysis failed.
+    If the same link is already being analysed (by a notification scan, a Link Gate tap, the extension...) this joins
+    that job instead of starting a second one; a recent decisive answer is returned instantly.
     """
-    key = _verdict_cache_key(url)
-    now = time.time()
-    with _verdict_cache_lock:
-        hit = _verdict_cache.get(key)
-        if hit and now - hit[0] < VERDICT_CACHE_SECONDS:
-            return copy.deepcopy(hit[1])
-    if not _analysis_slots.acquire(timeout=20):
+    job, _ = scan_jobs_manager.start_or_join(url)
+    if not job.wait(scan_jobs.JOB_WAIT_SECONDS) or job.state != "done":
         return None
-    try:
-        result = get_link_pipeline().analyze_url(url)
-    finally:
-        _analysis_slots.release()
-    if result and result.get("decisive") is True:
-        with _verdict_cache_lock:
-            if len(_verdict_cache) >= VERDICT_CACHE_MAX:
-                _verdict_cache.pop(next(iter(_verdict_cache)))
-            _verdict_cache[key] = (now, copy.deepcopy(result))
-    return result
+    return scan_jobs_manager.result_copy(job)
 
 
 def scan_feature_rows(pipeline_res, tier_analyzed, db_source=None):
@@ -895,6 +950,59 @@ def save_link_scan():
 
     except Exception as e:
         return server_error(e)
+
+@app.route('/api/links/scan-jobs', methods=['POST'])
+@require_auth
+@rate_limit("scan_jobs", 60, 60, per_user=True)
+def start_scan_job():
+    """
+    Start a scan, or JOIN the scan of the same link that is already running (for example the one the notification
+    scanner started when the message arrived). Returns at once with the live stage progress; poll the job for updates.
+    A finished recent scan is returned immediately with its result.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        url = normalize_input_url(data.get('url'))
+        if not url:
+            return jsonify({"error": "A valid http(s) url is required"}), 400
+        source_app = sanitize_header_value(data.get('source_app', ''), 100) or None
+        record = data.get('record', True) is not False
+
+        job, how = scan_jobs_manager.start_or_join(url)
+        scan_id = None
+        if record:
+            if not job.add_watcher(g.user_id, source_app):         # the job already finished: record right now
+                try:
+                    scan_id = _record_job_scan(g.user_id, url, job.result, source_app)
+                except Exception as e:
+                    logging.getLogger("trustshield.scan").warning("could not record scan: %s", e)
+        snap = job.snapshot(joined=(how != "started"))
+        snap["how"] = how
+        if job.state == "done":
+            snap["result"] = _job_result_payload(job.result)
+            snap["scan_id"] = scan_id
+            return jsonify(snap), 200
+        return jsonify(snap), 202
+    except Exception as e:
+        return server_error(e)
+
+
+@app.route('/api/links/scan-jobs/<job_id>', methods=['GET'])
+@require_auth
+@rate_limit("scan_job_poll", 240, 60, per_user=True)
+def scan_job_status(job_id):
+    """Live progress of a scan job, and its result once it is done."""
+    try:
+        job = scan_jobs_manager.get(job_id)
+        if job is None:
+            return jsonify({"error": "Unknown or expired scan"}), 404
+        snap = job.snapshot()
+        if job.state == "done":
+            snap["result"] = _job_result_payload(job.result)
+        return jsonify(snap), 200
+    except Exception as e:
+        return server_error(e)
+
 
 @app.route('/api/links/explain', methods=['POST'])
 @require_auth

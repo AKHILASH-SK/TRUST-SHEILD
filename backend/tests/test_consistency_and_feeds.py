@@ -34,34 +34,109 @@ def test_a_confident_model_still_wins_on_a_clean_looking_page():
 
 # ---- the same link always gets the same answer --------------------------------------------------------------------
 
-def test_decisive_verdict_is_reused_for_every_spelling_of_the_link(monkeypatch):
-    calls = []
-
+def _fake_pipeline(monkeypatch, calls, result):
     class FakePipeline:
         def analyze_url(self, url):
             calls.append(url)
-            return {"verdict": "LEGITIMATE / CLEAN", "threat_score": 4.0, "decisive": True, "display_verdict": "Safe"}
-
+            return dict(result)
     monkeypatch.setattr(backend_app, "get_link_pipeline", lambda: FakePipeline())
-    backend_app._verdict_cache.clear()
+    monkeypatch.setattr(backend_app.phishing_importer, "check_url_in_database", lambda u: (False, None, None))
+    backend_app.scan_jobs_manager.clear()
+
+
+def test_decisive_verdict_is_reused_for_every_spelling_of_the_link(monkeypatch):
+    calls = []
+    _fake_pipeline(monkeypatch, calls, {"verdict": "LEGITIMATE / CLEAN", "threat_score": 4.0, "decisive": True,
+                                        "display_verdict": "Safe"})
     first = backend_app.run_link_pipeline("https://sqlite.org/")
     again = backend_app.run_link_pipeline("http://www.sqlite.org")
     assert first == again and len(calls) == 1
 
 
-def test_uncertain_verdict_is_never_cached(monkeypatch):
+def test_uncertain_verdict_is_kept_only_briefly(monkeypatch):
+    import scan_jobs
     calls = []
-
-    class FakePipeline:
-        def analyze_url(self, url):
-            calls.append(url)
-            return {"verdict": "SUSPICIOUS", "threat_score": 55.0, "decisive": False, "display_verdict": "Unverified - open with care"}
-
-    monkeypatch.setattr(backend_app, "get_link_pipeline", lambda: FakePipeline())
-    backend_app._verdict_cache.clear()
+    _fake_pipeline(monkeypatch, calls, {"verdict": "SUSPICIOUS", "threat_score": 55.0, "decisive": False,
+                                        "display_verdict": "Unverified - open with care"})
+    monkeypatch.setattr(scan_jobs, "TTL_UNVERIFIED", 0)
     backend_app.run_link_pipeline("https://unsure.example/")
     backend_app.run_link_pipeline("https://unsure.example/")
     assert len(calls) == 2
+
+
+# ---- one scan per link: a second asker joins the running job and sees the same progress --------------------------------
+
+def test_a_second_asker_joins_the_running_scan_instead_of_starting_again():
+    import threading
+    import time
+    import scan_jobs
+    from core_engine import scan_progress
+
+    runs, gate = [], threading.Event()
+
+    def runner(url):
+        runs.append(url)
+        scan_progress.report("threat_lists", "done")
+        scan_progress.report("sandbox", "running", "opening the page")
+        gate.wait(5)
+        return {"display_verdict": "Safe", "verdict": "LEGITIMATE / CLEAN", "decisive": True}
+
+    manager = scan_jobs.JobManager(runner)
+    first, how1 = manager.start_or_join("https://shop.example/")
+    time.sleep(0.2)
+    second, how2 = manager.start_or_join("http://www.shop.example")          # e.g. the user taps while the scan runs
+    assert (how1, how2) == ("started", "joined") and first is second
+    snap = second.snapshot(joined=True)
+    assert snap["joined"] is True and 0 < snap["progress"] < 100
+    stages = {s["id"]: s["status"] for s in snap["stages"]}
+    assert stages["threat_lists"] == "done" and stages["sandbox"] == "running" and stages["verdict"] == "pending"
+    gate.set()
+    assert first.wait(5) and first.state == "done" and len(runs) == 1
+    assert first.snapshot()["progress"] == 100
+    _, how3 = manager.start_or_join("https://shop.example/")
+    assert how3 == "cached" and len(runs) == 1
+
+
+def test_a_failing_scan_never_leaves_a_job_hanging():
+    import scan_jobs
+
+    def runner(url):
+        raise RuntimeError("boom")
+
+    job, _ = scan_jobs.JobManager(runner).start_or_join("https://x.example/")
+    assert job.wait(5) and job.state == "error" and job.error
+
+
+def test_watchers_are_recorded_when_the_job_finishes_and_late_askers_are_told_to_record_now():
+    import scan_jobs
+    recorded = []
+    manager = scan_jobs.JobManager(lambda url: {"display_verdict": "Safe", "decisive": True},
+                                   on_finish=lambda job: recorded.extend(job.watchers))
+    job, _ = manager.start_or_join("https://w.example/")
+    assert job.wait(5)
+    assert job.add_watcher(7, "WhatsApp") is False           # already finished: the caller records immediately
+
+
+def test_known_phishing_link_answers_instantly_and_skips_the_slow_stages(monkeypatch):
+    monkeypatch.setattr(backend_app.phishing_importer, "check_url_in_database", lambda u: (True, "phishing", "openphish"))
+    backend_app.scan_jobs_manager.clear()
+    job, _ = backend_app.scan_jobs_manager.start_or_join("https://known-bad.example/login")
+    assert job.wait(10) and job.result["display_verdict"] == "Dangerous" and job.result["tier_0_match"] is True
+    states = {s["id"]: s["status"] for s in job.snapshot()["stages"]}
+    assert states["sandbox"] == "skipped" and states["threat_lists"] == "done"
+
+
+def test_pipeline_reports_its_stages_to_the_listening_job():
+    from core_engine import scan_progress
+    from core_engine.link_threat_pipeline import LinkThreatPipeline
+    seen = []
+    token = scan_progress.set_sink(lambda stage, status, detail="": seen.append((stage, status)))
+    try:
+        LinkThreatPipeline().analyze_url("https://www.google.com/")        # trusted domain: short path
+    finally:
+        scan_progress.reset_sink(token)
+    assert ("link_analysis", "done") in seen and ("threat_lists", "done") in seen and ("reputation", "done") in seen
+    assert ("sandbox", "skipped") in seen
 
 
 # ---- evidence rows for scan_features ----------------------------------------------------------------------------------

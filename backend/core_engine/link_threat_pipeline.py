@@ -18,6 +18,7 @@ import tldextract
 from .url_heuristics import parse_url_heuristics
 from .threat_db import get_threat_db, ThreatIntelDB
 from .sandbox_engine import VirtualSandboxAnalyzer
+from .scan_progress import report as _progress
 from .final_decision_engine import FinalDecisionEngine
 
 logger = logging.getLogger(__name__)
@@ -194,14 +195,18 @@ class LinkThreatPipeline:
         # ----------------------------------------------------
         # Stage 1: Fast Heuristics (< 1 ms) - NEVER STOPS BY ITSELF
         # ----------------------------------------------------
+        _progress("link_analysis", "running")
         heuristics = parse_url_heuristics(clean_url)
         heuristic_risk = heuristics.get("heuristic_risk_score", 0.0)
         heuristic_flags = heuristics.get("heuristic_flags", [])
+        _progress("link_analysis", "done", f"{len(heuristic_flags)} warning sign(s)" if heuristic_flags else "no warning signs")
 
         # ----------------------------------------------------
         # Stage 2: Local Threat DB Check (< 2 ms)
         # ----------------------------------------------------
+        _progress("threat_lists", "running")
         is_known_malicious = self.threat_db.check_indicator(clean_url)
+        _progress("threat_lists", "done", "found in a threat list" if is_known_malicious else "not listed")
         if is_known_malicious:
             # Match Found in Local Threat DB: Instant Block and stop analysis
             known = self.decision_engine.evaluate(
@@ -219,6 +224,7 @@ class LinkThreatPipeline:
         # ----------------------------------------------------
         # Stage 2.5: Brand fast path + VirusTotal reputation
         # ----------------------------------------------------
+        _progress("reputation", "running")
         vt_risk_score = 35.0  # Default baseline for unverified/new domains
         reg_domain = tldextract.extract(clean_url).registered_domain.lower()
         user_content = is_user_content_host(clean_url)
@@ -247,7 +253,10 @@ class LinkThreatPipeline:
         elif is_brand:
             vt_risk_score = 0.0
 
+        _progress("reputation", "done", "trusted domain" if (is_brand or vt_whitelisted) and not vt_malicious else f"risk {int(vt_risk_score)}/100")
         if (is_brand or vt_whitelisted) and not vt_malicious:
+            _progress("sandbox", "skipped", "trusted domain")
+            _progress("model", "skipped", "trusted domain")
             return {
                 "url": clean_url,
                 "threat_score": 0.0,
@@ -275,8 +284,11 @@ class LinkThreatPipeline:
         # ----------------------------------------------------
         sandbox_res: Dict[str, Any] = {}
         if not skip_sandbox:
+            _progress("sandbox", "running", "opening the page")
             sandbox_res = self.sandbox.analyze_link_in_sandbox(clean_url)
+            _progress("sandbox", "done", "page could not be opened" if sandbox_res.get("sandbox_unreachable") else "page inspected")
         else:
+            _progress("sandbox", "skipped")
             sandbox_res = {
                 "sandbox_has_password_field": 0,
                 "external_form_action": 0,
@@ -295,11 +307,13 @@ class LinkThreatPipeline:
         # Stage 4: Trained ML classifier (page model, or lexical model when the page could not be opened)
         # ----------------------------------------------------
         ml_result = None
+        _progress("model", "running")
         try:
             from ml.model_runtime import get_runtime
             ml_result = get_runtime().score(clean_url, sandbox_res, use_page=not skip_sandbox)
         except Exception as e:
             logger.debug(f"ML stage skipped: {e}")
+        _progress("model", "done", f"{int(ml_result['probability'] * 100)}% risk" if ml_result else "not available")
         page_text = sandbox_res.get("_text", "") or ""
         # raw page evidence was only needed for ML; never let it leave the pipeline
         sandbox_res.pop("_html", None)
@@ -311,6 +325,7 @@ class LinkThreatPipeline:
         # ----------------------------------------------------
         # Stage 5: Final fusion (ML verdict + hard security rules)
         # ----------------------------------------------------
+        _progress("verdict", "running", "combining the evidence")
         final_result = self.decision_engine.evaluate(
             url=clean_url,
             nlp_score=nlp_score,
