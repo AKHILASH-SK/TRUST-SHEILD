@@ -132,6 +132,31 @@ def is_user_content_host(url_or_host: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in USER_CONTENT_HOSTS)
 
 
+# Collaboration / document / form platforms of established vendors. The main branch trusted all of them; a page on them is
+# written by someone else, so this is a deliberate trade-off (see TRUST_COLLAB_PLATFORMS): the platform's reputation (our
+# list or VirusTotal) is accepted and the sandbox is skipped. Site builders and script hosts (sites.google.com,
+# script.google.com, *.github.io, *.blogspot.com ...), file/CDN hosts and shorteners are NOT here: every tenant there is a
+# different website, so they are always sandboxed. Exact addresses on a phishing list are still blocked first.
+COLLAB_PLATFORM_HOSTS = {
+    "docs.google.com", "drive.google.com", "forms.google.com", "forms.gle",
+    "forms.office.com", "forms.microsoft.com", "sharepoint.com", "onedrive.live.com", "1drv.ms", "aka.ms",
+    "typeform.com", "jotform.com", "surveymonkey.com", "airtable.com", "forms.zoho.com", "zendesk.com",
+    "notion.so", "dropbox.com", "box.com", "trello.com", "figma.com", "canva.com", "medium.com",
+    "github.com", "gitlab.com", "bitbucket.org",
+}
+TRUST_COLLAB_PLATFORMS = os.getenv("TRUST_COLLAB_PLATFORMS", "on").lower() != "off"
+
+
+def is_collab_platform(url_or_host: str) -> bool:
+    """A page on a trusted collaboration platform (and not a link that forwards the visitor to another domain)."""
+    if not TRUST_COLLAB_PLATFORMS:
+        return False
+    host = extract_host(url_or_host)
+    if not host or has_foreign_redirect(url_or_host):
+        return False
+    return any(host == h or host.endswith("." + h) for h in COLLAB_PLATFORM_HOSTS)
+
+
 def _load_top_domains() -> set:
     """Registered domains of the most popular sites (Tranco top 6000, minus hosting platforms and domains that appear in
     public phishing lists). Built offline; see core_engine/data/top_domains.txt. Checked locally, so it needs no API call."""
@@ -311,8 +336,9 @@ class LinkThreatPipeline:
         _progress("reputation", "running")
         vt_risk_score = 35.0  # Default baseline for unverified/new domains
         reg_domain = tldextract.extract(clean_url).registered_domain.lower()
-        user_content = is_user_content_host(clean_url)
-        is_brand = is_brand_fast_path(clean_url)
+        collab = is_collab_platform(clean_url)
+        user_content = is_user_content_host(clean_url) and not collab
+        is_brand = is_brand_fast_path(clean_url) or collab
         trusted_view = is_trusted_view_page(clean_url)
         vt_malicious = False
         vt_whitelisted = False
@@ -353,11 +379,11 @@ class LinkThreatPipeline:
                 "decisive": True,
                 "analysis_complete": True,
                 "summary": (
-                    (f"• Threat Summary: This is a document or repository page on '{reg_domain}', a trusted service.\n"
-                     f"• Key Forensic Evidence: The page only displays content and cannot collect a login. Its text is written by "
-                     f"someone else, so do not trust links or requests inside it.\n"
-                     f"• Recommended Action: Safe to open; be careful with anything you are asked to do inside it.")
-                    if trusted_view and not is_brand else
+                    (f"• Threat Summary: This is a page on '{reg_domain}', a trusted document, form or collaboration platform.\n"
+                     f"• Key Forensic Evidence: The platform is an established service and the link is not on any phishing list. "
+                     f"What is inside (a document, a form, a repository) is written by someone else and was not inspected.\n"
+                     f"• Recommended Action: Safe to open; do not enter passwords, card details or codes into a form you did not expect.")
+                    if (trusted_view or collab) else
                     (f"• Threat Summary: Domain '{reg_domain}' is an established, verified global service.\n"
                      f"• Key Forensic Evidence: Recognised as a top-ranked trusted domain (own site or sub-domain).\n"
                      f"• Recommended Action: No action required. Safe to browse.")

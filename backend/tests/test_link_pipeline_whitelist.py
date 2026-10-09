@@ -78,17 +78,17 @@ def test_brand_skips_sandbox_with_zero_score(pipeline):
     assert pipeline.calls == []
 
 
-def test_user_content_goes_through_sandbox(pipeline):
-    r = pipeline.analyze_url("https://docs.google.com/forms/d/abc")
-    assert pipeline.calls, "docs.google.com must be sandboxed"
+def test_site_builders_go_through_the_sandbox(pipeline):
+    # every tenant of a site builder is a different website: the platform's reputation says nothing about the page
+    r = pipeline.analyze_url("https://sites.google.com/view/fake-login")
+    assert pipeline.calls, "sites.google.com must be sandboxed"
     assert r["telemetry"].get("status") != "WHITELISTED"
 
 
-def test_vt_rank_does_not_whitelist_user_content(pipeline):
+def test_vt_rank_does_not_whitelist_site_builders_or_free_hosting(pipeline):
     pipeline.good_domain_checker = FakeVT({"is_whitelisted": True, "vt_risk_score": 0.0, "malicious_count": 0})
-    pipeline.analyze_url("https://evil.sharepoint.com/login")
+    pipeline.analyze_url("https://evil.vercel.app/login")
     assert pipeline.calls
-    assert not pipeline.is_globally_whitelisted("https://evil.sharepoint.com/login")
 
 
 def test_vt_rank_whitelists_unknown_non_user_content(pipeline):
@@ -240,3 +240,41 @@ def test_the_top_domain_list_never_vouches_for_hosting_platforms():
 def test_a_trusted_site_forwarding_to_another_domain_is_still_sandboxed(url):
     assert ltp.has_foreign_redirect(url) and not is_brand_fast_path(url)
     assert not ltp.has_foreign_redirect("https://accounts.google.com/signin?continue=https://mail.google.com/")
+
+
+@pytest.mark.parametrize("url", [
+    "https://docs.google.com/forms/d/e/1FAIpQLSeIbAwwDmGz1fDpICAXPkFVG9wbWPjcg1BpphK84NgkAI48UA/viewform",
+    "https://forms.gle/abc123", "https://forms.office.com/r/abc", "https://acme.sharepoint.com/sites/x/doc.aspx",
+    "https://www.typeform.com/to/abc", "https://github.com/a/b/releases/download/v1/x.zip", "https://medium.com/@x/post",
+])
+def test_pages_on_trusted_collaboration_platforms_skip_the_sandbox(pipeline, url):
+    assert ltp.is_collab_platform(url)
+    out = pipeline.analyze_url(url)
+    assert out["display_verdict"] == "Safe" and pipeline.calls == []
+
+
+@pytest.mark.parametrize("url", [
+    "https://sites.google.com/view/fake-login", "https://script.google.com/macros/s/abc/exec", "https://user.github.io/",
+    "https://x.blogspot.com/", "https://app.vercel.app/", "https://bit.ly/abc", "https://storage.googleapis.com/b/x.html",
+    "https://docs.google.com.evil.xyz/forms/d/e/1/viewform",
+    "https://www.google.com/url?q=https://evil.example/", "https://forms.gle/x?continue=https://evil.example/login",
+])
+def test_site_builders_shorteners_file_hosts_and_forwarding_links_stay_sandboxed(pipeline, url):
+    assert not ltp.is_collab_platform(url)
+    pipeline.analyze_url(url)
+    assert pipeline.calls == [url]
+
+
+def test_trusting_collaboration_platforms_can_be_switched_off(pipeline, monkeypatch):
+    monkeypatch.setattr(ltp, "TRUST_COLLAB_PLATFORMS", False)
+    url = "https://forms.gle/abc123"
+    assert not ltp.is_collab_platform(url)
+    pipeline.analyze_url(url)
+    assert pipeline.calls == [url]
+
+
+def test_virustotal_consensus_still_beats_a_trusted_platform(pipeline):
+    pipeline.good_domain_checker = FakeVT({"vt_risk_score": 95.0, "malicious_count": 20, "suspicious_count": 0,
+                                           "total_engines": 70, "detection_ratio": 0.3, "is_whitelisted": False})
+    pipeline.analyze_url("https://forms.gle/abc123")
+    assert pipeline.calls == ["https://forms.gle/abc123"]
