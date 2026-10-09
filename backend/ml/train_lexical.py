@@ -77,9 +77,10 @@ def main() -> None:
     args = ap.parse_args()
     rng = random.Random(args.seed)
     t0 = time.time()
+    trainlib.start_log("train_lexical")
 
     # ---- 1. assemble labelled URLs ------------------------------------------------------------
-    print("[1/6] loading datasets ...", flush=True)
+    print("[1/6] loading datasets (malicious feeds, Tranco, hosted sites) ...", flush=True)
     mal_sources = datasets.load_all_malicious(args.refresh, include_phiusiil=True)
     mal: List[str] = []
     for name, urls in mal_sources.items():
@@ -144,7 +145,7 @@ def main() -> None:
 
     # ---- 2. features ---------------------------------------------------------------------------
     print("[3/6] extracting features ...", flush=True)
-    X = featurize(urls, args.jobs)
+    X = trainlib.cached_features(urls, lambda u: featurize(u, args.jobs), "lexical_X", FEATURE_VERSION)
     split = np.array([trainlib.split_of(g) for g in groups])
     tr, va, te = split == "train", split == "val", split == "test"
     print(f"   train {tr.sum():,d}  val {va.sum():,d}  test {te.sum():,d}  (split by site, no site on both sides)", flush=True)
@@ -185,7 +186,7 @@ def main() -> None:
         "categorical": ["tld_id"],
     })
     trainlib.save_url_hashes("lexical", urls)   # lets ml.evaluate_live pick URLs the model never trained on
-    print(f"\n[6/6] saved {path}\n   total time {time.time() - t0:.0f}s", flush=True)
+    print(f"\n[6/6] saved {path}\n   total time {trainlib.fmt_secs(time.time() - t0)}", flush=True)
 
 
 if __name__ == "__main__":

@@ -208,6 +208,8 @@ def main() -> None:
           f"{sum(1 for j in jobs if j[1] == 0):,d} benign)", flush=True)
 
     lock = threading.Lock()
+    started_at = time.time()
+    total_jobs = [len(jobs)]                      # grows when the extra internal links are queued
     stats = collections.Counter()
     deadline = time.time() + args.max_minutes * 60 if args.max_minutes else None
     stop = threading.Event()
@@ -221,7 +223,14 @@ def main() -> None:
             done = sum(stats.values())
             if done % 25 == 0:
                 summary = ", ".join(f"{'mal' if k[0] else 'ben'}/{k[1]}={v}" for k, v in sorted(stats.items()))
-                print(f"[collect] {done:,d} done  ({summary})", flush=True)
+                elapsed = max(1.0, time.time() - started_at)
+                rate = done / elapsed * 60
+                left = max(0, total_jobs[0] - done)
+                eta = left / (done / elapsed) if done else 0
+                usable = sum(v for k, v in stats.items() if k[1] == "ok")
+                print(f"[collect] {done:,d}/{total_jobs[0]:,d} ({100 * done / max(1, total_jobs[0]):.0f}%)  "
+                      f"{rate:,.1f} pages/min  usable {usable:,d} ({100 * usable / done:.0f}%)  "
+                      f"elapsed {int(elapsed // 60)}m  about {int(eta // 60)}m left   ({summary})", flush=True)
 
     def worker(job: Tuple[str, int, str], fh) -> None:
         if stop.is_set() or (deadline and time.time() > deadline):
@@ -254,7 +263,8 @@ def main() -> None:
                     if j[0] not in seen_extra:
                         seen_extra.add(j[0])
                         deep_jobs.append(j)
-                print(f"[collect] visiting {len(deep_jobs):,d} deep links from benign sites", flush=True)
+                total_jobs[0] += len(deep_jobs)
+                print(f"[collect] visiting {len(deep_jobs):,d} extra internal links of the reachable benign sites", flush=True)
                 with cf.ThreadPoolExecutor(max_workers=args.workers) as pool:
                     try:
                         list(pool.map(lambda j: worker(j, fh), deep_jobs))

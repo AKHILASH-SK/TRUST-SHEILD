@@ -222,3 +222,35 @@ def test_hosted_benign_loader_survives_a_rate_limit(monkeypatch, tmp_path):
 
     monkeypatch.setattr(datasets.requests, "get", lambda *a, **k: Limited())
     assert datasets.load_hosted_benign(refresh=True, target=10) == []
+
+
+# ---- training progress helpers -------------------------------------------------------------------------------------------------
+
+def test_progress_clock_and_log_file(tmp_path, monkeypatch, capsys):
+    import sys
+    from ml import trainlib
+    assert trainlib.fmt_secs(5) == "5s" and trainlib.fmt_secs(125) == "2m05s" and trainlib.fmt_secs(7300) == "2h01m"
+    log = tmp_path / "run.log"
+    tee = trainlib._Tee(open(log, "w", encoding="utf-8"))
+    tee.write("hello\nsecond line\n")
+    tee.write("partial ")
+    tee.write("line\n")
+    tee.flush()
+    text = log.read_text(encoding="utf-8")
+    assert text.count("[+") == 3 and "hello" in text and "partial line" in text      # one clock per line, none mid-line
+
+
+def test_feature_cache_computes_once_then_loads_from_disk(tmp_path, monkeypatch):
+    import numpy as np
+    from ml import trainlib
+    monkeypatch.setattr(trainlib.os.path, "dirname", lambda p: str(tmp_path))
+    calls = []
+
+    def featurize(urls):
+        calls.append(len(urls))
+        return np.arange(len(urls) * 3, dtype=np.float32).reshape(len(urls), 3)
+
+    first = trainlib.cached_features(["https://a.example/", "https://b.example/"], featurize, "t", 2)
+    second = trainlib.cached_features(["https://a.example/", "https://b.example/"], featurize, "t", 2)
+    changed = trainlib.cached_features(["https://a.example/", "https://c.example/"], featurize, "t", 2)
+    assert calls == [2, 2] and (first == second).all() and changed.shape == (2, 3)     # same list -> cached; new list -> recomputed

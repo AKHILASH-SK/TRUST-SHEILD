@@ -18,6 +18,7 @@ param(
     [int]$Benign = 3000,
     [int]$Workers = 8,
     [int]$HostedBenign = 0,
+    [int]$DeepLinks = -1,
     [switch]$OnlyHosted
 )
 
@@ -30,6 +31,11 @@ if ($OnlyHosted) {
     $Benign = 0
     if ($HostedBenign -le 0) { $HostedBenign = 1200 }
 }
+# Extra internal pages visited per reachable benign site: 2 normally, 1 for the hosted run (keeps it about half as long).
+if ($DeepLinks -lt 0) { if ($OnlyHosted) { $DeepLinks = 1 } else { $DeepLinks = 2 } }
+
+# Each browser needs roughly 0.4 GB. Docker Desktop has about 8 GB here, so 8 browsers is the sweet spot.
+if ($Workers -gt 10) { Write-Host "More than 10 browsers can exhaust memory; using 10." -ForegroundColor Yellow; $Workers = 10 }
 
 docker info *> $null
 if ($LASTEXITCODE -ne 0) {
@@ -50,6 +56,6 @@ $refresh = @()
 if (-not $OnlyHosted) { $refresh += "--refresh" }
 
 Write-Host "Collecting: $Malicious malicious + $Benign benign + $HostedBenign hosted-benign pages with $Workers browsers. Output: backend\ml\data\pages.jsonl" -ForegroundColor Cyan
-docker run --rm --security-opt no-new-privileges --shm-size=2g --memory=6g @envArgs -w /srv/backend `
+docker run --rm --security-opt no-new-privileges --shm-size=2g --memory=7g @envArgs -w /srv/backend `
     -v "${dataDir}:/srv/backend/ml/data" trustshield-backend `
-    python -m ml.collect_dataset --n-malicious $Malicious --n-benign $Benign --n-hosted-benign $HostedBenign --workers $Workers @refresh
+    python -m ml.collect_dataset --n-malicious $Malicious --n-benign $Benign --n-hosted-benign $HostedBenign --deep-links $DeepLinks --workers $Workers @refresh

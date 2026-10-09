@@ -141,9 +141,124 @@ def lgbm_params(n_rows: int) -> Dict[str, Any]:
     )
 
 
+def fmt_secs(seconds: float) -> str:
+    seconds = int(max(0, seconds))
+    if seconds < 90:
+        return f"{seconds}s"
+    if seconds < 5400:
+        return f"{seconds // 60}m{seconds % 60:02d}s"
+    return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+
+
+class Stages:
+    """Prints '[2/6] text   (step took 12s, total 1m30s)' lines so a long run always shows where it is."""
+
+    def __init__(self, total: int):
+        self.total, self.t0, self.last, self.n = total, time.time(), time.time(), 0
+
+    def step(self, text: str) -> None:
+        now = time.time()
+        if self.n:
+            print(f"      done in {fmt_secs(now - self.last)}  (total so far {fmt_secs(now - self.t0)})", flush=True)
+        self.n += 1
+        self.last = now
+        print(f"[{self.n}/{self.total}] {text}", flush=True)
+
+    def finish(self) -> None:
+        now = time.time()
+        print(f"      done in {fmt_secs(now - self.last)}  (TOTAL {fmt_secs(now - self.t0)})", flush=True)
+
+
+class _Tee:
+    """Copies everything printed to a log file and puts a running clock at the start of every line: [+2m10s] text."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+        self.t0 = time.time()
+        self.at_line_start = True
+
+    def _stamp(self, data: str) -> str:
+        out = []
+        for chunk in data.splitlines(True):
+            if self.at_line_start and chunk.strip():
+                out.append(f"[+{fmt_secs(time.time() - self.t0):>6}] ")
+            out.append(chunk)
+            self.at_line_start = chunk.endswith("\n")
+        return "".join(out)
+
+    def write(self, data):
+        stamped = self._stamp(data)
+        for s in self.streams:
+            try:
+                s.write(stamped)
+                s.flush()
+            except Exception:
+                pass
+        return len(data)
+
+    def flush(self):
+        for s in self.streams:
+            try:
+                s.flush()
+            except Exception:
+                pass
+
+    def isatty(self):
+        return False
+
+
+def start_log(name: str) -> str:
+    """Everything printed from now on is ALSO saved to backend/ml/data/logs/<name>_<time>.log (kept after the run)."""
+    import sys
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    path = os.path.join(log_dir, f"{name}_{time.strftime('%Y%m%d-%H%M%S')}.log")
+    fh = open(path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = _Tee(sys.__stdout__, fh)
+    print(f"[log] this run is also saved to {path}", flush=True)
+    return path
+
+
+def progress_callback(every: int = 50, patience: int = 100):
+    """LightGBM callback: a readable progress line every `every` trees (validation loss, best so far, speed, time)."""
+    t0 = time.time()
+
+    def _callback(env) -> None:
+        it = env.iteration + 1
+        if it % every and it != 1:
+            return
+        loss = env.evaluation_result_list[0][2] if env.evaluation_result_list else float("nan")
+        best = getattr(env.model, "best_iteration", 0) or 0
+        speed = it / max(1e-6, time.time() - t0)
+        print(f"      tree {it:>4d}   validation loss {loss:.4f}   {speed:,.0f} trees/s   elapsed {fmt_secs(time.time() - t0)}"
+              f"   (stops after {patience} trees without improvement)", flush=True)
+
+    _callback.order = 30
+    return _callback
+
+
+def cached_features(urls: List[str], featurize_fn, tag: str, version: int):
+    """Feature matrix for exactly this list of URLs, computed once and then loaded from disk (re-runs are instant)."""
+    import hashlib
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    key = hashlib.sha256(("\n".join(urls) + f"|v{version}").encode("utf-8", errors="replace")).hexdigest()[:20]
+    path = os.path.join(cache_dir, f"{tag}_{key}.npy")
+    if os.path.exists(path):
+        print(f"      loaded the saved feature matrix ({os.path.basename(path)}): no need to recompute", flush=True)
+        return np.load(path)
+    matrix = featurize_fn(urls)
+    np.save(path, matrix)
+    print(f"      saved the feature matrix for next time ({os.path.basename(path)})", flush=True)
+    return matrix
+
+
 def fit_lgbm(X_tr, y_tr, X_val, y_val, categorical: Optional[List[int]] = None, w_tr=None, w_val=None):
     import lightgbm as lgb
-    clf = lgb.LGBMClassifier(class_weight="balanced", **lgbm_params(len(y_tr)))
+    params = lgbm_params(len(y_tr))
+    print(f"      training LightGBM on the CPU ({os.cpu_count()} threads): {len(y_tr):,d} rows, up to {params['n_estimators']} trees. "
+          f"(Fitting takes seconds to a few minutes; a GPU would not make it meaningfully faster at this size.)", flush=True)
+    clf = lgb.LGBMClassifier(class_weight="balanced", **params)
     kwargs = {}
     if w_tr is not None:
         kwargs["sample_weight"] = w_tr
@@ -151,7 +266,7 @@ def fit_lgbm(X_tr, y_tr, X_val, y_val, categorical: Optional[List[int]] = None, 
     clf.fit(
         X_tr, y_tr, eval_set=[(X_val, y_val)], eval_metric="binary_logloss",
         categorical_feature=categorical or "auto",
-        callbacks=[lgb.early_stopping(100, verbose=False), lgb.log_evaluation(100)],
+        callbacks=[lgb.early_stopping(100, verbose=False), progress_callback(50, 100)],
         **kwargs,
     )
     return clf

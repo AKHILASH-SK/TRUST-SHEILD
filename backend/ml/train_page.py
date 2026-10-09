@@ -47,6 +47,7 @@ def main() -> None:
     args = ap.parse_args()
     rng = random.Random(args.seed)
     t0 = time.time()
+    trainlib.start_log("train_page")
 
     lex_path = os.path.join(trainlib.MODEL_DIR, "lexical_model.joblib")
     if not os.path.exists(lex_path):
