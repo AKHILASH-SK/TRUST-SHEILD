@@ -75,10 +75,31 @@ def show_event(event):
         say(f"  IP ROTATION DETECTED            : {event['rotation'].get('message')}", "red")
 
 
+def switch_demo_mode(on, minutes=30):
+    """Ask the RUNNING backend to switch demo mode on/off (key from backend/lab/data/toggle_token). Returns True when it is on/off as asked."""
+    token_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toggle_token")
+    try:
+        token = open(token_file, encoding="utf-8").read().strip()
+        res = requests.post(f"{API}/api/lab/mode", json={"on": on, "minutes": minutes}, headers={"X-Lab-Token": token}, timeout=15)
+        return res.status_code == 200
+    except Exception:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pause", action="store_true")
+    ap.add_argument("--off", action="store_true", help="only switch demo mode off on the running backend, then stop")
+    ap.add_argument("--minutes", type=int, default=30, help="demo mode switches itself off after this many minutes")
     args = ap.parse_args()
+    if args.off:
+        say("demo mode switched off." if switch_demo_mode(False) else "could not switch demo mode off (is the backend running?).", "yellow")
+        return
+    if not switch_demo_mode(True, args.minutes):
+        say("Could not switch demo mode on. The backend must be running with the latest code: close its window once, start it again "
+            "(python app.py), then run this again.", "red")
+        return
+    say(f"Demo mode is ON for {args.minutes} minutes (it switches itself off). The backend keeps running; nothing is restarted.", "yellow")
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
     world = LabWorld()
     requests.get(f"{API}/api/gateway/events?clear=1", timeout=10)

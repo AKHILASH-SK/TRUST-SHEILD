@@ -13,7 +13,7 @@ powershell -ExecutionPolicy Bypass -File tools\run_all_checks.ps1 -Quick
 
 You should end with a green **ALL CHECKS PASSED**. (Without `-Quick` it takes about 5 minutes and tests everything.)
 Red **FAILED** = scroll up, find the line with `FAILED` or `FAIL`, and send it to Akhilash.
-*Do not run this while the demo windows (section C) are open.*
+*Run it before the demo, not in the middle of it (it keeps the machine busy for about a minute).*
 
 ## B. Start the normal backend
 
@@ -26,15 +26,17 @@ The SOC portal is at `http://localhost:8000/portal/`.
 
 ## C. The impersonation demo (the "man in the middle" story, about 3 minutes)
 
-1. Close the backend window from section B (Ctrl+C), so the demo can use port 8000.
-2. In PowerShell:
+**The backend is never restarted or closed by the demo.** Keep it running from section B (so you can show the SOC portal first), then:
 ```
 cd C:\Users\akhil\AndroidStudioProjects\TrustShield\backend
 powershell -ExecutionPolicy Bypass -File lab\run_demo.ps1 -Pause
 ```
-It opens two windows (the lab backend and the mail gateway) and plays six scenes in this window. Press **Enter** to go to the next scene.
-3. Open `http://localhost:8000/portal/`, press **Ctrl+F5**, click **Mail Gateway** in the left menu. Watch it fill while the scenes run.
-4. When finished: close the two extra windows. For normal use start the backend again (section B). **Never scan real links while the demo windows are open.**
+- If the backend is already running, the demo uses it as it is. If it isn't running, the demo starts it in its own window and leaves it open.
+- The mail gateway is started in its own window only if it isn't running already. Then six scenes play in this window; press **Enter** for the next one.
+- The demo switches the running backend into *demo mode* for 30 minutes (simulated bank, rotating DNS, 127.0.0.x senders). It switches itself off again. To switch it off at once: `python -m lab.scenes --off`.
+- Open `http://localhost:8000/portal/`, press **Ctrl+F5**, click **Mail Gateway**. It fills while the scenes run, and **the results stay on screen afterwards**.
+- *One-time note:* if the backend window was opened BEFORE the latest update, close that window once and start it again (`python app.py`). After that you never need to restart it for the demo.
+- To show the lab emails in Email Analysis, upload the files from `backend\lab\samples` within the 30 minutes after the demo.
 
 | Scene | What you see | One sentence to say |
 |---|---|---|

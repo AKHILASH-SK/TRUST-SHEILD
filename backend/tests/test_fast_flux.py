@@ -63,7 +63,8 @@ def test_the_lab_dns_server_makes_the_difference_visible_over_real_udp():
 def test_email_pipeline_infrastructure_skips_trusted_hosting_and_ip_links_and_flags_rotation(monkeypatch):
     from core_engine import infrastructure
     from lab import fastflux_dns
-    monkeypatch.setenv("TRUSTSHIELD_LAB_MODE", "1")
+    from core_engine import email_forensics
+    monkeypatch.setattr(email_forensics, "LAB_MODE", True)          # demo mode (the switch infrastructure.py follows)
     stop = fastflux_dns.start("127.0.0.1", 5353)
     try:
         out = infrastructure.inspect_links([

@@ -1267,20 +1267,99 @@ _GATEWAY_FIELDS = ("id", "time", "connecting_ip", "mail_from", "claimed_domain",
                    "action", "case_id", "evidence_sha256", "spf", "dkim", "dmarc", "stored_as", "location", "isp", "network_flags", "lat", "lon")
 
 
-def _gateway_feed_allowed():
-    """The gateway feed is for the demo lab or an administrator: lab mode, or the correct X-Admin-Key."""
+# ---- demo (lab) mode that a RUNNING backend can switch on and off, so the presentation never needs a restart ----------------------
+# The lab (backend/lab) simulates a bank, an attacker and rotating DNS on this laptop. It must never be reachable by anyone else, so
+# switching it needs a secret key that is only written to a file on this machine (backend/lab/data/toggle_token). Someone who can
+# only reach the web address cannot read that file. The mode switches itself off after a while.
+LAB_TOGGLE_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lab", "data", "toggle_token")
+LAB_STATE = {"until": 0.0, "used": False, "timer": None, "dns": False}
+LAB_DEFAULT_MINUTES = 30
+
+
+def _lab_token():
+    try:
+        os.makedirs(os.path.dirname(LAB_TOGGLE_TOKEN_FILE), exist_ok=True)
+        with open(LAB_TOGGLE_TOKEN_FILE, "w", encoding="utf-8") as fh:        # a fresh key at every start
+            fh.write(secrets.token_hex(24))
+        with open(LAB_TOGGLE_TOKEN_FILE, encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
+LAB_TOKEN = _lab_token()
+
+
+def _lab_on():
+    from core_engine import email_forensics
+    return bool(email_forensics.LAB_MODE)
+
+
+def _lab_enable(minutes):
+    from lab.mail_lab import LabWorld
+    LabWorld().install()
+    if not LAB_STATE["dns"]:
+        try:
+            from lab import fastflux_dns
+            fastflux_dns.start()
+            LAB_STATE["dns"] = True
+        except OSError:
+            LAB_STATE["dns"] = True                                            # already listening: fine
+    LAB_STATE["used"] = True
+    LAB_STATE["until"] = time.time() + minutes * 60
+    if LAB_STATE["timer"] is not None:
+        LAB_STATE["timer"].cancel()
+    timer = threading.Timer(minutes * 60, _lab_disable)
+    timer.daemon = True
+    timer.start()
+    LAB_STATE["timer"] = timer
+
+
+def _lab_disable():
     if os.getenv("TRUSTSHIELD_LAB_MODE", "").strip() == "1":
+        return                                                                 # started in lab mode: leave it
+    from lab.mail_lab import LabWorld
+    LabWorld.uninstall()
+    LAB_STATE["until"] = 0.0
+
+
+def _gateway_feed_allowed(write=False):
+    """The gateway feed is for the demo lab or an administrator: lab mode (reading stays possible after the demo), or the X-Admin-Key."""
+    if os.getenv("TRUSTSHIELD_LAB_MODE", "").strip() == "1":
+        return True
+    if _lab_on() or (not write and LAB_STATE["used"]):
         return True
     key = os.getenv("ADMIN_API_KEY", "").strip()
     supplied = request.headers.get("X-Admin-Key", "")
     return bool(key) and _hmac.compare_digest(supplied.encode(), key.encode())
 
 
+@app.route('/api/lab/mode', methods=['GET', 'POST'])
+def lab_mode():
+    """GET: is demo mode on?  POST {"on": true, "minutes": 30} with header X-Lab-Token: switch it (the key is in backend/lab/data/toggle_token)."""
+    if request.method == 'GET':
+        remaining = max(0, int(LAB_STATE["until"] - time.time())) if _lab_on() and LAB_STATE["until"] else 0
+        return jsonify({"lab_mode": _lab_on(), "minutes_left": remaining // 60, "demo_available": bool(LAB_TOKEN)}), 200
+    supplied = request.headers.get("X-Lab-Token", "")
+    if not LAB_TOKEN or not _hmac.compare_digest(supplied.encode(), LAB_TOKEN.encode()):
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get("on", True):
+            minutes = max(1, min(int(data.get("minutes") or LAB_DEFAULT_MINUTES), 240))
+            _lab_enable(minutes)
+        else:
+            _lab_disable()
+    except Exception as exc:
+        return jsonify({"error": f"demo mode could not be switched: {type(exc).__name__}"}), 500
+    return jsonify({"lab_mode": _lab_on()}), 200
+
+
 @app.route('/api/gateway/events', methods=['GET', 'POST'])
 @rate_limit("gateway_events", 600, 60)
 def gateway_events():
     """The mail gateway reports every decision here (POST); the portal's Mail Gateway tab reads them (GET)."""
-    if not _gateway_feed_allowed():
+    if not _gateway_feed_allowed(write=request.method == 'POST'):
         return jsonify({"error": "Forbidden"}), 403
     if request.method == 'POST':
         data = request.get_json(silent=True)
@@ -1306,7 +1385,7 @@ GATEWAY_NOTES = _collections.deque(maxlen=50)
 @rate_limit("gateway_notes", 300, 60)
 def gateway_notes():
     """Results of the demo's other checks (fast-flux, fake page, SHA-256 seal) so the portal can show them next to the emails."""
-    if not _gateway_feed_allowed():
+    if not _gateway_feed_allowed(write=request.method == 'POST'):
         return jsonify({"error": "Forbidden"}), 403
     if request.method == 'POST':
         data = request.get_json(silent=True)

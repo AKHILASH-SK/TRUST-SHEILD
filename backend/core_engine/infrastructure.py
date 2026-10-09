@@ -21,7 +21,8 @@ _TLD = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
 
 
 def _lab() -> bool:
-    return os.environ.get("TRUSTSHIELD_LAB_MODE", "").strip() == "1"
+    from . import email_forensics
+    return bool(email_forensics.LAB_MODE)                      # set at start-up or by the running backend's demo switch
 
 
 def _candidates(urls: List[str]) -> List[Dict[str, Any]]:
