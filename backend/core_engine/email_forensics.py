@@ -15,6 +15,7 @@ import email.utils
 import hashlib
 import ipaddress
 import logging
+import os
 import re
 import time
 from email import policy
@@ -34,6 +35,10 @@ DNS_TIMEOUT = 3.0
 SPF_TIME_BUDGET = 6.0
 SPF_MAX_LOOKUPS = 10
 SPF_MAX_DEPTH = 10
+
+# Lab only (see backend/lab): simulate senders with loopback addresses and answer DNS from a table instead of the internet.
+LAB_MODE = os.environ.get("TRUSTSHIELD_LAB_MODE", "").strip() == "1"
+DNS_OVERRIDE = None          # callable(name, rtype) -> list of strings, or None to fall through to real DNS
 
 # Offline-safe tldextract: use the bundled public-suffix snapshot, never fetch over the network.
 _TLD = tldextract.TLDExtract(suffix_list_urls=(), cache_dir=None)
@@ -92,6 +97,8 @@ def is_public_ip(ip_str: str) -> bool:
     mapped = getattr(ip, "ipv4_mapped", None)
     if mapped is not None:
         ip = mapped
+    if LAB_MODE and (ip.is_loopback or ip.is_private) and not ip.is_multicast:
+        return True                  # the local lab simulates senders with 127.0.0.x addresses
     return bool(ip.is_global and not ip.is_multicast)
 
 
@@ -192,6 +199,10 @@ def _dns_lookup(name: str, rtype: str, timeout: float = DNS_TIMEOUT) -> List[str
       TXT -> joined character-strings, A/AAAA -> address, MX -> "pref host".
     NXDOMAIN / NoAnswer -> [] (definitive). Timeouts, SERVFAIL etc. -> _DnsTempError.
     """
+    if DNS_OVERRIDE is not None:
+        answered = DNS_OVERRIDE(name, rtype)
+        if answered is not None:
+            return list(answered)
     resolver = dns.resolver.Resolver()
     resolver.timeout = timeout
     resolver.lifetime = timeout

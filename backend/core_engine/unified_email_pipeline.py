@@ -416,6 +416,20 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     elif dmarc_state == "indeterminate" or spf_state == "indeterminate":
         risk_factors.append("SPF/DMARC could not be fully evaluated (DNS error) - not scored as failure")
 
+    # 2b. "Who is pretending to be whom": the checks above plus display name, lookalike domain, forwarding and the receiving
+    #     provider's own report. Adds only what the plain failure points above did not already count.
+    sender_assessment: Dict[str, Any] = {}
+    try:
+        from .sender_impersonation import assess_sender, score_contribution
+        sender_assessment = assess_sender(forensics, eml_bytes)
+        points, why = score_contribution(sender_assessment)
+        already = 30.0 if (spf_state == "fail" and dmarc_state == "fail") else (15.0 if dmarc_state == "fail" else 0.0)
+        if points > already:
+            base_threat += points - already
+            risk_factors.append(why)
+    except Exception as e:                                   # never let the extra analysis break the email verdict
+        logger.warning(f"Sender impersonation analysis error: {e}")
+
     # 3. Reply-To Mismatch (BEC spoofing indicator: +35 points)
     reply_to_mismatch = bool(metadata.get("reply_to_mismatch", False))
     if reply_to_mismatch:
@@ -585,6 +599,7 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             "dmarc_state": dmarc_state,
             "dmarc_policy": auth.get("dmarc_policy"),
         },
+        "sender_assessment": sender_assessment,
         "links_total": links_total,
         "links_analyzed": links_analyzed,
         "links_skipped": links_skipped,
