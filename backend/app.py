@@ -589,14 +589,27 @@ def to_client_verdict(pipeline_res):
 
 
 import scan_jobs
+import verdict_memory
 from core_engine import scan_progress
+
+verdict_store = verdict_memory.VerdictMemory(db_cursor)
+if os.getenv("VERDICT_MEMORY", "on").lower() != "off":
+    verdict_store.ensure_table()
 
 
 def _scan_runner(url):
     """
-    The one analysis every entry point shares: known-threat database first (instant), then the full pipeline.
-    Progress is reported to whichever scan job is listening.
+    The one analysis every entry point shares: what we already know about this link (instant), the known-threat database
+    (instant), then the full pipeline. Progress is reported to whichever scan job is listening.
     """
+    remembered = verdict_store.lookup(url)
+    if remembered is not None:
+        scan_progress.report("threat_lists", "done", "already analysed by TrustShield")
+        for stage in ("link_analysis", "reputation", "sandbox", "model"):
+            scan_progress.report(stage, "skipped", "answered from memory")
+        remembered["tier_analyzed"] = "VERDICT_MEMORY"
+        print(f"[MEMORY] answered from the shared verdict memory: {remembered.get('display_verdict')}  {url[:80]}", flush=True)
+        return remembered
     scan_progress.report("threat_lists", "running")
     try:
         is_phishing, threat_type, db_source = phishing_importer.check_url_in_database(url)
@@ -689,7 +702,14 @@ def _record_job_scan(user_id, url, result, source_app):
     return scan_id
 
 
+def _remember_verdict(job):
+    """Keep a strong verdict so the next person gets it instantly (see verdict_memory.py for what is strong enough)."""
+    if job.result and not job.result.get("from_memory") and verdict_store.remember(job.url, job.result):
+        print(f"[MEMORY] stored: {job.result.get('display_verdict')}  {job.url[:80]}", flush=True)
+
+
 def _on_scan_job_finished(job):
+    _remember_verdict(job)
     for user_id, source_app in list(job.watchers):
         try:
             _record_job_scan(user_id, job.url, job.result, source_app)
@@ -708,6 +728,7 @@ def _on_scan_refined(job, before):
     first (fast) verdict up to date, so the history, the details screen and later alerts show the refined answer.
     """
     result = job.result
+    _remember_verdict(job)
     old_verdict, new_verdict = to_client_verdict(before), to_client_verdict(result)
     with db_cursor() as cur:
         cur.execute("""UPDATE link_scans SET risk_level = %s, verdict = %s, reasons = %s, threat_score = %s, analysis_complete = %s
