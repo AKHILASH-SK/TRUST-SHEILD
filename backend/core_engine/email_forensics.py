@@ -127,14 +127,29 @@ def extract_ips_from_string(text: str) -> List[str]:
     return result
 
 
+# "from helo.name (reverse.dns [203.0.113.9]) by ...": the address in square brackets inside the from-clause is the one the
+# RECEIVING server saw on the connection. The HELO name before it is whatever the sender chose to say, so an address written
+# there (or anywhere else in the header) must never be mistaken for the connecting IP.
+_CONNECTION_IP = re.compile(r"\(\s*[^()]*?\[([0-9a-fA-F:.]+)\][^()]*\)")
+
+
 def find_connecting_ip(received_headers: List[str]) -> Optional[str]:
     """
     The connecting IP is the address of the client that handed the message to OUR receiving
     MTA: it is recorded in the TOPMOST Received header (each MTA prepends its own). Headers
     holding only non-public addresses (internal hops) are skipped going downwards.
+    The bracketed address of the from-clause is preferred; other addresses in the header are used only when the header
+    has no bracketed one at all.
     """
     for header in received_headers or []:
         clean = " ".join(str(header).split())
+        from_clause = clean.split(" by ", 1)[0]
+        bracketed = [m.group(1) for m in _CONNECTION_IP.finditer(from_clause)]
+        if bracketed:
+            for ip in bracketed:
+                if is_public_ip(ip):
+                    return ip
+            continue                                     # an internal hop: look further down, never at the HELO text
         for ip in extract_ips_from_string(clean):
             if is_public_ip(ip):
                 return ip

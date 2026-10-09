@@ -141,3 +141,16 @@ def test_lab_whole_pipeline_verdicts(world):
                                    extra_headers="List-Id: <x.example>" + chr(13) + chr(10) + "ARC-Seal: i=1")
     forwarded = analyze_email_pipeline(forwarded_mail, skip_link_sandbox=True)
     assert forwarded["verdict"].startswith("SUSPICIOUS")          # not "authenticated", and not called forged either
+
+
+def test_the_connecting_ip_is_the_one_the_receiving_server_recorded_not_one_the_sender_wrote():
+    from core_engine.email_forensics import find_connecting_ip
+    forged_helo = "from 8.8.8.8 (evil.example [93.184.216.34]) by mx.receiver.example with ESMTP; Fri, 9 Oct 2026 10:00:00 +0000"
+    assert find_connecting_ip([forged_helo]) == "93.184.216.34"          # not the 8.8.8.8 the sender claimed in HELO
+    gmail_style = "from mail-xyz.google.com (mail-xyz.google.com. [209.85.220.41]) by mx.example.com with ESMTPS"
+    assert find_connecting_ip([gmail_style]) == "209.85.220.41"
+    # an internal hop (private bracketed address) is skipped, and the HELO text of that hop is never used
+    internal = "from 8.8.4.4 (internal [10.0.0.5]) by relay.example"
+    assert find_connecting_ip([internal, gmail_style]) == "209.85.220.41"
+    # headers without brackets still work as before
+    assert find_connecting_ip(["from host by mx with SMTP; connection from 93.184.216.34"]) == "93.184.216.34"

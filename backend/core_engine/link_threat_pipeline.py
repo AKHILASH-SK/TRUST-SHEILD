@@ -170,6 +170,21 @@ def _load_top_domains() -> set:
 
 TOP_DOMAINS = _load_top_domains()
 
+
+def _official_brand_domains() -> set:
+    """The official domains of the 58 impersonated brands the page sandbox knows (banks, wallets, couriers ...)."""
+    global _OFFICIAL
+    if _OFFICIAL is None:
+        try:
+            from ml.features import BRAND_DOMAINS
+            _OFFICIAL = {d for domains in BRAND_DOMAINS.values() for d in domains}
+        except Exception:
+            _OFFICIAL = set()
+    return _OFFICIAL
+
+
+_OFFICIAL = None
+
 # Query parameters that make a trusted site send the visitor on to another address (open redirects are a favourite way to
 # put a phishing page behind a trusted domain).
 _REDIRECT_PARAMS = {"url", "u", "q", "redirect", "redirect_uri", "redirect_url", "redirecturl", "next", "continue", "dest",
@@ -209,7 +224,7 @@ def is_brand_fast_path(url_or_host: str) -> bool:
         reg = tldextract.extract(host).registered_domain.lower()
     except Exception:
         return False
-    if reg not in BRAND_FAST_PATH_DOMAINS and reg not in TOP_DOMAINS:
+    if reg not in BRAND_FAST_PATH_DOMAINS and reg not in TOP_DOMAINS and reg not in _official_brand_domains():
         return False
     return not has_foreign_redirect(url_or_host)
 

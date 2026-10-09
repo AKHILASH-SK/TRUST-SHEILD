@@ -278,3 +278,15 @@ def test_virustotal_consensus_still_beats_a_trusted_platform(pipeline):
                                            "total_engines": 70, "detection_ratio": 0.3, "is_whitelisted": False})
     pipeline.analyze_url("https://forms.gle/abc123")
     assert pipeline.calls == ["https://forms.gle/abc123"]
+
+
+@pytest.mark.parametrize("url", ["https://www.hdfcbank.com/login", "https://netbanking.hdfcbank.com/", "https://www.paypal.com/signin",
+                                 "https://secure.icicibank.com/"])
+def test_official_domains_of_the_known_brands_are_trusted_and_lookalikes_are_not(url):
+    assert is_brand_fast_path(url)
+
+
+@pytest.mark.parametrize("url", ["https://hdfcbank-secure-login.com/", "https://hdfcbank.com.evil.example/", "https://paypal-verify.top/",
+                                 "https://hdfc-bank.xyz/"])
+def test_lookalikes_of_brand_domains_are_not_trusted(url):
+    assert not is_brand_fast_path(url)

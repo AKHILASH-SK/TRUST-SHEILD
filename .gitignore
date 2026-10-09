@@ -67,3 +67,5 @@ backend/core_engine/trained_models/_previous/
 
 backend/lab/data/
 backend/lab/samples/
+
+backend/gateway/mailbox/

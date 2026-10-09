@@ -508,7 +508,7 @@ function copyRawHeaders(e) {
 // TAB NAVIGATION
 // =========================================================================
 
-var TAB_NAMES = ['dashboard', 'email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report'];
+var TAB_NAMES = ['dashboard', 'email', 'threat', 'network', 'geo', 'ioc', 'graph', 'vault', 'timeline', 'report', 'gateway'];
 var CONTENT_TABS = ['email', 'threat', 'network', 'geo', 'ioc', 'graph', 'timeline', 'report'];
 
 function switchTab(name) {
@@ -523,6 +523,8 @@ function switchTab(name) {
   if (name === 'vault') {
     loadVaultCasesHistory();
   }
+
+  if (name === 'gateway') startGatewayPolling(); else stopGatewayPolling();
 
   // Leaflet sizes itself against its container at init time
   if (name === 'geo' && mapInstance) {
@@ -542,7 +544,7 @@ function enableAllTabs() {
 
 function disableTabsExceptDashboard() {
   document.querySelectorAll('.nav-item').forEach(btn => {
-    if (btn.dataset.tab !== 'dashboard' && btn.dataset.tab !== 'vault') {
+    if (btn.dataset.tab !== 'dashboard' && btn.dataset.tab !== 'vault' && btn.dataset.tab !== 'gateway') {
       btn.classList.add('tab-disabled');
     } else {
       btn.classList.remove('tab-disabled');
@@ -951,6 +953,130 @@ function renderVerdict(data, elapsedSeconds) {
   }
 }
 
+// ---------- Attacker infrastructure (fast-flux + certificate), shown under the sender card ----------
+function renderInfrastructure(data) {
+  const card = document.getElementById('infrastructureCard');
+  if (!card) return;
+  const infra = data.infrastructure || {};
+  const domains = infra.domains || [];
+  if (!domains.length) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const rows = document.getElementById('infrastructureRows');
+  rows.replaceChildren();
+  const tone = { fast_flux: 'bg-red-100 text-red-700 border-red-200', possible: 'bg-amber-100 text-amber-700 border-amber-200',
+                 normal: 'bg-emerald-100 text-emerald-700 border-emerald-200', unknown: 'bg-slate-100 text-slate-600 border-slate-200',
+                 untrusted: 'bg-red-100 text-red-700 border-red-200', new: 'bg-amber-100 text-amber-700 border-amber-200',
+                 ok: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+  const pill = (label, level) => {
+    const el = document.createElement('span');
+    el.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase border ' + (tone[level] || tone.unknown);
+    el.textContent = label;
+    return el;
+  };
+  domains.forEach((d) => {
+    const box = document.createElement('div');
+    box.className = 'rounded-lg bg-slate-50 border border-slate-200 p-2.5';
+    const head = document.createElement('div');
+    head.className = 'flex items-center justify-between gap-2 mb-1';
+    const name = document.createElement('span');
+    name.className = 'font-mono font-semibold text-slate-800 break-all';
+    name.textContent = d.domain;
+    head.appendChild(name);
+    const pills = document.createElement('span');
+    pills.className = 'flex gap-1 shrink-0';
+    const ff = d.fast_flux || {};
+    pills.appendChild(pill(ff.level === 'fast_flux' ? 'FAST-FLUX' : (ff.level || 'unknown'), ff.level));
+    if (d.certificate) pills.appendChild(pill('CERT ' + (d.certificate.level || 'unknown'), d.certificate.level));
+    head.appendChild(pills);
+    box.appendChild(head);
+    const line = (text) => { const p = document.createElement('p'); p.className = 'text-slate-600 leading-snug'; p.textContent = text; box.appendChild(p); };
+    line(ff.headline || '');
+    if (ff.distinct_ips) line(ff.distinct_ips + ' different IPs seen' + (ff.min_ttl != null ? ', answers expire in ' + ff.min_ttl + 's' : '') +
+      (ff.networks ? ', across ' + ff.networks.length + ' networks' : ''));
+    if (d.certificate && d.certificate.headline) line(d.certificate.headline);
+    rows.appendChild(box);
+  });
+}
+
+// ---------- Mail Gateway tab ----------
+var gatewayTimer = null;
+
+function startGatewayPolling() {
+  stopGatewayPolling();
+  refreshGatewayEvents();
+  gatewayTimer = setInterval(refreshGatewayEvents, 2000);
+}
+
+function stopGatewayPolling() {
+  if (gatewayTimer) { clearInterval(gatewayTimer); gatewayTimer = null; }
+}
+
+async function clearGatewayEvents() {
+  try { await fetch(`${API_BASE}/api/gateway/events?clear=1`); } catch (e) { /* ignore */ }
+  refreshGatewayEvents();
+}
+window.clearGatewayEvents = clearGatewayEvents;
+
+async function refreshGatewayEvents() {
+  const status = document.getElementById('gatewayStatus');
+  const body = document.getElementById('gatewayRows');
+  const alertBox = document.getElementById('gatewayRotationAlert');
+  const badge = document.getElementById('navGatewayBadge');
+  if (!status || !body) return;
+  let events = [];
+  try {
+    const res = await fetch(`${API_BASE}/api/gateway/events`);
+    if (res.status === 403) {
+      status.textContent = 'LAB ONLY';
+      status.className = 'px-2 py-1 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200';
+      return;
+    }
+    events = (await res.json()).events || [];
+    status.textContent = 'LIVE';
+    status.className = 'px-2 py-1 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+  } catch (e) {
+    status.textContent = 'OFFLINE';
+    return;
+  }
+  const blocked = events.filter(e => e.action === 'quarantine').length;
+  if (badge) { badge.textContent = blocked ? String(blocked) : ''; badge.classList.toggle('hidden', !blocked); }
+  const rotating = events.find(e => e.rotation && e.rotation.message);
+  if (alertBox) {
+    alertBox.classList.toggle('hidden', !rotating);
+    if (rotating) alertBox.textContent = 'IP rotation detected: ' + rotating.rotation.message +
+      ' (addresses: ' + (rotating.rotation.failing_ips || []).join(', ') + ')';
+  }
+  body.replaceChildren();
+  if (!events.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 8; td.className = 'p-6 text-center text-slate-400';
+    td.textContent = 'No messages yet. Send mail to the gateway (port 2525) or run the demo scenes.';
+    tr.appendChild(td); body.appendChild(tr);
+    return;
+  }
+  const actionTone = { quarantine: 'bg-red-100 text-red-700 border-red-200', warn: 'bg-amber-100 text-amber-700 border-amber-200',
+                       deliver: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+  events.forEach((e) => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-slate-50 align-top';
+    const cell = (text, cls) => { const td = document.createElement('td'); td.className = 'p-3 ' + (cls || ''); td.textContent = text == null ? '' : text; tr.appendChild(td); return td; };
+    cell(e.time, 'font-mono text-slate-500');
+    cell(e.connecting_ip, 'font-mono font-bold text-slate-800');
+    cell(e.claimed_domain || '-', 'font-mono');
+    cell([e.spf, e.dkim, e.dmarc].map(v => (v || '?').toUpperCase()).join(' / '), 'font-mono text-[10px]');
+    cell((e.sender_level || '') + (e.headline ? ': ' + e.headline : ''), 'text-slate-600 max-w-xs');
+    cell((e.verdict || '') + (e.score != null ? ' (' + e.score + ')' : ''), 'font-semibold');
+    const action = cell('', '');
+    const tag = document.createElement('span');
+    tag.className = 'px-1.5 py-0.5 rounded text-[9px] font-bold font-mono uppercase border ' + (actionTone[e.action] || '');
+    tag.textContent = e.action || '';
+    action.appendChild(tag);
+    cell(e.case_id || '-', 'font-mono text-[10px] text-slate-500');
+    body.appendChild(tr);
+  });
+}
+
 const IMPERSONATION_STYLES = {
   spoofed: ['FORGED SENDER', 'bg-red-100 text-red-700 border-red-200'],
   suspicious: ['SUSPICIOUS', 'bg-amber-100 text-amber-700 border-amber-200'],
@@ -1002,6 +1128,7 @@ function renderMetadataAndAuth(data) {
   const mx = data.sender_domain_intelligence || {};
 
   renderSenderAssessment(data);
+  renderInfrastructure(data);
 
   // BEC Warning
   const becBox = document.getElementById('becAlertBox');

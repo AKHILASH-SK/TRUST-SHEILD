@@ -216,3 +216,11 @@ def test_verdict_cloaking_redirect_to_a_famous_site_is_suspicious_on_a_new_domai
 def test_verdict_document_share_lure_on_free_hosting_is_suspicious(pipeline):
     out = verdict(pipeline, "doc-share-lure.herokuapp.com")
     assert out["verdict"] == "SUSPICIOUS" and "lure" in out["telemetry"]["override_reason"].lower()
+
+
+def test_relay_page_copying_a_real_bank_login_is_caught_while_the_real_bank_passes(lab):
+    genuine = scan("hdfcbank.com")
+    relay = scan("hdfcbank-secure-login.com")
+    assert genuine["claimed_brand"] == "hdfc" and genuine["brand_owns_domain"] is True and genuine["brand_impersonation"] == 0
+    assert relay["claimed_brand"] == "hdfc" and relay["brand_owns_domain"] is False
+    assert relay["brand_impersonation"] == 1 and relay["credential_surface_found"]

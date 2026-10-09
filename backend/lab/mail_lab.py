@@ -101,6 +101,6 @@ def genuine_bank_email(world: LabWorld) -> bytes:
                                              subject="Your statement is ready", body="Your monthly statement is available."))
 
 
-def forged_bank_email(subject="Urgent: verify your account", body="Click https://bank-verify.example/login now"):
+def forged_bank_email(subject="Urgent: verify your account", body="Your account is locked. Verify now: https://flux.bank-verify.test/login"):
     """The attacker's email: it claims to be the bank, but comes from their own server and has no valid signature."""
     return build_message(f'"Bank Security" <alerts@{BANK_DOMAIN}>', ATTACKER_IP, subject=subject, body=body)

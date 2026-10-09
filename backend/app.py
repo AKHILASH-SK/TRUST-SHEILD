@@ -594,7 +594,12 @@ import verdict_memory
 if os.getenv("TRUSTSHIELD_LAB_MODE", "").strip() == "1":          # the impersonation demo: simulated DNS for bank.test (lab/)
     from lab.mail_lab import LabWorld
     LabWorld().install()
-    print("[LAB] Lab mode ON: bank.test DNS and 127.0.0.x senders are simulated. Do not use for real scanning.", flush=True)
+    try:
+        from lab import fastflux_dns
+        fastflux_dns.start()                                           # the attacker's rotating DNS, on 127.0.0.1:5353
+    except OSError as _exc:
+        print(f"[LAB] fast-flux DNS server not started: {_exc}", flush=True)
+    print("[LAB] Lab mode ON: bank.test DNS, rotating-DNS and 127.0.0.x senders are simulated. Do not use for real scanning.", flush=True)
 from core_engine import scan_progress
 
 verdict_store = verdict_memory.VerdictMemory(db_cursor)
@@ -1251,6 +1256,61 @@ def get_user_link_history(user_id):
 
     except Exception as e:
         return server_error(e)
+
+# ==================== MAIL GATEWAY FEED + INFRASTRUCTURE CHECK ====================
+
+import collections as _collections
+import hmac as _hmac
+
+GATEWAY_EVENTS = _collections.deque(maxlen=200)
+_GATEWAY_FIELDS = ("id", "time", "connecting_ip", "mail_from", "claimed_domain", "sender_level", "headline", "verdict", "score",
+                   "action", "case_id", "evidence_sha256", "spf", "dkim", "dmarc", "stored_as")
+
+
+def _gateway_feed_allowed():
+    """The gateway feed is for the demo lab or an administrator: lab mode, or the correct X-Admin-Key."""
+    if os.getenv("TRUSTSHIELD_LAB_MODE", "").strip() == "1":
+        return True
+    key = os.getenv("ADMIN_API_KEY", "").strip()
+    supplied = request.headers.get("X-Admin-Key", "")
+    return bool(key) and _hmac.compare_digest(supplied.encode(), key.encode())
+
+
+@app.route('/api/gateway/events', methods=['GET', 'POST'])
+@rate_limit("gateway_events", 600, 60)
+def gateway_events():
+    """The mail gateway reports every decision here (POST); the portal's Mail Gateway tab reads them (GET)."""
+    if not _gateway_feed_allowed():
+        return jsonify({"error": "Forbidden"}), 403
+    if request.method == 'POST':
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid event"}), 400
+        event = {k: (str(data.get(k))[:300] if data.get(k) is not None else None) for k in _GATEWAY_FIELDS}
+        rotation = data.get("rotation")
+        if isinstance(rotation, dict):
+            event["rotation"] = {"distinct_ips": int(rotation.get("distinct_ips") or 0),
+                                 "failing_ips": [str(i)[:64] for i in (rotation.get("failing_ips") or [])[:20]],
+                                 "message": str(rotation.get("message") or "")[:300]}
+        GATEWAY_EVENTS.appendleft(event)
+        return jsonify({"stored": True}), 201
+    if request.args.get("clear") == "1":
+        GATEWAY_EVENTS.clear()
+    return jsonify({"events": list(GATEWAY_EVENTS)}), 200
+
+
+@app.route('/api/infra/check', methods=['POST'])
+@rate_limit("infra_check", 20, 60)
+def infrastructure_check():
+    """Fast-flux and certificate check for the domain of a link: {"url": "https://..."}."""
+    data = request.get_json(silent=True) or {}
+    url = normalize_input_url(data.get('url') or data.get('domain'))
+    if not url:
+        return jsonify({"error": "A valid link or domain is required"}), 400
+    from core_engine.infrastructure import inspect_links
+    result = inspect_links([url])
+    return jsonify({"url": url, **result, "skipped": not result["domains"]}), 200
+
 
 @app.route('/api/health', methods=['GET'])
 def api_health():

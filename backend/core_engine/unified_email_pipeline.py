@@ -383,6 +383,14 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     links_analyzed = len(ordered_full)
     links_skipped = len(skipped)
 
+    # How does the attackers' domain behave (rotating addresses) and is its certificate worth trusting?
+    try:
+        from .infrastructure import inspect_links
+        infrastructure = inspect_links(unique_links)
+    except Exception as e:
+        logger.warning(f"Infrastructure check error: {e}")
+        infrastructure = {"domains": [], "flux_domains": 0, "untrusted_certificates": 0}
+
     # =========================================================================
     # Step D: Calculate Global Email Threat Score (0.0 to 100.0)
     # =========================================================================
@@ -429,6 +437,16 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             risk_factors.append(why)
     except Exception as e:                                   # never let the extra analysis break the email verdict
         logger.warning(f"Sender impersonation analysis error: {e}")
+
+    # 2c. Infrastructure: rotating addresses (fast-flux) are a real sign of an attacker's domain; an untrusted certificate
+    #     adds a little. Neither is enough alone, so both are small and only add weight to other findings.
+    if infrastructure.get("flux_domains"):
+        base_threat += 15.0
+        flux = [d["domain"] for d in infrastructure["domains"] if d["fast_flux"].get("level") == "fast_flux"]
+        risk_factors.append(f"Fast-flux infrastructure: {', '.join(flux[:3])} keeps changing the addresses it points to")
+    if infrastructure.get("untrusted_certificates"):
+        base_threat += 5.0
+        risk_factors.append("A linked site presents a certificate that a browser would not trust")
 
     # 3. Reply-To Mismatch (BEC spoofing indicator: +35 points)
     reply_to_mismatch = bool(metadata.get("reply_to_mismatch", False))
@@ -603,6 +621,7 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
             "dmarc_policy": auth.get("dmarc_policy"),
         },
         "sender_assessment": sender_assessment,
+        "infrastructure": infrastructure,
         "links_total": links_total,
         "links_analyzed": links_analyzed,
         "links_skipped": links_skipped,

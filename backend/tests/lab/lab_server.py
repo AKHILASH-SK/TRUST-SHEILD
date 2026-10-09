@@ -60,6 +60,23 @@ def kyc(path):
     return page("ok", "ok")
 
 
+# ---- adversary-in-the-middle: the genuine bank, and a relay on another domain that serves the SAME page and passes
+# ---- everything typed on to the real bank (so the victim sees the real login and the attacker keeps the password/session)
+_BANK_LOGIN = ('<h1>HDFC Bank NetBanking</h1><p>Welcome back. Please sign in to continue.</p><form action="{action}" method="post">'
+               '<input name="userid" placeholder="Customer ID"><input type="password" name="pwd" placeholder="Password">'
+               '<button type="submit">Login</button></form>' + FOOTER)
+
+
+@site("hdfcbank.com")
+def genuine_bank(path):
+    return page("HDFC Bank NetBanking Login", _BANK_LOGIN.format(action="/netbanking/session"))
+
+
+@site("hdfcbank-secure-login.com")
+def relay_bank(path):
+    return page("HDFC Bank NetBanking Login", _BANK_LOGIN.format(action="/relay/session"))
+
+
 # ---- login is inside a modal opened by a button
 @site("modal-shop.com")
 def modal(path):
