@@ -69,7 +69,7 @@ def test_laws_title_does_not_flag_aws(sb, monkeypatch):
     html = b"<html><title>Employment laws in India</title><body>laws laws login</body></html>"
     monkeypatch.setattr(se, "assert_public_url", no_dns_guard)
     monkeypatch.setattr(se.requests, "get", lambda url, **kw: FakeResp(200, html))
-    f = sb._analyze_with_requests("http://example.org/", {})
+    f = sb._analyze_with_requests("http://not-a-ranked-site-for-tests.test/", {})
     assert f["brand_impersonation"] == 0 and f["impersonated_brand"] is None
 
 
@@ -78,7 +78,7 @@ def test_generic_bank_title_is_not_title_mismatch(sb, monkeypatch):
             b"<input type='password'></form></html>")
     monkeypatch.setattr(se, "assert_public_url", no_dns_guard)
     monkeypatch.setattr(se.requests, "get", lambda url, **kw: FakeResp(200, html))
-    f = sb._analyze_with_requests("http://example.org/", {})
+    f = sb._analyze_with_requests("http://not-a-ranked-site-for-tests.test/", {})
     assert f["sandbox_title_mismatch"] == 0
 
 
@@ -87,7 +87,7 @@ def test_real_brand_title_with_password_form_is_mismatch(sb, monkeypatch):
             b"<input type='password'></form></html>")
     monkeypatch.setattr(se, "assert_public_url", no_dns_guard)
     monkeypatch.setattr(se.requests, "get", lambda url, **kw: FakeResp(200, html))
-    f = sb._analyze_with_requests("http://example.org/", {})
+    f = sb._analyze_with_requests("http://not-a-ranked-site-for-tests.test/", {})
     assert f["sandbox_title_mismatch"] == 1 and f["sandbox_has_password_field"] == 1
 
 
@@ -95,7 +95,7 @@ def test_real_brand_title_without_credential_form_is_not_mismatch(sb, monkeypatc
     html = b"<html><title>I love PayPal news</title><body>article</body></html>"
     monkeypatch.setattr(se, "assert_public_url", no_dns_guard)
     monkeypatch.setattr(se.requests, "get", lambda url, **kw: FakeResp(200, html))
-    f = sb._analyze_with_requests("http://example.org/", {})
+    f = sb._analyze_with_requests("http://not-a-ranked-site-for-tests.test/", {})
     assert f["sandbox_title_mismatch"] == 0
 
 

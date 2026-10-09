@@ -196,3 +196,47 @@ def test_consensus_of_engines_blocks_without_needing_the_sandbox():
           "detection_ratio": 0.5, "vt_risk_score": 95.0, "popularity_rank": 99999999}
     out = _pipeline_with(vt, CLEAN_PAGE).analyze_url("https://known-bad.example/")
     assert out["threat_score"] >= 90 and "VirusTotal" in out["summary"]
+
+
+@pytest.mark.parametrize("url", [
+    "https://docs.google.com/spreadsheets/d/1AbC/edit#gid=0", "https://docs.google.com/document/d/1AbC/edit",
+    "https://docs.google.com/u/0/presentation/d/1AbC/edit", "https://drive.google.com/file/d/1AbC/view",
+    "https://drive.google.com/drive/folders/1AbC", "https://github.com/torvalds/linux",
+])
+def test_pages_that_only_show_a_document_or_repository_skip_the_sandbox(pipeline, url):
+    assert ltp.is_trusted_view_page(url)
+    out = pipeline.analyze_url(url)
+    assert out["display_verdict"] == "Dangerous" or out["display_verdict"] == "Safe"
+    assert out["display_verdict"] == "Safe" and pipeline.calls == []
+
+
+@pytest.mark.parametrize("url", [
+    "https://docs.google.com/forms/d/e/1FAIpQLSabc/viewform",       # can collect a login
+    "https://sites.google.com/view/fake-login", "https://script.google.com/macros/s/abc/exec", "https://forms.gle/xyz",
+    "https://github.com/a/b/releases/download/v1/setup.exe", "https://github.com/login",
+    "https://evil-docs.google.com.example.xyz/spreadsheets/d/1",   # not Google at all
+])
+def test_pages_that_can_collect_a_login_or_deliver_a_file_are_still_sandboxed(url):
+    assert not ltp.is_trusted_view_page(url) and not is_brand_fast_path(url)
+
+
+def test_a_sub_domain_of_a_top_ranked_company_is_recognised_without_virustotal(pipeline):
+    assert "stackoverflow.com" in ltp.TOP_DOMAINS or "wikipedia.org" in ltp.TOP_DOMAINS
+    for url in ("https://learn.microsoft.com/en-us/azure/", "https://aws.amazon.com/ec2/", "https://meet.google.com/abc-defg-hij"):
+        assert is_brand_fast_path(url)
+    out = pipeline.analyze_url("https://learn.microsoft.com/en-us/azure/")
+    assert out["display_verdict"] == "Safe" and pipeline.calls == []
+
+
+def test_the_top_domain_list_never_vouches_for_hosting_platforms():
+    for host in ("blogspot.com", "github.io", "vercel.app", "weebly.com", "bit.ly", "duckdns.org", "000webhostapp.com"):
+        assert host not in ltp.TOP_DOMAINS and not is_brand_fast_path(f"https://x.{host}/")
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.google.com/url?q=https://evil.example/login", "https://l.facebook.com/l.php?u=https%3A%2F%2Fevil.example%2F",
+    "https://accounts.google.com/signin?continue=https://evil.example/",
+])
+def test_a_trusted_site_forwarding_to_another_domain_is_still_sandboxed(url):
+    assert ltp.has_foreign_redirect(url) and not is_brand_fast_path(url)
+    assert not ltp.has_foreign_redirect("https://accounts.google.com/signin?continue=https://mail.google.com/")

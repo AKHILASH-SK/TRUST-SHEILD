@@ -132,8 +132,51 @@ def is_user_content_host(url_or_host: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in USER_CONTENT_HOSTS)
 
 
+def _load_top_domains() -> set:
+    """Registered domains of the most popular sites (Tranco top 6000, minus hosting platforms and domains that appear in
+    public phishing lists). Built offline; see core_engine/data/top_domains.txt. Checked locally, so it needs no API call."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "top_domains.txt")
+        with open(path, encoding="utf-8") as fh:
+            return {ln.strip().lower() for ln in fh if ln.strip()}
+    except OSError:
+        return set()
+
+
+TOP_DOMAINS = _load_top_domains()
+
+# Query parameters that make a trusted site send the visitor on to another address (open redirects are a favourite way to
+# put a phishing page behind a trusted domain).
+_REDIRECT_PARAMS = {"url", "u", "q", "redirect", "redirect_uri", "redirect_url", "redirecturl", "next", "continue", "dest",
+                    "destination", "target", "goto", "link", "to", "return", "returnurl", "return_to", "out", "r", "ref_url"}
+
+
+def has_foreign_redirect(url: str) -> bool:
+    """True when the URL asks the site to forward the visitor to a different registered domain."""
+    try:
+        from urllib.parse import parse_qsl, unquote
+        parsed = urlparse(url if "://" in url else f"http://{url}")
+        own = tldextract.extract(parsed.hostname or "").registered_domain.lower()
+        for name, value in parse_qsl(parsed.query, keep_blank_values=False):
+            if name.lower() not in _REDIRECT_PARAMS:
+                continue
+            target = unquote(value).strip()
+            if target.startswith("//"):
+                target = "http:" + target
+            if target.lower().startswith(("http://", "https://")):
+                if tldextract.extract(target).registered_domain.lower() != own:
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def is_brand_fast_path(url_or_host: str) -> bool:
-    """True only for a pure brand domain that is not also a user-content host."""
+    """
+    True for a page on a trusted company's OWN domain, any sub-domain of it included (mail.google.com, learn.microsoft.com):
+    a brand domain from our list or a top-ranked site. Never for hosts where third parties publish pages, and never when
+    the link forwards the visitor to another domain (open redirect): those go to the sandbox.
+    """
     host = extract_host(url_or_host)
     if not host or is_user_content_host(host):
         return False
@@ -141,7 +184,38 @@ def is_brand_fast_path(url_or_host: str) -> bool:
         reg = tldextract.extract(host).registered_domain.lower()
     except Exception:
         return False
-    return reg in BRAND_FAST_PATH_DOMAINS
+    if reg not in BRAND_FAST_PATH_DOMAINS and reg not in TOP_DOMAINS:
+        return False
+    return not has_foreign_redirect(url_or_host)
+
+
+# Pages on user-content hosts that only SHOW something and cannot collect a login: a Google document, sheet, slide deck or
+# drawing, a Drive file or folder view, a GitHub repository page. (Forms, Sites and Apps Script pages can, so they stay
+# sandboxed. The document's text is written by someone else; what is trusted is the page that shows it.)
+_VIEW_PAGES = {
+    "docs.google.com": ("/document/", "/spreadsheets/", "/presentation/", "/drawings/"),
+    "drive.google.com": ("/file/", "/drive/folders/", "/drive/u/"),
+    "github.com": (),                                   # any repository page except downloads (checked below)
+}
+_GITHUB_NOT_VIEW = ("/releases/download", "/raw/", "/archive/", "/upload", "/login", "/session", "/settings")
+
+
+def is_trusted_view_page(url: str) -> bool:
+    try:
+        import re as _re
+        parsed = urlparse(url if "://" in url else f"http://{url}")
+        host = (parsed.hostname or "").lower().rstrip(".")
+        host = host[4:] if host.startswith("www.") else host
+        path = parsed.path or "/"
+        if host not in _VIEW_PAGES or has_foreign_redirect(url):
+            return False
+        if host == "github.com":
+            parts = [p for p in path.split("/") if p]
+            return len(parts) >= 1 and not any(bad in path.lower() for bad in _GITHUB_NOT_VIEW)
+        path = _re.sub(r"^/(?:u/\d+|a/[^/]+)(?=/)", "", path)        # Google's multi-account prefix: /u/0/ and /a/domain/
+        return any(path.startswith(prefix) for prefix in _VIEW_PAGES[host])
+    except Exception:
+        return False
 
 
 class LinkThreatPipeline:
@@ -239,11 +313,14 @@ class LinkThreatPipeline:
         reg_domain = tldextract.extract(clean_url).registered_domain.lower()
         user_content = is_user_content_host(clean_url)
         is_brand = is_brand_fast_path(clean_url)
+        trusted_view = is_trusted_view_page(clean_url)
         vt_malicious = False
         vt_whitelisted = False
         vt_detail = None
 
-        if self.good_domain_checker:
+        if trusted_view:
+            vt_risk_score = 0.0          # a document or repository page: recognised locally, no VirusTotal call
+        elif self.good_domain_checker:
             try:
                 vt_rep = self.good_domain_checker.get_vt_reputation(clean_url)
             except Exception as e:
@@ -263,8 +340,9 @@ class LinkThreatPipeline:
         elif is_brand:
             vt_risk_score = 0.0
 
-        _progress("reputation", "done", "trusted domain" if (is_brand or vt_whitelisted) and not vt_malicious else f"risk {int(vt_risk_score)}/100")
-        if (is_brand or vt_whitelisted) and not vt_malicious:
+        trusted = is_brand or trusted_view or vt_whitelisted
+        _progress("reputation", "done", "trusted domain" if trusted and not vt_malicious else f"risk {int(vt_risk_score)}/100")
+        if trusted and not vt_malicious:
             _progress("sandbox", "skipped", "trusted domain")
             _progress("model", "skipped", "trusted domain")
             return {
@@ -275,9 +353,14 @@ class LinkThreatPipeline:
                 "decisive": True,
                 "analysis_complete": True,
                 "summary": (
-                    f"• Threat Summary: Domain '{reg_domain}' is an established, verified global service.\n"
-                    f"• Key Forensic Evidence: Fast-Path Whitelist bypass (Global Tier-1 / VirusTotal Top 500k).\n"
-                    f"• Recommended Action: No action required. Safe to browse."
+                    (f"• Threat Summary: This is a document or repository page on '{reg_domain}', a trusted service.\n"
+                     f"• Key Forensic Evidence: The page only displays content and cannot collect a login. Its text is written by "
+                     f"someone else, so do not trust links or requests inside it.\n"
+                     f"• Recommended Action: Safe to open; be careful with anything you are asked to do inside it.")
+                    if trusted_view and not is_brand else
+                    (f"• Threat Summary: Domain '{reg_domain}' is an established, verified global service.\n"
+                     f"• Key Forensic Evidence: Recognised as a top-ranked trusted domain (own site or sub-domain).\n"
+                     f"• Recommended Action: No action required. Safe to browse.")
                 ),
                 "telemetry": {
                     "status": "WHITELISTED",
