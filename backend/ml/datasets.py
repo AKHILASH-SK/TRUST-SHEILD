@@ -162,16 +162,25 @@ HOSTED_TOPICS = [
 HOSTED_STAR_BANDS = [(15, 40), (41, 120), (121, 500), (501, 100000)]
 
 
-def load_hosted_benign(refresh: bool = False, target: int = 3000, max_age_days: float = 14.0) -> List[str]:
+def is_eval_reserved(url: str) -> bool:
+    """One hosted site in ten is reserved for the final evaluation: never used to train any model (stable for a given site)."""
+    import zlib
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or url).lower()
+    return zlib.crc32(host.encode("utf-8")) % 10 == 0
+
+
+def load_hosted_benign(refresh: bool = False, target: int = 3000, max_age_days: float = 14.0,
+                       cache_name: str = "hosted_benign") -> List[str]:
     """URLs of live sites on shared hosting platforms that belong to real, starred GitHub projects (benign label)."""
     from urllib.parse import urlparse
     from .features import FREE_HOSTING_SUFFIXES
     os.makedirs(RAW_DIR, exist_ok=True)
-    path = os.path.join(RAW_DIR, "hosted_benign.txt")
+    path = os.path.join(RAW_DIR, cache_name + ".txt")
     if not refresh and os.path.exists(path) and (time.time() - os.path.getmtime(path)) < max_age_days * 86400:
         with open(path, encoding="utf-8") as fh:
             cached = [ln.strip() for ln in fh if ln.strip()]
-        if len(cached) >= min(target, 500):
+        if len(cached) >= min(target, 500):          # each list has its own cache file; a list that ran out of new sites is still complete
             return cached
     suffixes = tuple(FREE_HOSTING_SUFFIXES)
     token = os.getenv("GITHUB_TOKEN", "").strip()
