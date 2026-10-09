@@ -93,6 +93,7 @@ dependencies {
     
     // AppCompat & Material Design
     implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.browser:browser:1.4.0")        // Custom Tabs provider for the Link Gate
     implementation("com.google.android.material:material:1.10.0")
     
     // RecyclerView

@@ -24,6 +24,16 @@
         <item name="android:windowLightStatusBar">true</item>
     </style>
 
+    <!-- Link Gate pop-up: transparent window, the card is drawn by the layout -->
+    <style name="Theme.TrustShield.Gate" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
+    </style>
+
     <!-- Activity themes -->
     <style name="Theme.TrustShield.LoginActivity" parent="Theme.TrustShield" />
     <style name="Theme.TrustShield.HomeActivity" parent="Theme.TrustShield" />

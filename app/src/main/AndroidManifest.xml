@@ -7,6 +7,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Lets Link Gate see which browsers are installed so it can hand a verified link to one of them -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
+
     <application
         android:name=".TrustShieldApp"
         android:allowBackup="false"
@@ -100,6 +114,34 @@
             android:exported="false"
             android:label="@string/app_name"
             android:theme="@style/Theme.TrustShield" />
+
+        <!-- Link Gate: receives web links tapped in WhatsApp, SMS, e-mail and other apps while TrustShield is the
+             default browser, checks them, then hands safe links to the real browser. Own task affinity so that
+             Back returns to the app the link was tapped in. -->
+        <activity
+            android:name=".gate.LinkGateActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TrustShield.Gate">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <!-- Makes TrustShield a Custom Tabs provider, so apps that open links in a Custom Tab (Gmail and others) also come
+             to the Link Gate while TrustShield is the default browser. -->
+        <service
+            android:name=".gate.GateCustomTabsService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.support.customtabs.action.CustomTabsService" />
+            </intent-filter>
+        </service>
 
         <!-- NotificationListener Service to extract messages from external apps -->
         <service
