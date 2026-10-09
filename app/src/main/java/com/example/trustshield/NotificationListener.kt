@@ -215,15 +215,17 @@ class NotificationListener : NotificationListenerService() {
                         reasons = reasons,
                         sourceApp = packageName,
                         callback = object : LinkScanRecorder.OnLinkScanCallback {
-                            override fun onResult(scanId: Int, verdict: String, reasons: String) {
-                                Log.d(TAG, "Backend verdict for $url: $verdict")
+                            override fun onResult(scanId: Int, verdict: String, reasons: String, aiPending: Boolean) {
+                                Log.d(TAG, "Backend verdict for $url: $verdict (AI check pending: $aiPending)")
                                 if (alertedFromDatabase) return
                                 val points = com.example.trustshield.gate.GateText.bullets(reasons)
+                                // The alert goes out AT ONCE with the first verdict; the AI summary/second opinion never delays it.
                                 when (verdict) {
                                     "DANGEROUS" -> alertManager.showDangerousLinkAlert(url, packageName, points.ifEmpty { listOf("TrustShield analysis found this link dangerous") })
                                     "SUSPICIOUS" -> alertManager.showSuspiciousLinkAlert(url, packageName, points.ifEmpty { listOf("TrustShield could not confirm this link is safe") })
                                     else -> Log.d(TAG, "Backend says safe: no alert for $url")
                                 }
+                                if (aiPending && verdict == "SUSPICIOUS") followUpAiCheck(scanId, url, packageName)
                             }
 
                             override fun onSuccess(scanId: Int, verdict: String) {}
@@ -245,6 +247,27 @@ class NotificationListener : NotificationListenerService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error in link security analysis: ${e.message}", e)
         }
+    }
+
+    /**
+     * The first verdict was "Unverified" and an AI second opinion was still running on the server. Check back a few times: if it
+     * turns out dangerous, alert again (loudly); if it clears the link, remove the earlier warning.
+     */
+    private fun followUpAiCheck(scanId: Int, url: String, packageName: String) {
+        Thread {
+            repeat(10) {
+                try { Thread.sleep(6000) } catch (e: InterruptedException) { return@Thread }
+                val state = com.example.trustshield.gate.GateClient.fetchScanState(scanId) ?: return@repeat
+                if (state.aiPending) return@repeat
+                val points = com.example.trustshield.gate.GateText.bullets(state.reasons)
+                when (state.verdict) {
+                    "DANGEROUS" -> alertManager.showDangerousLinkAlert(url, packageName, points.ifEmpty { listOf("An AI check confirmed this link is dangerous") })
+                    "SAFE" -> alertManager.cancelAlert(url)
+                    else -> Log.d(TAG, "AI check left $url as unverified")
+                }
+                return@Thread
+            }
+        }.start()
     }
 
     /**

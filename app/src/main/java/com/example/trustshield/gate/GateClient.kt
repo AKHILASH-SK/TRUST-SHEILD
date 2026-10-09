@@ -18,7 +18,8 @@ data class JobSnapshot(
     val joined: Boolean,               // true when we attached to a scan that was already running
     val stages: List<StageInfo>,
     val result: GateResult?,
-    val error: String
+    val error: String,
+    val refining: Boolean = false        // the first verdict is out; the AI second opinion is still running
 )
 
 /** Either a snapshot, or a ready-made failure result (signed out, server unreachable...). */
@@ -87,7 +88,8 @@ object GateClient {
         val result = obj.optJSONObject("result")?.let { parseResult(it) }
         return JobSnapshot(
             jobId = obj.optString("job_id"), state = obj.optString("state", "running"), progress = obj.optInt("progress", 0),
-            joined = obj.optBoolean("joined", false), stages = stages, result = result, error = obj.optString("error", "")
+            joined = obj.optBoolean("joined", false), stages = stages, result = result, error = obj.optString("error", ""),
+            refining = obj.optBoolean("refining", false)
         )
     }
 
@@ -102,6 +104,25 @@ object GateClient {
             verdict == "SAFE" -> GateLevel.SAFE
             else -> GateLevel.UNVERIFIED
         }
-        return GateResult(level, GateText.bullets(obj.optString("reasons", "")))
+        return GateResult(level, GateText.bullets(obj.optString("reasons", "")), aiPending = obj.optBoolean("ai_pending", false))
+    }
+
+    /** Current state of a saved scan: its verdict now, and whether the AI second opinion is still running. */
+    data class ScanState(val verdict: String, val reasons: String, val aiPending: Boolean)
+
+    fun fetchScanState(scanId: Int): ScanState? {
+        val token = AuthStore.token ?: return null
+        return try {
+            val conn = URL(BuildConfig.BASE_URL.removeSuffix("/") + "/api/links/scans/$scanId").openConnection() as HttpURLConnection
+            conn.connectTimeout = CONNECT_TIMEOUT_MS
+            conn.readTimeout = READ_TIMEOUT_MS
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            if (conn.responseCode !in 200..299) return null
+            val obj = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            ScanState(obj.optString("verdict", "").uppercase(), obj.optString("reasons", ""), obj.optBoolean("ai_pending", false))
+        } catch (e: Exception) {
+            Log.w(TAG, "scan state failed: ${e.javaClass.simpleName}")
+            null
+        }
     }
 }

@@ -615,7 +615,7 @@ def _scan_runner(url):
             "telemetry": {"known_db_match": 1, "status": "KNOWN_THREAT", "phishing_feed_source": db_source,
                           "threat_type": threat_type, "analysis_complete": True},
         }
-    result = get_link_pipeline().analyze_url(url)
+    result = get_link_pipeline().analyze_url(url, defer_ai=True)        # the AI second opinion must never delay the verdict
     if isinstance(result, dict):
         result.setdefault("tier_analyzed", "V2_LINK_PIPELINE")
         result.setdefault("tier_0_match", False)
@@ -632,7 +632,17 @@ def _job_result_payload(result):
         "analysis_complete": bool(result.get("analysis_complete", True)),
         "reasons": result.get("summary", ""),
         "tier_0_match": bool(result.get("tier_0_match")),
+        "ai_pending": bool((result.get("telemetry") or {}).get("ai_pending")),
     }
+
+
+def _url_spellings(url):
+    """'https://www.x.org/', 'https://x.org' ... all count as the same link."""
+    bare = url.rstrip("/")
+    spellings = {url, bare, bare + "/"}
+    for u in list(spellings):
+        spellings.add(u.replace("://www.", "://", 1) if "://www." in u else u.replace("://", "://www.", 1))
+    return sorted(spellings)
 
 
 def _record_job_scan(user_id, url, result, source_app):
@@ -645,17 +655,14 @@ def _record_job_scan(user_id, url, result, source_app):
       the old record is updated, so the history never keeps showing a stale answer.
     'www.' and trailing-slash spellings of the link count as the same link.
     """
-    bare = url.rstrip("/")
-    spellings = {url, bare, bare + "/"}
-    for u in list(spellings):
-        spellings.add(u.replace("://www.", "://", 1) if "://www." in u else u.replace("://", "://www.", 1))
+    spellings = _url_spellings(url)
     verdict = to_client_verdict(result)
     reasons = str(result.get("summary", ""))[:4000]
     score = float(result.get("threat_score", 0) or 0)
     complete = bool(result.get("analysis_complete", True))
     with db_cursor() as cur:
         cur.execute("SELECT id, risk_level FROM link_scans WHERE user_id = %s AND url = ANY(%s) ORDER BY id DESC LIMIT 1",
-                    (user_id, sorted(spellings)))
+                    (user_id, spellings))
         existing = cur.fetchone()
         if existing and existing[1] == verdict:
             return None
@@ -690,7 +697,34 @@ def _on_scan_job_finished(job):
             logging.getLogger("trustshield.scan").warning("could not record scan for user %s: %s", user_id, e)
 
 
-scan_jobs_manager = scan_jobs.JobManager(_scan_runner, slots=_analysis_slots, on_finish=_on_scan_job_finished)
+def _refine_scan(result, context):
+    from core_engine.link_threat_pipeline import refine_result
+    return refine_result(result, context)
+
+
+def _on_scan_refined(job, before):
+    """
+    The AI second opinion finished after the verdict was already delivered. Bring every history record that was saved with the
+    first (fast) verdict up to date, so the history, the details screen and later alerts show the refined answer.
+    """
+    result = job.result
+    old_verdict, new_verdict = to_client_verdict(before), to_client_verdict(result)
+    with db_cursor() as cur:
+        cur.execute("""UPDATE link_scans SET risk_level = %s, verdict = %s, reasons = %s, threat_score = %s, analysis_complete = %s
+                       WHERE url = ANY(%s) AND risk_level = %s AND analyzed_at > NOW() - INTERVAL '30 minutes' RETURNING id""",
+                    (new_verdict, new_verdict, str(result.get("summary", ""))[:4000], float(result.get("threat_score", 0) or 0),
+                     bool(result.get("analysis_complete", True)), _url_spellings(job.url), old_verdict))
+        ids = [r[0] for r in cur.fetchall()]
+    rows = scan_feature_rows(result, result.get("tier_analyzed", "V2_LINK_PIPELINE"))
+    for scan_id in ids:
+        with db_cursor() as cur:
+            cur.execute("DELETE FROM scan_features WHERE scan_id = %s", (scan_id,))
+            cur.executemany("INSERT INTO scan_features (scan_id, feature_name, feature_value) VALUES (%s, %s, %s)",
+                            [(scan_id, n, v) for n, v in rows])
+
+
+scan_jobs_manager = scan_jobs.JobManager(_scan_runner, slots=_analysis_slots, on_finish=_on_scan_job_finished,
+                                         refiner=_refine_scan, on_refined=_on_scan_refined)
 
 
 def run_link_pipeline(url):
@@ -978,7 +1012,8 @@ def save_link_scan():
             "display_verdict": display_verdict,
             "decisive": decisive,
             "tier_0_match": bool(is_phishing),
-            "tier_analyzed": tier_analyzed
+            "tier_analyzed": tier_analyzed,
+            "ai_pending": bool(pipeline_res and (pipeline_res.get("telemetry") or {}).get("ai_pending"))
         }), 201
 
     except Exception as e:
@@ -1013,6 +1048,7 @@ def start_scan_job():
         snap["how"] = how
         if job.state == "done":
             snap["result"] = _job_result_payload(job.result)
+            snap["result"]["ai_pending"] = job.refining
             snap["scan_id"] = scan_id
             return jsonify(snap), 200
         return jsonify(snap), 202
@@ -1032,7 +1068,31 @@ def scan_job_status(job_id):
         snap = job.snapshot()
         if job.state == "done":
             snap["result"] = _job_result_payload(job.result)
+            snap["result"]["ai_pending"] = job.refining
         return jsonify(snap), 200
+    except Exception as e:
+        return server_error(e)
+
+
+@app.route('/api/links/scans/<int:scan_id>', methods=['GET'])
+@require_auth
+@rate_limit("scan_state", 120, 60, per_user=True)
+def scan_state(scan_id):
+    """Current verdict of one of the caller's saved scans, and whether the AI second opinion is still running."""
+    try:
+        with db_cursor() as cur:
+            cur.execute("SELECT id, url, risk_level, reasons, threat_score FROM link_scans WHERE id = %s AND user_id = %s",
+                        (scan_id, g.user_id))
+            row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "Scan not found"}), 404
+        job, how = (None, None)
+        try:
+            job = scan_jobs_manager.peek(row[1])
+        except Exception:
+            job = None
+        return jsonify({"id": row[0], "url": row[1], "verdict": row[2], "reasons": row[3], "threat_score": row[4],
+                        "ai_pending": bool(job is not None and job.refining)}), 200
     except Exception as e:
         return server_error(e)
 
@@ -1052,6 +1112,7 @@ def explain_link():
         scan_id = data.get('scan_id')
         url = normalize_input_url(data.get('url')) if data.get('url') else None
         refresh = data.get('refresh') is True or (scan_id is None and url is not None)      # the app's Refresh button
+        quick = data.get('quick') is True       # "give me something instantly": rule-based text now, Gemini version via a second call
 
         if not url and not scan_id:
             return jsonify({"error": "Missing url or scan_id"}), 400
@@ -1087,7 +1148,7 @@ def explain_link():
             except Exception:
                 pass
 
-        if len(features) < 5:                                   # older scan without stored evidence: use the (shared) analysis
+        if len(features) < 5 and not quick:                     # older scan without stored evidence: use the (shared) analysis
             result = run_link_pipeline(url)
             if result is None:
                 return jsonify({"error": "Analysis service is busy"}), 503
@@ -1095,6 +1156,12 @@ def explain_link():
             features = {n: v for n, v in scan_feature_rows(result, result.get("tier_analyzed", "V2_LINK_PIPELINE"))}
 
         facts = explainer.facts_from_features(features, url, verdict, score)
+        if quick:
+            from core_engine import llm_reviewer as _llm
+            text, _ = explainer.explain(facts, use_ai=False)
+            return jsonify({"status": "success", "url": url, "scan_id": scan_id, "verdict": verdict, "threat_score": score,
+                            "summary": text, "source": "rules", "model": "Quick summary (AI version loading)",
+                            "ai_pending": bool(_llm.is_enabled())}), 200
         summary, source = explainer.explain(facts)
         label = "Written by Google Gemini" if source == "gemini" else "Summary from the analysis"
 

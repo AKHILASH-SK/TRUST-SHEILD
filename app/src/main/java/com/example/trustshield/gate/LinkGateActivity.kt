@@ -82,15 +82,34 @@ class LinkGateActivity : AppCompatActivity() {
 
     private fun runCheck() {
         val started = System.currentTimeMillis()
+        var rendered = false
+        var refineStarted = 0L
         var reply = GateClient.startJob(url, sourceApp)
         while (!closed) {
             reply.failure?.let { failure -> post { render(failure) }; return }
             val snap = reply.snapshot ?: return
-            post { showProgress(snap) }
             if (snap.state == "done" && snap.result != null) {
-                post { render(snap.result) }
-                return
+                // The FIRST verdict is shown at once. An AI second opinion may still be running: keep following it for a
+                // while and update the card if it changes the answer (it never delays the first verdict).
+                if (!rendered) {
+                    rendered = true
+                    val first = snap.result.copy(aiPending = snap.refining)
+                    post { render(first) }
+                    if (snap.refining) refineStarted = System.currentTimeMillis()
+                }
+                if (!snap.refining) {
+                    if (refineStarted != 0L) post { renderRefined(snap.result) }
+                    return
+                }
+                if (System.currentTimeMillis() - refineStarted > REFINE_WAIT_MS) {
+                    post { clearPendingNote() }
+                    return
+                }
+                try { Thread.sleep(POLL_MS) } catch (e: InterruptedException) { return }
+                reply = GateClient.pollJob(snap.jobId)
+                continue
             }
+            post { showProgress(snap) }
             if (snap.state == "error") {
                 post { render(GateResult(GateLevel.ERROR, message = snap.error.ifBlank { "The check could not be completed." })) }
                 return
@@ -183,7 +202,7 @@ class LinkGateActivity : AppCompatActivity() {
             }
             GateLevel.UNVERIFIED -> showWarning(
                 "!", "#D97706", "Unverified – open with care",
-                "TrustShield could not confirm that this link is safe.", result.reasons
+                "TrustShield could not confirm that this link is safe.", result.reasons, aiPending = result.aiPending
             )
             GateLevel.DANGEROUS -> showWarning(
                 "✕", "#DC2626", "Dangerous link",
@@ -194,10 +213,50 @@ class LinkGateActivity : AppCompatActivity() {
         }
     }
 
-    private fun showWarning(glyph: String, color: String, heading: String, text: String, reasons: List<String>) {
+    private var warningLevel: GateLevel? = null
+
+    /** The AI second opinion finished: update the card only if it changed the answer. */
+    private fun renderRefined(result: GateResult) {
+        if (closed) return
+        when {
+            result.level == warningLevel -> clearPendingNote()
+            result.level == GateLevel.SAFE -> {
+                paint("✓", "#16A34A")
+                title.text = "Safe"
+                statusText.text = "An extra AI check cleared this link."
+                reasonsBox.removeAllViews()
+                result.reasons.forEach { addReason(it) }
+                primary.visibility = View.VISIBLE
+                primary.text = "Open link"
+                primary.setOnClickListener { openLink() }
+                secondary.visibility = View.VISIBLE
+                secondary.text = "Go back"
+                secondary.setTextColor(Color.parseColor("#64748B"))
+                secondary.setOnClickListener { closeGate() }
+                warningLevel = GateLevel.SAFE
+            }
+            result.level == GateLevel.DANGEROUS -> {
+                reasonsBox.removeAllViews()
+                showWarning(
+                    "✕", "#DC2626", "Dangerous link",
+                    "An extra AI check confirmed: this link looks like phishing or malware.", result.reasons
+                )
+            }
+            else -> clearPendingNote()
+        }
+    }
+
+    private fun clearPendingNote() {
+        if (statusText.text.toString().endsWith(PENDING_NOTE)) {
+            statusText.text = statusText.text.toString().removeSuffix(PENDING_NOTE).trimEnd()
+        }
+    }
+
+    private fun showWarning(glyph: String, color: String, heading: String, text: String, reasons: List<String>, aiPending: Boolean = false) {
         paint(glyph, color)
         title.text = heading
-        statusText.text = text
+        warningLevel = if (heading.startsWith("Dangerous")) GateLevel.DANGEROUS else GateLevel.UNVERIFIED
+        statusText.text = text + (if (aiPending) PENDING_NOTE else "")
         reasons.forEach { addReason(it) }
         primary.visibility = View.VISIBLE
         primary.text = "Go back"
@@ -301,5 +360,7 @@ class LinkGateActivity : AppCompatActivity() {
         private const val POLL_MS = 900L
         private const val MAX_WAIT_MS = 80_000L
         private const val SKIP_AFTER_MS = 8_000L
+        private const val REFINE_WAIT_MS = 45_000L
+        private const val PENDING_NOTE = "  An extra AI check is still running…"
     }
 }

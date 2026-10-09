@@ -40,7 +40,7 @@ def test_a_confident_model_alone_no_longer_convicts_a_clean_looking_page():
 
 def _fake_pipeline(monkeypatch, calls, result):
     class FakePipeline:
-        def analyze_url(self, url):
+        def analyze_url(self, url, **kwargs):
             calls.append(url)
             return dict(result)
     monkeypatch.setattr(backend_app, "get_link_pipeline", lambda: FakePipeline())
@@ -473,3 +473,102 @@ def test_the_reviewer_is_not_anchored_by_the_model_score_when_only_the_model_is_
               "telemetry": {"hard_override_triggered": False, "ml_capped_no_evidence": True}}
     finalize_verdict(result, url="http://x/", ml_result={"probability": 1.0}, reviewer=Spy())
     assert seen == {"lean": "UNDECIDED", "ml": None}
+
+
+# ---- the AI second opinion must never delay the verdict ---------------------------------------------------------------------
+
+def test_the_verdict_is_delivered_before_the_ai_second_opinion_and_refined_afterwards():
+    import threading
+    import time
+    import scan_jobs
+
+    ai_started, ai_release, hooks = threading.Event(), threading.Event(), []
+
+    def runner(url):
+        return {"verdict": "SUSPICIOUS", "display_verdict": "Unverified - open with care", "threat_score": 70.0,
+                "decisive": False, "telemetry": {"ai_pending": True}, "_ai_context": {"url": url}}
+
+    def refiner(result, context):
+        ai_started.set()
+        ai_release.wait(5)                                         # the slow Gemini call
+        result.update(verdict="LEGITIMATE / CLEAN", display_verdict="Safe", threat_score=30.0, decisive=True)
+        result["telemetry"]["ai_pending"] = False
+        return result
+
+    manager = scan_jobs.JobManager(runner, refiner=refiner, on_refined=lambda job, before: hooks.append((before["display_verdict"], job.result["display_verdict"])))
+    started = time.time()
+    job, _ = manager.start_or_join("https://ambiguous.example/")
+    assert job.wait(3) and time.time() - started < 2                # released at once, long before the AI finishes
+    assert job.result["display_verdict"] == "Unverified - open with care" and job.refining is True
+    assert "_ai_context" not in job.result and job.snapshot()["refining"] is True
+    assert ai_started.wait(3) and not hooks                         # the AI is running in the background
+    # a second asker meanwhile gets the same fast answer and the same pending flag
+    again, how = manager.start_or_join("https://www.ambiguous.example")
+    assert how == "cached" and again is job and again.refining
+    ai_release.set()
+    for _ in range(50):
+        if not job.refining:
+            break
+        time.sleep(0.1)
+    assert job.result["display_verdict"] == "Safe" and job.version == 1 and hooks == [("Unverified - open with care", "Safe")]
+    assert manager.peek("https://ambiguous.example/") is job
+
+
+def test_a_failing_ai_second_opinion_keeps_the_first_verdict():
+    import time
+    import scan_jobs
+
+    def runner(url):
+        return {"verdict": "SUSPICIOUS", "display_verdict": "Unverified - open with care", "threat_score": 70.0,
+                "telemetry": {"ai_pending": True}, "_ai_context": {"url": url}}
+
+    def refiner(result, context):
+        raise RuntimeError("Gemini unavailable")
+
+    manager = scan_jobs.JobManager(runner, refiner=refiner)
+    job, _ = manager.start_or_join("https://x.example/")
+    job.wait(3)
+    for _ in range(50):
+        if not job.refining:
+            break
+        time.sleep(0.1)
+    assert job.refining is False and job.result["display_verdict"] == "Unverified - open with care" and job.version == 0
+
+
+def test_the_pipeline_defers_the_ai_and_the_refinement_finishes_the_job():
+    from core_engine.link_threat_pipeline import DISPLAY_SAFE, DISPLAY_UNVERIFIED, finalize_verdict, refine_result
+
+    class Reviewer:
+        MIN_CONFIDENCE = 0.75
+        calls = 0
+
+        def is_enabled(self):
+            return True
+
+        def review(self, *a, **k):
+            Reviewer.calls += 1
+            return {"verdict": "SAFE", "confidence": 0.9, "reasons": ["ordinary page"], "impersonated_brand": ""}
+
+        decide = staticmethod(lambda lean, res: None)
+
+    result = {"verdict": "SUSPICIOUS", "threat_score": 70.0, "analysis_complete": True, "summary": "s",
+              "telemetry": {"hard_override_triggered": False, "ml_capped_no_evidence": True}}
+    fast = finalize_verdict(result, url="http://x/", ml_result={"probability": 1.0}, reviewer=Reviewer(), defer_ai=True)
+    assert Reviewer.calls == 0 and fast["display_verdict"] == DISPLAY_UNVERIFIED and fast["telemetry"]["ai_pending"] is True
+    ctx = fast.pop("_ai_context")
+    final = refine_result(fast, ctx, reviewer=Reviewer())
+    assert Reviewer.calls == 1 and final["display_verdict"] == DISPLAY_SAFE and final["telemetry"]["ai_pending"] is False
+    # hard-rule results never wait for, or involve, the AI
+    hard = {"verdict": "CRITICAL FRAUD / PHISHING", "threat_score": 100.0, "analysis_complete": True, "summary": "",
+            "telemetry": {"hard_override_triggered": True}}
+    assert "_ai_context" not in finalize_verdict(hard, url="http://x/", reviewer=Reviewer(), defer_ai=True)
+
+
+def test_quick_explanation_answers_without_waiting_for_the_writer(monkeypatch):
+    import contextlib
+    from core_engine import explainer
+    # the quick path must never call the writer: prove it by making the writer explode
+    monkeypatch.setattr(explainer.llm_reviewer, "generate_json", lambda *a, **k: (_ for _ in ()).throw(AssertionError("writer called")))
+    facts = explainer.facts_from_features(DATUM_FEATURES, "https://datum-ashy-beta.vercel.app", "SAFE", 30.0)
+    text, source = explainer.explain(facts, use_ai=False)
+    assert source == "rules" and "Threat Summary" in text

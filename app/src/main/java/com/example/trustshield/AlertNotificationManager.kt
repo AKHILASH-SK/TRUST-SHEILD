@@ -115,6 +115,11 @@ class AlertNotificationManager(private val context: Context) {
         showNotification(title, message, bigText, NotificationCompat.PRIORITY_MAX, isError = true, notificationId)
     }
     
+    /** Remove the alert shown for a link (used when a later AI check cleared it). */
+    fun cancelAlert(url: String) {
+        notificationManager.cancel(Math.abs(url.hashCode() % 100000))
+    }
+
     /**
      * Show alert for suspicious link
      * @param isFromPhishingDB If true, alert every time (no cooldown) - link is in phishing database
@@ -207,6 +212,7 @@ class AlertNotificationManager(private val context: Context) {
                 .build()
             
             Log.d(TAG, "Posting notification to system...")
+            notificationManager.cancel(notificationId)       // a refined verdict for the same link must alert afresh, not update silently
             notificationManager.notify(notificationId, notification)
             Log.d(TAG, "✓ Notification posted successfully! ID: $notificationId")
             

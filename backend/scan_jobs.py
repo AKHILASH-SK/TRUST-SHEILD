@@ -49,6 +49,9 @@ class ScanJob:
         self.error = ""
         self.result: Optional[Dict[str, Any]] = None
         self.watchers: List[Tuple[int, str]] = []        # (user id, source app) that asked for the scan to be recorded
+        self.refining = False                            # True while the AI second opinion is still running in the background
+        self.ai_context: Optional[Dict[str, Any]] = None
+        self.version = 0                                 # increases each time the result is refined
         self._lock = threading.Lock()
         self._event = threading.Event()
         self.stages: "OrderedDict[str, Dict[str, str]]" = OrderedDict(
@@ -128,7 +131,8 @@ class ScanJob:
         with self._lock:
             return {
                 "job_id": self.id, "state": self.state, "url": self.url, "progress": pct, "joined": joined,
-                "elapsed_seconds": round((self.finished or time.time()) - self.created, 1),
+                "elapsed_seconds": round((self.finished or time.time()) - self.created, 1), "refining": self.refining,
+                "version": self.version,
                 "stages": [dict(s) for s in self.stages.values()],
                 "error": self.error,
             }
@@ -136,7 +140,11 @@ class ScanJob:
 
 class JobManager:
     def __init__(self, runner: Callable[[str], Dict[str, Any]], slots: Optional[threading.BoundedSemaphore] = None,
-                 on_finish: Optional[Callable[[ScanJob], None]] = None, cache_max: int = 2000):
+                 on_finish: Optional[Callable[[ScanJob], None]] = None, cache_max: int = 2000,
+                 refiner: Optional[Callable[[Dict[str, Any], Dict[str, Any]], Optional[Dict[str, Any]]]] = None,
+                 on_refined: Optional[Callable[[ScanJob, Dict[str, Any]], None]] = None):
+        self.refiner = refiner                  # runs the AI second opinion AFTER the verdict has been delivered
+        self.on_refined = on_refined
         self.runner = runner
         self.slots = slots
         self.on_finish = on_finish
@@ -170,6 +178,16 @@ class JobManager:
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"scan-{job.id[:6]}").start()
         return job, "started"
 
+    def peek(self, url: str) -> Optional[ScanJob]:
+        """The running or recently finished job for a link, without starting anything."""
+        key = cache_key(url)
+        with self._lock:
+            running = self._running.get(key)
+            if running is not None:
+                return running
+            hit = self._done.get(key)
+            return hit[2] if hit else None
+
     def get(self, job_id: str) -> Optional[ScanJob]:
         with self._lock:
             return self._by_id.get(job_id)
@@ -199,6 +217,9 @@ class JobManager:
             if not isinstance(result, dict):
                 job.fail("The analysis returned no result.")
                 return
+            context = result.pop("_ai_context", None) if isinstance(result, dict) else None
+            if context and self.refiner is not None:
+                job.ai_context, job.refining = context, True         # answer now; the AI review follows in the background
             job.finish(result)
             self._store(job)
         except Exception as exc:       # a failing scan must never leave a job hanging
@@ -216,6 +237,34 @@ class JobManager:
                     self.on_finish(job)
                 except Exception:
                     logger.exception("scan job finish hook failed")
+            if job.refining:
+                print(f"[SCAN {job.id[:6]}] VERDICT SENT now ({(job.result or {}).get('display_verdict')}); "
+                      f"AI second opinion continues in the background", flush=True)
+                threading.Thread(target=self._refine, args=(job,), daemon=True, name=f"ai-{job.id[:6]}").start()
+
+    def _refine(self, job: ScanJob) -> None:
+        """The AI second opinion. The user already has the first verdict; this may sharpen it (Unverified -> Safe/Dangerous)."""
+        started = time.time()
+        before = copy.deepcopy(job.result)
+        refined = None
+        try:
+            refined = self.refiner(copy.deepcopy(job.result), job.ai_context or {})
+        except Exception:
+            logger.exception("AI refinement failed for %s", job.url[:80])
+        with job._lock:
+            if isinstance(refined, dict):
+                job.result = refined
+                job.version += 1
+            job.refining, job.ai_context = False, None
+        self._store(job)
+        after = (job.result or {}).get("display_verdict")
+        print(f"[SCAN {job.id[:6]}] AI REVIEW  finished in {time.time() - started:.0f}s: "
+              f"{(before or {}).get('display_verdict')} -> {after}", flush=True)
+        if isinstance(refined, dict) and self.on_refined is not None:
+            try:
+                self.on_refined(job, before or {})
+            except Exception:
+                logger.exception("refinement hook failed")
 
     def _store(self, job: ScanJob) -> None:
         shown = str((job.result or {}).get("display_verdict") or "")

@@ -6,7 +6,8 @@ enum class GateLevel { SAFE, UNVERIFIED, DANGEROUS, ERROR, SIGNED_OUT }
 data class GateResult(
     val level: GateLevel,
     val reasons: List<String> = emptyList(),
-    val message: String = ""
+    val message: String = "",
+    val aiPending: Boolean = false       // an AI second opinion is still running and may refine this answer
 )
 
 /** Turns the backend's long forensic text into a few short bullet points a person can read in a pop-up. */

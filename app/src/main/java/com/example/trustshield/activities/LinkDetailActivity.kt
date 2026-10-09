@@ -252,6 +252,24 @@ class LinkDetailActivity : AppCompatActivity() {
                     scan_id = if (forceRefresh) null else scanIdInt
                 )
 
+                // 1) a quick, rule-based summary shows at once; 2) the AI-written version replaces it when it arrives.
+                var showedQuick = false
+                if (!forceRefresh && scanIdInt != null) {
+                    try {
+                        val quick = apiService.explainLink(request.copy(quick = true))
+                        val q = quick.body()
+                        if (quick.isSuccessful && q != null) {
+                            explainSourceLabel.text = q.model?.takeIf { it.isNotBlank() } ?: "Quick summary"
+                            q.verdict?.let { currentVerdict = it; updateVerdictBadge(it, it) }
+                            bindGeminiReport(q.summary ?: "")
+                            showedQuick = true
+                            if (q.ai_pending != true) return@launch
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Quick explanation failed: ${e.message}")
+                    }
+                }
+
                 Log.d(TAG, "Sending explain request to backend for: $targetUrl (Scan ID: $scanIdInt)")
                 val response = apiService.explainLink(request)
 
@@ -269,6 +287,8 @@ class LinkDetailActivity : AppCompatActivity() {
                     }
 
                     bindGeminiReport(summary)
+                } else if (showedQuick) {
+                    explainSourceLabel.text = "Summary from the analysis"      // keep the quick text that is already on screen
                 } else {
                     Log.w(TAG, "Explain API returned error code: ${response.code()}")
                     llGeminiLoading.visibility = View.GONE
@@ -280,6 +300,10 @@ class LinkDetailActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch Gemini forensic report: ${e.message}", e)
+                if (llGeminiContent.visibility == View.VISIBLE) {              // a quick summary is already showing: keep it
+                    explainSourceLabel.text = "Summary from the analysis"
+                    return@launch
+                }
                 llGeminiLoading.visibility = View.GONE
                 llGeminiContent.visibility = View.VISIBLE
                 explainSourceLabel.text = "Not available"

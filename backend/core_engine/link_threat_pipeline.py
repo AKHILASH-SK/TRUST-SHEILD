@@ -184,10 +184,12 @@ class LinkThreatPipeline:
         url: str,
         email_text_context: str = "",
         nlp_score: float = 0.0,
-        skip_sandbox: bool = False
+        skip_sandbox: bool = False,
+        defer_ai: bool = False
     ) -> Dict[str, Any]:
         """
         Executes the 4-stage pipeline on the target URL.
+        defer_ai=True returns before the AI second opinion (see finalize_verdict).
         """
         clean_url = (url or "").strip()
         if not clean_url:
@@ -362,7 +364,8 @@ class LinkThreatPipeline:
         )
 
         return finalize_verdict(final_result, url=clean_url, sandbox_res=sandbox_res, ml_result=ml_result,
-                                vt_detail=vt_detail, free_hosting=bool(user_content), page_text=page_text)
+                                vt_detail=vt_detail, free_hosting=bool(user_content), page_text=page_text,
+                                defer_ai=defer_ai)
 
 
 DISPLAY_SAFE = "Safe"
@@ -383,14 +386,51 @@ def display_for(result: Dict[str, Any]) -> str:
     return DISPLAY_SAFE
 
 
+def _ai_review_step(result: Dict[str, Any], *, url: str, sandbox_res: Dict[str, Any], ml_result: Optional[Dict[str, Any]],
+                    vt_detail: Optional[Dict[str, Any]], free_hosting: bool, page_text: str, reviewer) -> None:
+    """The AI second opinion for a result stuck in the uncertain middle. Changes `result` in place."""
+    tel = result.setdefault("telemetry", {})
+    score = float(result.get("threat_score", 0) or 0)
+    no_evidence = bool(tel.get("ml_capped_no_evidence"))
+    # When only the model is alarmed (nothing concrete found), the reviewer must judge the page on its own: it is not
+    # shown the model's score and is not told which way our checks lean, so it cannot just echo the model.
+    lean = ("UNDECIDED" if no_evidence else
+            ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE"))
+    try:
+        review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=None if no_evidence else ml_result,
+                                 domain_age_days=int(sandbox_res.get("domain_age_days", -1) or -1), free_hosting=free_hosting)
+    except Exception:
+        review = None
+    tel["llm_review"] = review
+    if no_evidence:
+        # A soft model score plus an AI opinion is still no concrete evidence: the reviewer may CLEAR the link
+        # (SAFE), but can never convict it on its own. Anything else stays "Unverified - open with care".
+        confident = bool(review and float(review.get("confidence", 0) or 0) >= getattr(reviewer, "MIN_CONFIDENCE", 0.75))
+        decision = "SAFE" if (confident and review.get("verdict") == "SAFE") else None
+    else:
+        decision = reviewer.decide(lean, review)
+    if decision == "DANGEROUS":
+        result["verdict"] = "CRITICAL FRAUD / PHISHING"
+        result["threat_score"] = max(score, 85.0)
+    elif decision == "SAFE":
+        result["verdict"] = "LEGITIMATE / CLEAN" if result.get("analysis_complete", True) else "LEGITIMATE / UNVERIFIED"
+        result["threat_score"] = min(score, 30.0)
+    if review and review.get("reasons"):
+        result["summary"] = (result.get("summary", "") + "\n- AI review (" + review["verdict"].lower() + ", "
+                             + str(int(review["confidence"] * 100)) + "% sure): " + "; ".join(review["reasons"])).strip()
+
+
 def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[Dict[str, Any]] = None,
                      ml_result: Optional[Dict[str, Any]] = None, vt_detail: Optional[Dict[str, Any]] = None,
-                     free_hosting: bool = False, page_text: str = "", reviewer=None) -> Dict[str, Any]:
+                     free_hosting: bool = False, page_text: str = "", reviewer=None, defer_ai: bool = False) -> Dict[str, Any]:
     """
     Turn the engine's result into a decisive answer wherever the evidence allows it:
       * a dead domain has nothing to open -> Safe (page offline)
       * a score stuck in the uncertain middle -> ask the AI reviewer; act only if it agrees with our own lean
     Hard rules are never touched. Whatever stays uncertain is shown as 'Unverified - open with care'.
+
+    defer_ai=True: do NOT wait for the AI. The result is returned at once (uncertain results as 'Unverified') carrying the
+    context the AI step needs under "_ai_context" and telemetry["ai_pending"]=True; refine_result() finishes the job later.
     """
     from . import llm_reviewer as default_reviewer
     reviewer = reviewer or default_reviewer
@@ -409,37 +449,35 @@ def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[
           and not tel.get("ml_capped_uninspected")):
         # (a link whose page could not be opened and that nothing else condemns stays 'Unverified': the reviewer would
         #  only be guessing from the address, with no page content to look at)
-        no_evidence = bool(tel.get("ml_capped_no_evidence"))
-        # When only the model is alarmed (nothing concrete found), the reviewer must judge the page on its own: it is not
-        # shown the model's score and is not told which way our checks lean, so it cannot just echo the model.
-        lean = ("UNDECIDED" if no_evidence else
-                ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE"))
-        try:
-            review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=None if no_evidence else ml_result,
-                                     domain_age_days=int(sandbox_res.get("domain_age_days", -1) or -1), free_hosting=free_hosting)
-        except Exception:
-            review = None
-        tel["llm_review"] = review
-        if no_evidence:
-            # A soft model score plus an AI opinion is still no concrete evidence: the reviewer may CLEAR the link
-            # (SAFE), but can never convict it on its own. Anything else stays "Unverified - open with care".
-            confident = bool(review and float(review.get("confidence", 0) or 0) >= getattr(reviewer, "MIN_CONFIDENCE", 0.75))
-            decision = "SAFE" if (confident and review.get("verdict") == "SAFE") else None
+        ai_available = getattr(reviewer, "is_enabled", lambda: True)()
+        if defer_ai and ai_available:
+            tel["ai_pending"] = True
+            result["_ai_context"] = {"url": url, "sandbox_res": dict(sandbox_res), "ml_result": ml_result,
+                                     "vt_detail": vt_detail, "free_hosting": free_hosting, "page_text": page_text}
         else:
-            decision = reviewer.decide(lean, review)
-        if decision == "DANGEROUS":
-            result["verdict"] = "CRITICAL FRAUD / PHISHING"
-            result["threat_score"] = max(score, 85.0)
-        elif decision == "SAFE":
-            result["verdict"] = "LEGITIMATE / CLEAN" if result.get("analysis_complete", True) else "LEGITIMATE / UNVERIFIED"
-            result["threat_score"] = min(score, 30.0)
-        if review and review.get("reasons"):
-            result["summary"] = (result.get("summary", "") + "\n- AI review (" + review["verdict"].lower() + ", "
-                                 + str(int(review["confidence"] * 100)) + "% sure): " + "; ".join(review["reasons"])).strip()
+            _ai_review_step(result, url=url, sandbox_res=sandbox_res, ml_result=ml_result, vt_detail=vt_detail,
+                            free_hosting=free_hosting, page_text=page_text, reviewer=reviewer)
 
     result["display_verdict"] = display_for(result)
     result["decisive"] = result["display_verdict"] != DISPLAY_UNVERIFIED
     return result
+
+
+def refine_result(result: Dict[str, Any], context: Dict[str, Any], reviewer=None) -> Dict[str, Any]:
+    """Run the deferred AI second opinion for a result that finalize_verdict(defer_ai=True) returned. Returns a new result."""
+    import copy
+    from . import llm_reviewer as default_reviewer
+    reviewer = reviewer or default_reviewer
+    refined = copy.deepcopy(result)
+    refined.pop("_ai_context", None)
+    tel = refined.setdefault("telemetry", {})
+    _ai_review_step(refined, url=context["url"], sandbox_res=context.get("sandbox_res") or {}, ml_result=context.get("ml_result"),
+                    vt_detail=context.get("vt_detail"), free_hosting=bool(context.get("free_hosting")),
+                    page_text=context.get("page_text", ""), reviewer=reviewer)
+    tel["ai_pending"] = False
+    refined["display_verdict"] = display_for(refined)
+    refined["decisive"] = refined["display_verdict"] != DISPLAY_UNVERIFIED
+    return refined
 
 
 # Singleton convenience instance

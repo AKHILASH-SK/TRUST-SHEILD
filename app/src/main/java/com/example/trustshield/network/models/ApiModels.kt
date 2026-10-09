@@ -78,7 +78,8 @@ data class LinkScanResponse(
     val verdict: String,
     val analyzed_at: String,
     val source_app: String? = null,
-    val threat_score: Float? = null
+    val threat_score: Float? = null,
+    val ai_pending: Boolean? = null      // true: the verdict is final for now, an AI second opinion may still refine it
 )
 
 /**
@@ -108,7 +109,8 @@ data class LinkHistoryResponse(
  */
 data class LinkExplainRequest(
     val url: String,
-    val scan_id: Int? = null
+    val scan_id: Int? = null,
+    val quick: Boolean? = null           // true: answer instantly with the rule-based text (the AI version comes in a second call)
 )
 
 data class LinkExplainResponse(
@@ -119,7 +121,8 @@ data class LinkExplainResponse(
     val threat_score: Float?,
     val summary: String?,
     val source: String? = null,       // "gemini" when Gemini wrote the text, "rules" otherwise
-    val model: String? = null         // the label to show, e.g. "Written by Google Gemini"
+    val model: String? = null,        // the label to show, e.g. "Written by Google Gemini"
+    val ai_pending: Boolean? = null   // true on a quick answer: the AI-written version is still to come
 )
 
 // ===== Health Check Models =====
