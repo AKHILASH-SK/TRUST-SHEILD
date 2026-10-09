@@ -67,6 +67,8 @@ def load_seen(path: str) -> set:
 
 
 def pick_malicious(n: int, rng: random.Random, seen: set, refresh: bool) -> List[Tuple[str, str]]:
+    if n <= 0:
+        return []
     pools: Dict[str, List[str]] = {
         "phishtank": datasets.load_phishtank(refresh),
         "phishing_database": datasets.load_phishing_database(refresh),

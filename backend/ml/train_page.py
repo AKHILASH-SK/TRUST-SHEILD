@@ -76,6 +76,11 @@ def main() -> None:
             if rec.get("status") == "ok" and rec.get("html_gz_b64"):
                 rows.append(rec)
     print(f"   statuses: {status_count}", flush=True)
+    live_rows = [r for r in rows if not trainlib.is_dead_page(r)]
+    dead_by_class = {c: sum(1 for r in rows if r["label"] == c and trainlib.is_dead_page(r)) for c in (0, 1)}
+    print(f"   ignored {len(rows) - len(live_rows):,d} dead or placeholder pages (benign {dead_by_class[0]:,d}, malicious "
+          f"{dead_by_class[1]:,d}): 'site not found', 404, takedown notices and similar tell the model nothing", flush=True)
+    rows = live_rows
     seen, unique = set(), []
     for rec in rows:
         if rec["url"] not in seen:
@@ -126,7 +131,7 @@ def main() -> None:
     page_urls = [r["url"] for r in rows]
     weights, wstat = trainlib.hosted_balance_weights(page_urls, y)
     print(f"   shared-hosting pages: malicious {wstat['hosted_malicious']:,d} vs benign {wstat['hosted_benign']:,d}; "
-          f"benign hosted pages weighted x{wstat['benign_hosted_weight']:.1f}", flush=True)
+          f"hosted weights: benign x{wstat['benign_hosted_weight']:.1f}, malicious x{wstat['malicious_hosted_weight']:.1f}", flush=True)
     clf = trainlib.fit_lgbm(X[tr], y[tr], X[va], y[va], categorical=cat, w_tr=weights[tr], w_val=weights[va])
     print(f"   best iteration: {clf.best_iteration_}", flush=True)
 

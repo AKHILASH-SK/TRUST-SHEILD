@@ -141,6 +141,32 @@ def lgbm_params(n_rows: int) -> Dict[str, Any]:
     )
 
 
+_DEAD_TITLE = None
+
+
+def is_dead_page(record: Dict[str, Any]) -> bool:
+    """
+    A page that is gone or a placeholder: 'Site not found', 404, a platform's takedown notice, 'this app is not live'...
+    It tells the model nothing about phishing (the product treats these as 'offline: nothing to open'), and labelling such
+    pages benign or malicious only adds noise, so training ignores them.
+    """
+    import re
+    global _DEAD_TITLE
+    if _DEAD_TITLE is None:
+        _DEAD_TITLE = re.compile(
+            r"404|not found|no such (site|app|page)|takedown|take-down|isn'?t live|not live|no longer (available|exists)|"
+            r"suspended|has been (removed|deleted|disabled)|deployment (not found|has been)|domain (is )?(for sale|expired|parked)|"
+            r"default web ?page|welcome to nginx|apache2? (ubuntu )?default|coming soon|under construction|page cannot be found|"
+            r"this (site|page|app|form) (can.t|cannot|could ?n.t) be (reached|found)|couldn.t find this", re.I)
+    evidence = record.get("evidence") or {}
+    title = str(evidence.get("page_title") or "")
+    try:
+        status = int(evidence.get("http_status") or 0)
+    except (TypeError, ValueError):
+        status = 0
+    return bool(status >= 400 or _DEAD_TITLE.search(title))
+
+
 def fmt_secs(seconds: float) -> str:
     seconds = int(max(0, seconds))
     if seconds < 90:
@@ -274,9 +300,10 @@ def fit_lgbm(X_tr, y_tr, X_val, y_val, categorical: Optional[List[int]] = None, 
 
 def hosted_balance_weights(urls: List[str], labels, cap: float = 8.0):
     """
-    Sample weights that make the two classes count equally AMONG sites on shared hosting platforms. Without this a handful of
-    benign hosted sites is drowned by hundreds of phishing pages on the same platforms and the model learns that hosting
-    itself is evidence of phishing. Everything not hosted keeps weight 1.
+    Sample weights that make the two classes count about equally AMONG sites on shared hosting platforms: whichever class is the
+    smaller one there is weighted up (at most x`cap`). Without this, hundreds of phishing pages on the same platforms drown the
+    few benign ones (the old model learned "hosted = phishing"), or the other way round once many benign hosted pages exist.
+    Everything not hosted keeps weight 1.
     """
     from .features import is_hosted
     hosted = np.array([is_hosted(u) for u in urls])
@@ -284,10 +311,15 @@ def hosted_balance_weights(urls: List[str], labels, cap: float = 8.0):
     n_mal = int(((labels == 1) & hosted).sum())
     n_ben = int(((labels == 0) & hosted).sum())
     weights = np.ones(len(urls), dtype=np.float32)
-    if n_ben > 0 and n_mal > n_ben:
-        weights[(labels == 0) & hosted] = min(cap, n_mal / n_ben)
-    return weights, {"hosted_malicious": n_mal, "hosted_benign": n_ben,
-                     "benign_hosted_weight": float(weights[(labels == 0) & hosted][0]) if n_ben else 1.0}
+    stat = {"hosted_malicious": n_mal, "hosted_benign": n_ben, "benign_hosted_weight": 1.0, "malicious_hosted_weight": 1.0}
+    if n_ben > 0 and n_mal > 0:
+        if n_mal > n_ben:
+            stat["benign_hosted_weight"] = min(cap, n_mal / n_ben)
+            weights[(labels == 0) & hosted] = stat["benign_hosted_weight"]
+        elif n_ben > n_mal:
+            stat["malicious_hosted_weight"] = min(cap, n_ben / n_mal)
+            weights[(labels == 1) & hosted] = stat["malicious_hosted_weight"]
+    return weights, stat
 
 
 def print_hosted_report(urls: List[str], y, p, thresholds: Dict[str, Any]) -> Dict[str, Any]:

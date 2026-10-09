@@ -155,7 +155,7 @@ def main() -> None:
     cat = [LEXICAL_HOST_FEATURES.index("tld_id")]
     weights, wstat = trainlib.hosted_balance_weights(urls, labels)
     print(f"   shared-hosting balance: malicious {wstat['hosted_malicious']:,d} vs benign {wstat['hosted_benign']:,d}; "
-          f"benign hosted sites weighted x{wstat['benign_hosted_weight']:.1f}", flush=True)
+          f"hosted weights: benign x{wstat['benign_hosted_weight']:.1f}, malicious x{wstat['malicious_hosted_weight']:.1f}", flush=True)
     clf = trainlib.fit_lgbm(X[tr], labels[tr], X[va], labels[va], categorical=cat, w_tr=weights[tr], w_val=weights[va])
     print(f"   best iteration: {clf.best_iteration_}", flush=True)
 

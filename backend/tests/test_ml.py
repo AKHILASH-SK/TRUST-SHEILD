@@ -254,3 +254,31 @@ def test_feature_cache_computes_once_then_loads_from_disk(tmp_path, monkeypatch)
     second = trainlib.cached_features(["https://a.example/", "https://b.example/"], featurize, "t", 2)
     changed = trainlib.cached_features(["https://a.example/", "https://c.example/"], featurize, "t", 2)
     assert calls == [2, 2] and (first == second).all() and changed.shape == (2, 3)     # same list -> cached; new list -> recomputed
+
+
+def test_dead_and_placeholder_pages_are_ignored_by_training():
+    from ml.trainlib import is_dead_page
+    dead = [{"evidence": {"page_title": "Site not found \u00b7 GitHub Pages", "http_status": 404}},
+            {"evidence": {"page_title": "Website Takedown Notice - Lovable Trust & Safety", "http_status": 200}},
+            {"evidence": {"page_title": "This app isn't live yet", "http_status": 200}},
+            {"evidence": {"page_title": "Anything", "http_status": 503}}]
+    live = [{"evidence": {"page_title": "DATUM - Planning-to-Execution Bridge", "http_status": 200}},
+            {"evidence": {"page_title": "My portfolio", "http_status": 200}}, {"evidence": {}}, {}]
+    assert all(is_dead_page(r) for r in dead) and not any(is_dead_page(r) for r in live)
+
+
+def test_asking_for_zero_malicious_pages_collects_none(monkeypatch):
+    import random
+    from ml import collect_dataset
+    monkeypatch.setattr(collect_dataset.datasets, "load_phishtank", lambda r: (_ for _ in ()).throw(AssertionError("must not load")))
+    assert collect_dataset.pick_malicious(0, random.Random(1), set(), False) == []
+
+
+def test_hosted_weights_balance_in_both_directions():
+    import numpy as np
+    from ml import trainlib
+    many_benign = ["https://b%d.vercel.app/" % i for i in range(30)] + ["https://m%d.vercel.app/" % i for i in range(5)]
+    labels = np.array([0] * 30 + [1] * 5)
+    weights, stat = trainlib.hosted_balance_weights(many_benign, labels)
+    assert stat["malicious_hosted_weight"] == 6.0 and stat["benign_hosted_weight"] == 1.0
+    assert (weights[30:] == 6.0).all() and (weights[:30] == 1.0).all()
