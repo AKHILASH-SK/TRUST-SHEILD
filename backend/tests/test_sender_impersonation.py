@@ -18,7 +18,7 @@ def test_forged_email_from_a_domain_that_rejects_it_is_spoofed():
     out = si.assess_sender(forensics(spf="fail", dkim="none", dmarc="fail", policy="reject"), eml())
     assert out["level"] == "spoofed"
     assert "203.0.113.9" in out["headline"] and "paypal.com" in out["headline"]
-    assert si.score_contribution(out)[0] >= 40
+    assert out["owner_policy_rejects"] is True and si.score_contribution(out)[0] >= 80      # the domain itself says "reject"
 
 
 def test_all_checks_failing_while_claiming_a_brand_is_spoofed_even_without_a_reject_policy():
@@ -128,3 +128,16 @@ def test_lab_the_same_forgery_forwarded_through_a_list_is_only_suspicious(world)
 def test_lab_analysis_never_touches_real_dns_for_lab_domains(world):
     from core_engine import email_forensics as ef
     assert ef._dns_lookup("bank.test", "TXT")[0].startswith("v=spf1")
+
+
+def test_lab_whole_pipeline_verdicts(world):
+    from core_engine.unified_email_pipeline import analyze_email_pipeline
+    from lab.mail_lab import genuine_bank_email, forged_bank_email, build_message, BANK_DOMAIN, ATTACKER_IP
+    genuine = analyze_email_pipeline(genuine_bank_email(world), skip_link_sandbox=True)
+    assert genuine["verdict"].startswith("LEGITIMATE") and genuine["sender_assessment"]["level"] == "authentic"
+    forged = analyze_email_pipeline(forged_bank_email(body="Please call us."), skip_link_sandbox=True)
+    assert forged["verdict"].startswith("CRITICAL") and forged["sender_assessment"]["level"] == "spoofed"
+    forwarded_mail = build_message(f'"Bank" <alerts@{BANK_DOMAIN}>', ATTACKER_IP,
+                                   extra_headers="List-Id: <x.example>" + chr(13) + chr(10) + "ARC-Seal: i=1")
+    forwarded = analyze_email_pipeline(forwarded_mail, skip_link_sandbox=True)
+    assert forwarded["verdict"].startswith("SUSPICIOUS")          # not "authenticated", and not called forged either

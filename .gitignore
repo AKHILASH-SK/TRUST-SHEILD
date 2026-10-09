@@ -64,3 +64,6 @@ backend/ml/data/
 *.mp4
 *.mov
 backend/core_engine/trained_models/_previous/
+
+backend/lab/data/
+backend/lab/samples/

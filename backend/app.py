@@ -590,6 +590,11 @@ def to_client_verdict(pipeline_res):
 
 import scan_jobs
 import verdict_memory
+
+if os.getenv("TRUSTSHIELD_LAB_MODE", "").strip() == "1":          # the impersonation demo: simulated DNS for bank.test (lab/)
+    from lab.mail_lab import LabWorld
+    LabWorld().install()
+    print("[LAB] Lab mode ON: bank.test DNS and 127.0.0.x senders are simulated. Do not use for real scanning.", flush=True)
 from core_engine import scan_progress
 
 verdict_store = verdict_memory.VerdictMemory(db_cursor)

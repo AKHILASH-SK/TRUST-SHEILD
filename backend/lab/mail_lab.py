@@ -10,6 +10,7 @@ the DNS answers (a table instead of the internet) and the sender addresses (127.
 simulation on with `install()`; it is switched off again with `uninstall()`.
 """
 import base64
+import os
 import dkim
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -23,13 +24,25 @@ ATTACKER_IP = "127.0.0.3"
 SELECTOR = "lab"
 
 
-class LabWorld:
-    """Pretend DNS for the lab domains, plus the bank's DKIM key."""
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "lab_dkim_private.pem")
 
-    def __init__(self):
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        self.private_pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
-                                             serialization.NoEncryption())
+
+class LabWorld:
+    """Pretend DNS for the lab domains, plus the bank's DKIM key (kept in lab/data so samples and the demo backend agree)."""
+
+    def __init__(self, persist: bool = True):
+        if persist and os.path.exists(KEY_FILE):
+            with open(KEY_FILE, "rb") as fh:
+                self.private_pem = fh.read()
+            key = serialization.load_pem_private_key(self.private_pem, password=None)
+        else:
+            key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            self.private_pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
+                                                 serialization.NoEncryption())
+            if persist:
+                os.makedirs(os.path.dirname(KEY_FILE), exist_ok=True)
+                with open(KEY_FILE, "wb") as fh:
+                    fh.write(self.private_pem)
         public_der = key.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
         self.records = {
             ("TXT", BANK_DOMAIN): [f"v=spf1 ip4:{BANK_IP} -all"],                                       # only the bank's server may send

@@ -202,6 +202,7 @@ def assess_sender(forensics: Dict[str, Any], raw_message: Optional[bytes] = None
 
     return {
         "level": level,
+        "owner_policy_rejects": bool(level == "spoofed" and dmarc == "fail" and policy_set in ("reject", "quarantine")),
         "headline": headline,
         "claims": {"display_name": display_name, "address_domain": from_domain, "brand": claimed_brand or None,
                    "reply_to": meta.get("reply_to") or None},
@@ -220,7 +221,9 @@ def score_contribution(assessment: Dict[str, Any]) -> Tuple[float, str]:
     """(points to add to the email's threat score, short reason). Spoofing alone is serious but never the whole verdict."""
     level = assessment.get("level")
     if level == "spoofed":
-        return 40.0, "Sender impersonation: " + assessment.get("headline", "")
+        # the domain's own published policy says "reject this": as clear as a sender check can be
+        points = 80.0 if assessment.get("owner_policy_rejects") else 65.0
+        return points, "Sender impersonation: " + assessment.get("headline", "")
     if level == "suspicious":
         return 15.0, "Sender could not be trusted: " + assessment.get("headline", "")
     return 0.0, ""

@@ -552,6 +552,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         final_verdict = "SUSPICIOUS / UNVERIFIED ORIGIN"
     else:
         final_verdict = "LEGITIMATE / AUTHENTICATED"
+    # A message whose sender checks failed is never labelled "authenticated", whatever its score
+    if final_verdict.startswith("LEGITIMATE") and sender_assessment.get("level") in ("suspicious", "spoofed"):
+        final_verdict = "SUSPICIOUS / UNVERIFIED ORIGIN"
 
     # Rebuild incident summary with updated score
     incident_summary = generate_incident_summary(
