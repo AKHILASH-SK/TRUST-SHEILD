@@ -409,18 +409,22 @@ def finalize_verdict(result: Dict[str, Any], *, url: str, sandbox_res: Optional[
           and not tel.get("ml_capped_uninspected")):
         # (a link whose page could not be opened and that nothing else condemns stays 'Unverified': the reviewer would
         #  only be guessing from the address, with no page content to look at)
-        lean = ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE")
+        no_evidence = bool(tel.get("ml_capped_no_evidence"))
+        # When only the model is alarmed (nothing concrete found), the reviewer must judge the page on its own: it is not
+        # shown the model's score and is not told which way our checks lean, so it cannot just echo the model.
+        lean = ("UNDECIDED" if no_evidence else
+                ("DANGEROUS" if (ml_result["probability"] >= 0.5 if ml_result else score >= 65) else "SAFE"))
         try:
-            review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=ml_result,
+            review = reviewer.review(url, sandbox_res, page_text, lean, vt=vt_detail, ml=None if no_evidence else ml_result,
                                      domain_age_days=int(sandbox_res.get("domain_age_days", -1) or -1), free_hosting=free_hosting)
         except Exception:
             review = None
         tel["llm_review"] = review
-        if (tel.get("ml_capped_no_evidence") and review and review.get("verdict") in ("SAFE", "DANGEROUS")
-                and float(review.get("confidence", 0) or 0) >= getattr(reviewer, "MIN_CONFIDENCE", 0.75)):
-            # The model alone says dangerous but the sandbox found nothing concrete: the reviewer, who read the page,
-            # arbitrates between the two (SAFE clears it, DANGEROUS confirms the model).
-            decision = review["verdict"]
+        if no_evidence:
+            # A soft model score plus an AI opinion is still no concrete evidence: the reviewer may CLEAR the link
+            # (SAFE), but can never convict it on its own. Anything else stays "Unverified - open with care".
+            confident = bool(review and float(review.get("confidence", 0) or 0) >= getattr(reviewer, "MIN_CONFIDENCE", 0.75))
+            decision = "SAFE" if (confident and review.get("verdict") == "SAFE") else None
         else:
             decision = reviewer.decide(lean, review)
         if decision == "DANGEROUS":

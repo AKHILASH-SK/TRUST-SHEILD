@@ -297,7 +297,7 @@ def test_concrete_evidence_keeps_the_dangerous_verdict():
         assert out["threat_score"] >= 80, extra
 
 
-def test_when_the_model_alone_accuses_the_reviewer_arbitrates_between_model_and_evidence():
+def test_when_the_model_alone_accuses_the_reviewer_can_clear_the_link_but_never_convict_it():
     from core_engine.link_threat_pipeline import DISPLAY_DANGEROUS, DISPLAY_SAFE, DISPLAY_UNVERIFIED, finalize_verdict
 
     class Reviewer:
@@ -317,7 +317,8 @@ def test_when_the_model_alone_accuses_the_reviewer_arbitrates_between_model_and_
 
     ml = {"probability": 1.0}
     assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.9))["display_verdict"] == DISPLAY_SAFE
-    assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("DANGEROUS", 0.9))["display_verdict"] == DISPLAY_DANGEROUS
+    # the reviewer cannot convict on soft evidence alone: DANGEROUS stays "Unverified"
+    assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("DANGEROUS", 0.95))["display_verdict"] == DISPLAY_UNVERIFIED
     assert finalize_verdict(result(), url="http://x/", ml_result=ml, reviewer=Reviewer("SAFE", 0.5))["display_verdict"] == DISPLAY_UNVERIFIED
 
 
@@ -453,3 +454,22 @@ def test_a_known_phishing_link_is_explained_without_waiting_for_the_writer():
                                           "https://x.example/app", "DANGEROUS", 100.0)
     text, source = explainer.explain(facts, writer=must_not_be_called)
     assert source == "rules" and "public phishing list" in text
+
+
+def test_the_reviewer_is_not_anchored_by_the_model_score_when_only_the_model_is_alarmed():
+    from core_engine.link_threat_pipeline import finalize_verdict
+    seen = {}
+
+    class Spy:
+        MIN_CONFIDENCE = 0.75
+
+        def review(self, url, evidence, text, lean, vt=None, ml=None, **k):
+            seen.update(lean=lean, ml=ml)
+            return None
+
+        decide = staticmethod(lambda lean, res: None)
+
+    result = {"verdict": "SUSPICIOUS", "threat_score": 70.0, "analysis_complete": True, "summary": "s",
+              "telemetry": {"hard_override_triggered": False, "ml_capped_no_evidence": True}}
+    finalize_verdict(result, url="http://x/", ml_result={"probability": 1.0}, reviewer=Spy())
+    assert seen == {"lean": "UNDECIDED", "ml": None}
