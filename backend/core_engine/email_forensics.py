@@ -904,7 +904,9 @@ def parse_email_file(file_bytes: bytes) -> Dict[str, Any]:
         errors.append(f"Payload extraction failed: {e}")
 
     reply_to_domain = extract_domain_from_email(reply_to)
-    reply_to_mismatch = bool(reply_to and from_domain and reply_to_domain != from_domain)
+    # Same company is not a mismatch: replies to bookmyshow.com for mail sent from info.bookmyshow.com are normal. A Reply-To on a
+    # DIFFERENT registered domain (the business-email-compromise trick) is still flagged.
+    reply_to_mismatch = bool(reply_to and from_domain and registered_domain(reply_to_domain) != registered_domain(from_domain))
 
     sender_domain_infra = check_sender_domain_infrastructure(from_domain)
     if sender_domain_infra.get("lookup_error"):

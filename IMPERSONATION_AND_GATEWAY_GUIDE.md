@@ -26,7 +26,7 @@ What nobody can do: find the attacker's real location behind VPNs/Tor/hacked mac
 | 7 | **Network safety check (phone)** | "Is this Wi-Fi tampering with my traffic?" (DNS, certificates, rewritten pages) | `app/.../network/NetworkIntegrity.kt`, Security & Privacy screen |
 | 8 | **Sealing with SHA-256** | "Nothing was changed after analysis" | existing `evidence_seal` + vault, used by the gateway |
 | 9 | **Lab + demo** | A safe, local simulation of all of the above | `backend/lab/` |
-| 10 | **Portal** | "Who is pretending to be whom" card, "Attacker infrastructure" card, **Mail Gateway** tab (live) | `frontend/` |
+| 10 | **Portal** | "Attacker infrastructure" card, **Mail Gateway** tab (live) | `frontend/` |
 
 Also fixed on the way (real security issue): the connecting IP is now taken from the address **the receiving server recorded in brackets**, never from text the sender wrote in
 the HELO name. Before, an attacker could plant a fake IP there.
@@ -52,6 +52,8 @@ Afterwards close those two windows and start the normal backend (`python app.py`
 Portal extras: upload `backend/lab/samples/2_forged_bank_email.eml` on the dashboard → Email Analysis tab shows the **"Who is pretending to be whom"** card and the **"Attacker infrastructure"** card.
 
 ## 4. How it works (follow the code)
+
+> **Important (changed after the first real-email test):** the sender-impersonation check and its portal card were removed from the normal SOC portal, because they could flag genuine emails (for example a real BookMyShow mail whose Reply-To uses the parent domain). The check now runs **only in demo mode** (the lab demo and the mail gateway); real emails are scored exactly as before. Demo mode switches itself off after 10 minutes and must not be left on during real analysis.
 
 ### 4.1 Sender impersonation (`sender_impersonation.py`)
 Input: what `email_forensics.parse_email_file` already computed (SPF/DKIM/DMARC states, connecting IP) + a few headers.

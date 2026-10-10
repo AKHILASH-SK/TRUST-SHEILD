@@ -57,6 +57,10 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+class _SkipSenderAssessment(Exception):
+    """The sender-impersonation check is part of the demo (lab) only; real emails are scored without it."""
+
+
 def classify_threat_attribution(
     auth_data: Dict[str, Any],
     origin_data: Dict[str, Any],
@@ -428,6 +432,9 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
     #     provider's own report. Adds only what the plain failure points above did not already count.
     sender_assessment: Dict[str, Any] = {}
     try:
+        from . import email_forensics as _forensics_module
+        if not _forensics_module.LAB_MODE:
+            raise _SkipSenderAssessment()                   # real mail: the original scoring only (no sender-impersonation points)
         from .sender_impersonation import assess_sender, score_contribution
         sender_assessment = assess_sender(forensics, eml_bytes)
         points, why = score_contribution(sender_assessment)
@@ -435,6 +442,8 @@ def analyze_email_pipeline(eml_bytes: bytes, skip_link_sandbox: bool = False) ->
         if points > already:
             base_threat += points - already
             risk_factors.append(why)
+    except _SkipSenderAssessment:
+        pass
     except Exception as e:                                   # never let the extra analysis break the email verdict
         logger.warning(f"Sender impersonation analysis error: {e}")
 

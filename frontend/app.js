@@ -1220,57 +1220,11 @@ async function refreshGatewayEvents() {
   });
 }
 
-const IMPERSONATION_STYLES = {
-  spoofed: ['FORGED SENDER', 'bg-red-100 text-red-700 border-red-200'],
-  suspicious: ['SUSPICIOUS', 'bg-amber-100 text-amber-700 border-amber-200'],
-  authentic: ['AUTHENTIC', 'bg-emerald-100 text-emerald-700 border-emerald-200'],
-  unverifiable: ['CANNOT VERIFY', 'bg-slate-100 text-slate-600 border-slate-200']
-};
-
-function renderSenderAssessment(data) {
-  const card = document.getElementById('impersonationCard');
-  if (!card) return;
-  const a = data.sender_assessment || {};
-  if (!a.level) { card.classList.add('hidden'); return; }
-  card.classList.remove('hidden');
-
-  const [label, classes] = IMPERSONATION_STYLES[a.level] || IMPERSONATION_STYLES.unverifiable;
-  const level = document.getElementById('impLevel');
-  level.className = 'px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase border ' + classes;
-  level.textContent = label;
-  document.getElementById('impHeadline').textContent = a.headline || '';
-
-  const claims = a.claims || {};
-  const reality = a.reality || {};
-  const claimParts = [];
-  if (claims.display_name) claimParts.push('Name: ' + claims.display_name);
-  if (claims.address_domain) claimParts.push('Domain: ' + claims.address_domain);
-  if (claims.brand) claimParts.push('Brand: ' + claims.brand);
-  if (claims.reply_to) claimParts.push('Replies go to: ' + claims.reply_to);
-  document.getElementById('impClaims').textContent = claimParts.join('  |  ') || 'Nothing specific';
-
-  const state = (v) => (v || 'unknown').toUpperCase();
-  const realityParts = ['Sent from IP: ' + (reality.sending_ip || 'unknown'),
-    'SPF ' + state(reality.spf) + '  |  DKIM ' + state(reality.dkim) + '  |  DMARC ' + state(reality.dmarc)];
-  if (reality.dmarc_policy) realityParts.push('Domain policy: ' + reality.dmarc_policy);
-  if (a.forwarded) realityParts.push('Looks forwarded / mailing list');
-  document.getElementById('impReality').textContent = realityParts.join('  |  ');
-
-  const list = document.getElementById('impReasons');
-  list.replaceChildren();
-  (a.reasons || []).forEach((reason) => {
-    const li = document.createElement('li');
-    li.textContent = reason;
-    list.appendChild(li);
-  });
-}
-
 function renderMetadataAndAuth(data) {
   const meta = data.metadata || {};
   const auth = data.authentication || {};
   const mx = data.sender_domain_intelligence || {};
 
-  renderSenderAssessment(data);
   renderInfrastructure(data);
 
   // BEC Warning

@@ -75,7 +75,7 @@ def show_event(event):
         say(f"  IP ROTATION DETECTED            : {event['rotation'].get('message')}", "red")
 
 
-def switch_demo_mode(on, minutes=30):
+def switch_demo_mode(on, minutes=10):
     """Ask the RUNNING backend to switch demo mode on/off (key from backend/lab/data/toggle_token). Returns True when it is on/off as asked."""
     token_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "toggle_token")
     try:
@@ -90,7 +90,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pause", action="store_true")
     ap.add_argument("--off", action="store_true", help="only switch demo mode off on the running backend, then stop")
-    ap.add_argument("--minutes", type=int, default=30, help="demo mode switches itself off after this many minutes")
+    ap.add_argument("--minutes", type=int, default=10, help="demo mode switches itself off after this many minutes")
     args = ap.parse_args()
     if args.off:
         say("demo mode switched off." if switch_demo_mode(False) else "could not switch demo mode off (is the backend running?).", "yellow")

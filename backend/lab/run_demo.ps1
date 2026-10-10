@@ -6,7 +6,7 @@
 #     cd backend
 #     powershell -ExecutionPolicy Bypass -File lab\run_demo.ps1            (add  -Pause  to wait for Enter between scenes)
 #
-# The demo switches the backend into demo mode (simulated bank, rotating DNS, 127.0.0.x senders) for 30 minutes and it switches
+# The demo switches the backend into demo mode (simulated bank, rotating DNS, 127.0.0.x senders) for 10 minutes and it switches
 # itself off again. To switch it off at once:   python -m lab.scenes --off
 # If the backend was started BEFORE the latest update, close its window once and start it again (python app.py).
 param([switch]$Pause)

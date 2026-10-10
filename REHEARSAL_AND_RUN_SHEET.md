@@ -33,11 +33,11 @@ powershell -ExecutionPolicy Bypass -File lab\run_demo.ps1 -Pause
 ```
 - If the backend is already running, the demo uses it as it is. If it isn't running, the demo starts it in its own window and leaves it open.
 - The mail gateway is started in its own window only if it isn't running already. Then six scenes play in this window; press **Enter** for the next one.
-- The demo switches the running backend into *demo mode* for 30 minutes (simulated bank, rotating DNS, 127.0.0.x senders). It switches itself off again. To switch it off at once: `python -m lab.scenes --off`.
+- The demo switches the running backend into *demo mode* for 10 minutes (simulated bank, rotating DNS, 127.0.0.x senders). It switches itself off again. To switch it off at once: `python -m lab.scenes --off`.
 - Open `http://localhost:8000/portal/`, click **Mail Gateway**. The four pages (real bank, relay copy, genuine and forged email) are at the top **before scene 1 starts**, with each verdict showing "not checked yet"; the badges fill in as the scenes run, and **the results stay on screen afterwards**. If you opened the portal before an update, it reloads itself on this tab (or press Ctrl+F5).
 - With `-Pause`, the first Enter is "Before we start": use it to explain the four pages ("they look identical to the victim") before any scene runs.
 - *One-time note:* if the backend window was opened BEFORE the latest update, close that window once and start it again (`python app.py`). After that you never need to restart it for the demo.
-- To show the lab emails in Email Analysis, upload the files from `backend\lab\samples` within the 30 minutes after the demo.
+- To show the lab emails in Email Analysis, upload the files from `backend\lab\samples` within the 10 minutes after the demo (real emails are never affected by demo mode, which also switches itself off).
 
 | Scene | What you see | One sentence to say |
 |---|---|---|
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File lab\run_demo.ps1 -Pause
 | 5 | Fake bank page = DANGEROUS, real bank = SAFE | "Looks identical. The address is the tell." |
 | 6 | Two long codes, then SEAL VALID | "Change one letter and the fingerprint changes. Evidence can't be edited silently." |
 
-In the portal, upload `backend\lab\samples\2_forged_bank_email.eml` (dashboard → **Browse .eml**), then open **Email Analysis** (cards: *Who is pretending to be whom*, *Attacker infrastructure*) and **Geolocation** (a map pin in Romania).
+In the portal, upload `backend\lab\samples\2_forged_bank_email.eml` (dashboard → **Browse .eml**), then open **Email Analysis** (the *Attacker infrastructure* card) and **Geolocation** (a map pin in Romania).
 
 ## D. The phone
 

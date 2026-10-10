@@ -1273,7 +1273,7 @@ _GATEWAY_FIELDS = ("id", "time", "connecting_ip", "mail_from", "claimed_domain",
 # only reach the web address cannot read that file. The mode switches itself off after a while.
 LAB_TOGGLE_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lab", "data", "toggle_token")
 LAB_STATE = {"until": 0.0, "used": False, "timer": None, "dns": False}
-LAB_DEFAULT_MINUTES = 30
+LAB_DEFAULT_MINUTES = 10
 
 
 def _lab_token():

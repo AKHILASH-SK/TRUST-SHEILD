@@ -161,3 +161,31 @@ def test_each_hop_is_located_by_the_address_the_server_recorded_not_by_the_helo_
     hop = "from 8.8.8.8 (evil.example [93.184.216.34]) by mx.receiver.example with ESMTP"
     origin, total, hops = trace_originating_ip([hop])
     assert origin == "93.184.216.34" and hops[0]["public_ips"][0] == "93.184.216.34"
+
+
+def test_real_mail_is_scored_without_the_sender_impersonation_check_and_only_the_demo_uses_it():
+    """The SOC portal scores real emails exactly as before: no sender-impersonation points, no forced 'suspicious' label."""
+    from core_engine import email_forensics
+    from core_engine.unified_email_pipeline import analyze_email_pipeline
+    assert email_forensics.LAB_MODE is False
+    real = (b"Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41]) by mx.google.com with SMTPS\r\n"
+            b"From: BookMyShow <no-reply@info.example-tickets.com>\r\nReply-To: no-reply@example-tickets.com\r\n"
+            b"To: me@example.com\r\nSubject: Your tickets are here\r\nDate: Fri, 09 Oct 2026 19:28:50 +0530\r\n\r\nSee you at the show.\r\n")
+    out = analyze_email_pipeline(real, skip_link_sandbox=True)
+    assert out["sender_assessment"] == {}
+    assert not any("Sender could not be trusted" in str(f) for f in out.get("incident_summary", ""))
+
+
+def test_a_reply_to_on_the_same_company_domain_is_not_a_mismatch_but_another_company_still_is():
+    from core_engine.email_forensics import parse_email_file
+
+    def mismatch(reply_to):
+        raw = (b"Received: from a.example.org (a.example.org [93.184.216.34]) by mx.example.net with ESMTP\r\n"
+               b"From: BookMyShow <no-reply@info.bookmyshow.com>\r\nReply-To: " + reply_to.encode() + b"\r\n"
+               b"To: me@example.com\r\nSubject: Tickets\r\n\r\nhello\r\n")
+        return parse_email_file(raw)["metadata"]["reply_to_mismatch"]
+
+    assert mismatch("no-reply@bookmyshow.com") is False                 # parent domain of the same company: normal
+    assert mismatch("help@mail.bookmyshow.com") is False                 # another sub-domain of the same company
+    assert mismatch("billing@bookmyshow-payments.top") is True           # a different domain: the real warning sign
+    assert mismatch("ceo@gmail.com") is True
