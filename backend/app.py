@@ -1336,9 +1336,10 @@ def _gateway_feed_allowed(write=False):
 
 @app.route('/demo/page/<name>')
 def demo_page(name):
-    """The demo's viewable pages (real bank, relay copy, genuine/forged email). Static and harmless, but only shown during/after a demo."""
-    if not (_lab_on() or LAB_STATE["used"]):
-        return jsonify({"error": "Not found"}), 404
+    """The demo's viewable pages (real bank, relay copy, genuine/forged email). Static and clearly marked as simulated; shown on any non-production backend, and on a production one only during/after a demo."""
+    production = os.getenv("TRUSTSHIELD_ENV", "").strip().lower() == "production" or bool(os.getenv("RENDER"))
+    if production and not (_lab_on() or LAB_STATE["used"]):
+        return jsonify({"error": "Not found"}), 404                      # a real server never shows the demo's fake bank pages
     from lab.demo_pages import render
     html = render(name)
     if html is None:

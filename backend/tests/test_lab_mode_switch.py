@@ -45,14 +45,17 @@ def test_gateway_feed_writes_need_demo_mode_but_the_results_stay_readable_after_
     c.get("/api/gateway/events?clear=1")
 
 
-def test_demo_pages_are_served_only_after_the_demo_has_been_used_and_are_self_contained():
+def test_demo_pages_are_served_on_development_backends_hidden_on_production_unless_a_demo_ran_and_are_self_contained(monkeypatch):
     c = client()
     headers = {"X-Lab-Token": backend_app.LAB_TOKEN}
     used_before = backend_app.LAB_STATE["used"]
     backend_app.LAB_STATE["used"] = False
     try:
-        assert c.get("/demo/page/bank").status_code == 404                                   # never shown outside a demo
+        assert c.get("/demo/page/bank").status_code == 200                                   # a development backend shows them at once
+        monkeypatch.setenv("TRUSTSHIELD_ENV", "production")
+        assert c.get("/demo/page/bank").status_code == 404                                   # a production server never shows them outside a demo
         c.post("/api/lab/mode", json={"on": True, "minutes": 1}, headers=headers)
+        monkeypatch.delenv("TRUSTSHIELD_ENV", raising=False)
         for name in ("bank", "relay", "mail-genuine", "mail-forged"):
             res = c.get(f"/demo/page/{name}")
             assert res.status_code == 200 and res.mimetype == "text/html"

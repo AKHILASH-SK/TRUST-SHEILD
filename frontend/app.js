@@ -1087,7 +1087,7 @@ async function loadDemoFrames() {
     if (!probe.ok) throw new Error('demo pages are not available yet');
   } catch (e) {
     const hint = document.getElementById('demoPagesHint');
-    if (hint) hint.textContent = 'run the demo (lab\\run_demo.ps1) and these pages appear here';
+    if (hint) hint.textContent = 'these pages are not available on this server';
     return;
   }
   names.forEach((n) => { const f = document.getElementById('demoFrame-' + n); if (f) f.src = `${API_BASE}/demo/page/${n}`; });
