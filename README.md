@@ -173,3 +173,52 @@ python app.py
 
 The backend server will start at `http://localhost:8000`.
 
+---
+
+## 🔌 Running Everything Locally (Laptop + Testing Phone)
+
+> ⚠️ **Please change the IP address in the places listed below so that it matches YOUR laptop, otherwise the app will not be able to reach the backend.**
+
+### 1. Put the laptop and the phone on the same network
+- Turn on the **Mobile Hotspot of the testing phone** and connect the **laptop to that hotspot's Wi-Fi**. The laptop and the phone must be on the same network, otherwise the app cannot reach the backend.
+- Keep the laptop connected to the **same hotspot** for the whole session. If you disconnect and reconnect (or switch to another Wi-Fi), the laptop's IP can change, and you must repeat step 2.
+
+### 2. Find your laptop's IP address and put it in the project's `.env`
+1. On the laptop open **PowerShell** and run `ipconfig`. Under the **Wi-Fi** adapter, copy the **IPv4 Address** (for example `10.93.230.61`).
+2. In the project's **root folder**, copy `.env.example` to `.env` (only the first time) and set:
+   ```
+   BACKEND_ENV=local
+   BACKEND_IP=<your laptop's IPv4 address from ipconfig>
+   BACKEND_PORT=8000
+   ```
+3. **Rebuild and reinstall the app** so it picks up the new address (the IP is built into the app):
+   ```bash
+   .\gradlew installDebug
+   ```
+   *(Never commit your `.env` file; it is private to your machine.)*
+
+> The **Chrome extension** and the **SOC portal** run on the laptop itself and already use `127.0.0.1` / `localhost`, so they need **no IP change** when you use them on the same laptop.
+
+### 3. Start the backend
+```bash
+cd backend
+python app.py
+```
+Wait about 40 seconds, then check `http://localhost:8000/api/health`, which should answer OK. Keep this window open while you test.
+If the phone still cannot reach it, allow Python through the Windows Firewall for **Public** networks (hotspot networks are usually treated as Public).
+
+### 4. Open the SOC Portal locally
+- On the laptop: **http://localhost:8000/portal/**
+- From another device on the same hotspot (for example a second phone): **http://&lt;your-laptop-IP&gt;:8000/portal/**
+
+Press **Ctrl + F5** once if the page looks old.
+
+### 5. Optional: check everything and run the impersonation demo
+```powershell
+cd backend
+powershell -ExecutionPolicy Bypass -File tools\run_all_checks.ps1 -Quick     # tests + false-positive checklist (about 1 minute)
+powershell -ExecutionPolicy Bypass -File lab\run_demo.ps1 -Pause               # the "person in the middle" demo (about 3 minutes)
+```
+The demo never restarts or closes the running backend. After starting it, open the portal and click **Mail Gateway**.
+More detail: **`REHEARSAL_AND_RUN_SHEET.md`** (copy-paste run sheet) and **`IMPERSONATION_AND_GATEWAY_GUIDE.md`** (how it works, and judge Q&amp;A).
+
