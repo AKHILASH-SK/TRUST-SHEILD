@@ -101,6 +101,15 @@ Each analysed email gets `evidence_sha256` (fingerprint of the original bytes). 
 - **Important:** that location is the **sending server**, not the person. If the sender used **Gmail**, the connecting IP is Google's data centre (Gmail does not reveal the user's own IP). If the attacker runs their **own SMTP server**, or a cheap VPS, you see *that* machine. If they use a VPN/Tor/hacked machine, you see that. City accuracy is approximate.
 - **In the lab**, the 127.0.0.x addresses have **simulated** locations (Mumbai = the bank, Bucharest/Lagos/Sao Paulo/Jakarta/Frankfurt/Singapore = the attacker's rotating servers), clearly labelled "(simulated)".
 
+### 4.8 Offline mode: the model on the phone
+When the phone cannot reach the TrustShield server (no internet), the Link Gate and the notification alerts no longer fall back to guesswork. They run **the same link-text model the server uses, on the phone**:
+- The 350-tree LightGBM model, its calibration table and thresholds are exported by `python -m ml.export_for_android` into `app/src/main/assets/ondevice/` (about 1.3 MB) and evaluated by small Kotlin code (`app/.../ondevice/`). No internet and no cloud call is involved.
+- It only judges the **text of the link** (28 host features). The page model needs the sandbox browser, so it cannot run offline, and every offline answer says *"Checked on this phone only; the page was not inspected"*.
+- **Proof it is identical to the server's model:** `LexicalParityTest` feeds ~1,000 links (phishing feeds, popular sites, hosted projects, and awkward cases such as IPs, ports, punycode, `.com.mu`) through both the Python and the Kotlin code and demands identical features and probabilities.
+- **Cut-offs (measured on 3,000 phishing and 3,000 legitimate links the model had never seen):** score >= 0.9892 -> **Dangerous** (48% of phishing, 0.0% of legitimate sites; but on free hosting like vercel.app or blogspot it is only *Unverified*, the hosting lesson); score >= 0.5 -> **Unverified** (75% of phishing, 3.3% of legitimate); below that -> **"Looks normal"** (never a clean *Safe*, because about a quarter of phishing links look ordinary from the text alone).
+- Tested on a real phone with mobile data off and the backend stopped: phishing-looking links (paypal-secure-login.top, hdfc-netbanking-verify.xyz, amazon-prize-claim.click, login-microsoft-account.cfd) were **Dangerous**; the fake Roblox links and the hosted Facebook look-alike were **Unverified**; ordinary sites and Google/GitHub links **looked normal**.
+- After retraining the server's models, run `python -m ml.export_for_android` again, then `.\gradlew testDebugUnitTest --tests "com.example.trustshield.LexicalParityTest"` to confirm the phone still matches.
+
 ## 5. Files added/changed
 
 ```

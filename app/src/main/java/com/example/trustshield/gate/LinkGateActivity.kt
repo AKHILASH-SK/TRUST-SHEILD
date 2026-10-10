@@ -13,8 +13,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.trustshield.LinkAnalyzer
-import com.example.trustshield.LinkRiskLevel
+import com.example.trustshield.ondevice.OfflineJudge
 import com.example.trustshield.R
 import com.example.trustshield.activities.MainActivity
 import com.google.android.material.button.MaterialButton
@@ -276,28 +275,53 @@ class LinkGateActivity : AppCompatActivity() {
         }
     }
 
-    /** The server could not be reached: fall back to the rules on this phone and be honest about it. */
+    /** The server could not be reached: judge the link on this phone (rules + the on-phone model) and be honest about it. */
     private fun showOffline(message: String) {
-        val local = try { LinkAnalyzer().analyzeLink(url) } catch (e: Exception) { null }
-        if (local != null && local.riskLevel != LinkRiskLevel.SAFE) {
-            val dangerous = local.riskLevel == LinkRiskLevel.DANGEROUS
-            showWarning(
-                if (dangerous) "✕" else "!", if (dangerous) "#DC2626" else "#D97706",
-                if (dangerous) "Dangerous link" else "Unverified – open with care",
-                "Checked on this phone only. $message", local.reasons.take(4)
+        statusText.text = "The server could not be reached. Checking on this phone ..."
+        Thread {
+            val verdict = try { OfflineJudge.judge(applicationContext, url) } catch (e: Throwable) { null }
+            ui.post { if (!closed) showOfflineVerdict(message, verdict) }
+        }.start()
+    }
+
+    private fun showOfflineVerdict(message: String, verdict: OfflineJudge.Verdict?) {
+        reasonsBox.removeAllViews()
+        val note = "Checked on this phone only (no connection to the TrustShield server)."
+        when (verdict?.level) {
+            OfflineJudge.Level.DANGEROUS -> showWarning(
+                "✕", "#DC2626", "Dangerous link",
+                "$note The page itself could not be inspected.", verdict.reasons.take(4)
             )
-            return
+            OfflineJudge.Level.UNVERIFIED -> showWarning(
+                "!", "#D97706", "Unverified – open with care",
+                "$note The page itself could not be inspected.", verdict.reasons.take(4)
+            )
+            OfflineJudge.Level.LOOKS_NORMAL -> {
+                paint("✓", "#0F766E")
+                title.text = "Looks normal"
+                statusText.text = "$note The page itself was not inspected, so this is not a full safety check."
+                verdict.reasons.take(3).forEach { addReason(it) }
+                primary.visibility = View.VISIBLE
+                primary.text = "Open link"
+                primary.setOnClickListener { openLink() }
+                secondary.visibility = View.VISIBLE
+                secondary.text = "Go back"
+                secondary.setTextColor(Color.parseColor("#64748B"))
+                secondary.setOnClickListener { closeGate() }
+            }
+            null -> {
+                paint("?", "#64748B")
+                title.text = "Couldn’t check this link"
+                statusText.text = message.ifBlank { "This link was not checked." }
+                primary.visibility = View.VISIBLE
+                primary.text = "Go back"
+                primary.setOnClickListener { closeGate() }
+                secondary.visibility = View.VISIBLE
+                secondary.text = "Open without checking"
+                secondary.setTextColor(Color.parseColor("#64748B"))
+                secondary.setOnClickListener { openLink() }
+            }
         }
-        paint("?", "#64748B")
-        title.text = "Couldn’t check this link"
-        statusText.text = message.ifBlank { "This link was not checked." }
-        primary.visibility = View.VISIBLE
-        primary.text = "Go back"
-        primary.setOnClickListener { closeGate() }
-        secondary.visibility = View.VISIBLE
-        secondary.text = "Open without checking"
-        secondary.setTextColor(Color.parseColor("#64748B"))
-        secondary.setOnClickListener { openLink() }
     }
 
     private fun showSignedOut() {

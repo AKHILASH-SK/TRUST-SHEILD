@@ -234,10 +234,19 @@ class NotificationListener : NotificationListenerService() {
                                 Log.e(TAG, "Backend not reachable for $url: $error")
                                 if (alertedFromDatabase) return
                                 val note = "Checked on this phone only (the TrustShield server could not be reached)"
-                                when (hint.riskLevel) {
-                                    LinkRiskLevel.DANGEROUS -> alertManager.showDangerousLinkAlert(url, packageName, hint.reasons.take(3) + note)
-                                    LinkRiskLevel.SUSPICIOUS -> alertManager.showSuspiciousLinkAlert(url, packageName, hint.reasons.take(3) + note)
-                                    LinkRiskLevel.SAFE -> {}
+                                // rules + the on-phone model; a link that merely looks ordinary raises no alert
+                                val offline = try { com.example.trustshield.ondevice.OfflineJudge.judge(applicationContext, url) } catch (e: Throwable) { null }
+                                when (offline?.level) {
+                                    com.example.trustshield.ondevice.OfflineJudge.Level.DANGEROUS ->
+                                        alertManager.showDangerousLinkAlert(url, packageName, offline.reasons.take(3) + note)
+                                    com.example.trustshield.ondevice.OfflineJudge.Level.UNVERIFIED ->
+                                        alertManager.showSuspiciousLinkAlert(url, packageName, offline.reasons.take(3) + note)
+                                    com.example.trustshield.ondevice.OfflineJudge.Level.LOOKS_NORMAL -> {}
+                                    null -> when (hint.riskLevel) {
+                                        LinkRiskLevel.DANGEROUS -> alertManager.showDangerousLinkAlert(url, packageName, hint.reasons.take(3) + note)
+                                        LinkRiskLevel.SUSPICIOUS -> alertManager.showSuspiciousLinkAlert(url, packageName, hint.reasons.take(3) + note)
+                                        LinkRiskLevel.SAFE -> {}
+                                    }
                                 }
                             }
                         }
