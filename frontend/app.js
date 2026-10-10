@@ -1065,6 +1065,19 @@ async function clearGatewayEvents() {
 window.clearGatewayEvents = clearGatewayEvents;
 
 var demoFramesLoaded = false;
+var portalBuildSeen = null;
+
+// If the portal files change while this tab is open (an update during the review), reload once so the newest page is shown.
+async function checkPortalBuild() {
+  try {
+    const res = await fetch(`${API_BASE}/api/lab/mode`);
+    if (!res.ok) return;
+    const build = (await res.json()).portal_build;
+    if (!build) return;
+    if (portalBuildSeen === null) { portalBuildSeen = build; return; }
+    if (build !== portalBuildSeen) location.reload();
+  } catch (e) { /* offline: nothing to do */ }
+}
 
 async function loadDemoFrames() {
   if (demoFramesLoaded) return;
@@ -1141,6 +1154,7 @@ async function refreshGatewayNotes() {
 }
 
 async function refreshGatewayEvents() {
+  checkPortalBuild();
   refreshGatewayNotes();
   if (!demoFramesLoaded) loadDemoFrames();                  // pages appear as soon as the demo has been run
   const status = document.getElementById('gatewayStatus');

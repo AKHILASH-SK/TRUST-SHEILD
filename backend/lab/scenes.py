@@ -105,6 +105,14 @@ def main():
     requests.get(f"{API}/api/gateway/events?clear=1", timeout=10)
     requests.get(f"{API}/api/gateway/notes?clear=1", timeout=10)
 
+    scene("BEFORE WE START  What the victim sees", args.pause,
+          "Open the portal's Mail Gateway tab: the four pages at the top are what a victim would see. The real bank and the relay copy look\n"
+          "IDENTICAL; the genuine and the forged email look IDENTICAL. Only the address bar and the message source differ.\n"
+          "Nothing has been checked yet (the badges say 'not checked yet'). The scenes now show how TrustShield tells them apart.")
+    note("Intro", "Look at the four pages above", "info",
+         ["The victim cannot tell the real bank from the relay copy, or the genuine email from the forged one.",
+          "The scenes below show how TrustShield decides: the real connecting address, SPF/DKIM/DMARC, the page's domain, the rotation."])
+
     scene("SCENE 1  The real bank writes to you (C -> A)", args.pause,
           f"The bank's mail server ({BANK_IP}) is listed in bank.test's SPF record and signs its mail with the bank's secret DKIM key.\n"
           "Nothing is wrong, so TrustShield must let it through.")

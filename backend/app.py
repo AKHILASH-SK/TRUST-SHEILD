@@ -1354,7 +1354,13 @@ def lab_mode():
     """GET: is demo mode on?  POST {"on": true, "minutes": 30} with header X-Lab-Token: switch it (the key is in backend/lab/data/toggle_token)."""
     if request.method == 'GET':
         remaining = max(0, int(LAB_STATE["until"] - time.time())) if _lab_on() and LAB_STATE["until"] else 0
-        return jsonify({"lab_mode": _lab_on(), "minutes_left": remaining // 60, "demo_available": bool(LAB_TOKEN)}), 200
+        fdir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+        try:
+            build = "-".join(str(int(os.path.getmtime(os.path.join(fdir, f)))) for f in ("index.html", "app.js"))
+        except OSError:
+            build = ""
+        return jsonify({"lab_mode": _lab_on(), "minutes_left": remaining // 60, "demo_available": bool(LAB_TOKEN),
+                        "portal_build": build}), 200
     supplied = request.headers.get("X-Lab-Token", "")
     if not LAB_TOKEN or not _hmac.compare_digest(supplied.encode(), LAB_TOKEN.encode()):
         return jsonify({"error": "Forbidden"}), 403
